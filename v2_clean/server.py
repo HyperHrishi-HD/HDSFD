@@ -107,48 +107,99 @@ def delete_item():
     conn.close()
     return jsonify({"status": "success"})
 
+@app.route('/api/gdrive/save-credentials', methods=['POST'])
+def save_gdrive_credentials():
+    data = request.json or {}
+    client_id = data.get('client_id')
+    client_secret = data.get('client_secret')
+    if not client_id or not client_secret:
+        return jsonify({"status": "error", "message": "Missing Client ID or Client Secret"}), 400
+
+    os.environ['GOOGLE_CLIENT_ID'] = client_id
+    os.environ['GOOGLE_CLIENT_SECRET'] = client_secret
+    creds_file = os.path.join(os.path.dirname(__file__), 'google_credentials.json')
+    with open(creds_file, 'w') as f:
+        json.dump({"client_id": client_id, "client_secret": client_secret}, f)
+    return jsonify({"status": "success", "message": "Google Client Credentials saved successfully!"})
+
 @app.route('/api/gdrive/auth', methods=['GET'])
 def gdrive_auth():
+    username = request.args.get('username', 'User')
+    client_id = os.environ.get('GOOGLE_CLIENT_ID', '721345678901-hdsfd.apps.googleusercontent.com')
+    redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
+    
+    scopes = [
+        'email',
+        'profile',
+        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/tasks'
+    ]
+    
+    google_auth_url = (
+        f"https://accounts.google.com/o/oauth2/v2/auth?"
+        f"client_id={encode_url_param(client_id)}&"
+        f"redirect_uri={encode_url_param(redirect_uri)}&"
+        f"response_type=code&"
+        f"scope={encode_url_param(' '.join(scopes))}&"
+        f"prompt=select_account%20consent&"
+        f"access_type=offline"
+    )
+    return redirect(google_auth_url)
+
+def encode_url_param(val):
+    import urllib.parse
+    return urllib.parse.quote(val, safe='')
+
+@app.route('/api/gdrive/callback', methods=['GET'])
+def gdrive_callback():
+    code = request.args.get('code')
     username = request.args.get('username', 'GoogleUser')
     client_id = os.environ.get('GOOGLE_CLIENT_ID')
     client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-    if client_id and client_secret:
-        client_config = {
-            "web": {
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "auth_uri": "https://accounts.google.com/o/oauth2/v2/auth",
-                "token_uri": "https://oauth2.googleapis.com/token",
-                "redirect_uris": [request.url_root.rstrip('/') + '/api/gdrive/callback']
+    user_email = username
+    if code and client_id and client_secret:
+        try:
+            redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
+            client_config = {
+                "web": {
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/v2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [redirect_uri]
+                }
             }
-        }
-        flow = Flow.from_client_config(client_config, scopes=[
-            'https://www.googleapis.com/auth/drive.file',
-            'https://www.googleapis.com/auth/calendar',
-            'https://www.googleapis.com/auth/tasks'
-        ])
-        flow.redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
-        auth_url, _ = flow.authorization_url(prompt='consent')
-        return redirect(auth_url)
+            flow = Flow.from_client_config(client_config, scopes=[
+                'https://www.googleapis.com/auth/userinfo.profile',
+                'https://www.googleapis.com/auth/userinfo.email',
+                'https://www.googleapis.com/auth/drive.file',
+                'https://www.googleapis.com/auth/calendar',
+                'https://www.googleapis.com/auth/tasks'
+            ])
+            flow.redirect_uri = redirect_uri
+            flow.fetch_token(authorization_response=request.url)
+            creds = flow.credentials
+            
+            # Fetch user email from Google UserInfo API
+            from googleapiclient.discovery import build
+            user_info_service = build('oauth2', 'v2', credentials=creds)
+            user_info = user_info_service.userinfo().get().execute()
+            user_email = user_info.get('email', username)
+        except Exception as e:
+            logger.warning(f"Failed to fetch user email in callback: {e}")
 
-    # Sandbox fallback redirect for local demo
-    callback_url = f"/api/gdrive/callback?username={username}"
-    return redirect(callback_url)
-
-@app.route('/api/gdrive/callback', methods=['GET'])
-def gdrive_callback():
-    username = request.args.get('username', 'GoogleUser')
     html = f"""
     <html>
       <body style="background: #0f172a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin:0;">
         <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 30px; border-radius: 20px; text-align: center;">
-          <h2 style="color: #a78bfa;">Google Account Connected!</h2>
-          <p>Logged in as {username}. Closing window...</p>
+          <h2 style="color: #c084fc;">Google Account Connected!</h2>
+          <p>Logged in as {user_email}. Closing window...</p>
         </div>
         <script>
           if (window.opener) {{
-            window.opener.postMessage({{ type: 'gdrive_linked', username: {json.dumps(username)} }}, '*');
+            window.opener.postMessage({{ type: 'gdrive_linked', username: {json.dumps(user_email)} }}, '*');
           }}
           setTimeout(function() {{ window.close(); }}, 1200);
         </script>

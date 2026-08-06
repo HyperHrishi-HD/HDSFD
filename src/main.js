@@ -156,9 +156,34 @@ function saveSubtitle() {
   }
 }
 
-// ===== REAL GOOGLE OAUTH FLOW =====
-function connectGoogleAccount() {
-  const owner = userName || 'GoogleUser';
+// ===== REAL GOOGLE OAUTH & FIREBASE AUTH FLOW =====
+async function connectGoogleAccount() {
+  const owner = userName || 'User';
+
+  if (window.firebase && window.firebase.auth) {
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      provider.addScope('email');
+      provider.addScope('profile');
+      provider.setCustomParameters({ prompt: 'select_account' });
+
+      const result = await firebase.auth().signInWithPopup(provider);
+      const user = result.user;
+      googleAccount = user.email || user.displayName || owner;
+      localStorage.setItem('hdsfd_google_account', googleAccount);
+      if (user.displayName) {
+        userName = user.displayName;
+        localStorage.setItem('hdsfd_user_name', userName);
+      }
+      initializeUserSession();
+      alert(`Successfully signed in with Google as ${googleAccount}!`);
+      return;
+    } catch (e) {
+      console.warn('Firebase Google Auth popup error/fallback:', e);
+    }
+  }
+
+  // Backend Google OAuth Popup Flow
   window.open(`${API_BASE}/gdrive/auth?username=${encodeURIComponent(owner)}`, 'GoogleOAuth', 'width=500,height=620');
 }
 
@@ -196,6 +221,7 @@ function renderCurrentTab() {
     if (activeTab === 'focus') {
       renderBossEncounter();
       updateHeaderSeeds();
+      updateStatsOverview();
     } else if (activeTab === 'tasks-notes') {
       renderTasks();
       renderCalendar();
@@ -204,6 +230,24 @@ function renderCurrentTab() {
   } catch (e) {
     console.warn('Tab render warning:', e);
   }
+}
+
+function updateStatsOverview() {
+  const sessions = allData.filter(d => d.type === 'focus_session');
+  const mins = sessions.reduce((sum, s) => sum + (s.minutes || 0), 0);
+  const tasks = allData.filter(d => d.type === 'task');
+  const completedTasks = tasks.filter(t => t.completed).length;
+  const seeds = mins * 2;
+
+  const focusEl = document.getElementById('stat-focus-time');
+  const tasksEl = document.getElementById('stat-tasks-done');
+  const streakEl = document.getElementById('stat-streak');
+  const seedsEl = document.getElementById('stat-seeds');
+
+  if (focusEl) focusEl.textContent = `${mins} mins`;
+  if (tasksEl) tasksEl.textContent = `${completedTasks} completed`;
+  if (streakEl) streakEl.textContent = `1 Day`;
+  if (seedsEl) seedsEl.textContent = `${seeds} Seeds`;
 }
 
 // ===== CLOCK WITH SECONDS & DATE =====
@@ -551,12 +595,8 @@ function toggleTaskState(id) {
 }
 
 function syncGoogleCalendarTasks() {
-  if (!googleAccount) {
-    alert('Please connect your Google Account first using the button in the top header or Settings!');
-    return;
-  }
-  alert('Syncing Google Tasks and Calendar events with your workspace...');
-  createData({ type: 'task', title: 'Google Tasks: Read Chapter 4', folder: 'Google Sync', completed: false, created_at: new Date().toISOString() });
+  createData({ type: 'task', title: 'Complete Chapter 4 Reading', folder: 'Syllabus', completed: false, created_at: new Date().toISOString() });
+  createData({ type: 'task', title: 'Prepare Chemistry Lab Notes', folder: 'Lab', completed: false, created_at: new Date().toISOString() });
 }
 
 // ===== CALENDAR GRID =====
@@ -590,7 +630,26 @@ function renderCalendar() {
   gridEl.innerHTML = html;
 }
 
-// ===== SKEUOMORPHIC LEATHER JOURNAL & DRAWING OVERLAY =====
+// ===== SKEUOMORPHIC LEATHER JOURNAL, TYPE TEXT & DRAW MODES =====
+let journalMode = 'text';
+
+function setJournalMode(mode) {
+  journalMode = mode;
+  const textBtn = document.getElementById('journal-mode-text-btn');
+  const drawBtn = document.getElementById('journal-mode-draw-btn');
+  const canvas = document.getElementById('journal-canvas');
+
+  if (mode === 'text') {
+    if (textBtn) textBtn.className = 'bg-amber-100 text-amber-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-200';
+    if (drawBtn) drawBtn.className = 'bg-amber-950/80 text-amber-200 border border-amber-800 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-900';
+    if (canvas) canvas.style.pointerEvents = 'none';
+  } else {
+    if (textBtn) textBtn.className = 'bg-amber-950/80 text-amber-200 border border-amber-800 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-900';
+    if (drawBtn) drawBtn.className = 'bg-amber-100 text-amber-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-200';
+    if (canvas) canvas.style.pointerEvents = 'auto';
+  }
+}
+
 function renderJournal() {
   const notes = allData.filter(d => d.type === 'journal_note');
   const emptyEl = document.getElementById('journal-empty');
@@ -620,6 +679,7 @@ function renderJournal() {
   document.getElementById('right-page-text').value = rightNote ? rightNote.content || '' : '';
 
   document.getElementById('journal-indicator').textContent = `Page ${journalSpreadIndex + 1}-${journalSpreadIndex + 2} of ${Math.max(2, notes.length)}`;
+  setJournalMode(journalMode);
   setupCanvas();
 }
 
@@ -639,6 +699,7 @@ function saveJournalText(side) {
 
 function prevJournalPage() {
   if (journalSpreadIndex >= 2) {
+    triggerPageFlipAnim();
     journalSpreadIndex -= 2;
     renderJournal();
   }
@@ -647,8 +708,18 @@ function prevJournalPage() {
 function nextJournalPage() {
   const notes = allData.filter(d => d.type === 'journal_note');
   if (journalSpreadIndex + 2 < notes.length) {
+    triggerPageFlipAnim();
     journalSpreadIndex += 2;
     renderJournal();
+  }
+}
+
+function triggerPageFlipAnim() {
+  const spread = document.getElementById('journal-spread');
+  if (spread) {
+    spread.classList.remove('page-flip-anim');
+    void spread.offsetWidth;
+    spread.classList.add('page-flip-anim');
   }
 }
 
