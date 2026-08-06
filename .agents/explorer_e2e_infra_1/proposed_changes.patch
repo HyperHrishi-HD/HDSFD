@@ -1,0 +1,14 @@
+diff --git a/backend/app.py b/backend/app.py
+index a123456..b65c32e 100644
+--- a/backend/app.py
++++ b/backend/app.py
+@@ -12,5 +12,7 @@
+-DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
++DB_PATH = os.environ.get('HDSFD_DB_PATH', os.path.join(os.path.dirname(__file__), 'database.db'))
+ 
+ def get_db_connection():
+     conn = sqlite3.connect(DB_PATH)
++    conn.execute("PRAGMA journal_mode=WAL;")
++    conn.execute("PRAGMA synchronous=NORMAL;")
+     conn.row_factory = sqlite3.Row
+     return conn

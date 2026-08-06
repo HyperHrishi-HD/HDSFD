@@ -23,6 +23,8 @@
   </script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Identity Services SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- Firebase JS SDK 10.8.0 -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -176,7 +178,9 @@
 
       <main id="content-area" class="flex-1 overflow-y-auto p-4 pb-24">
         
+        <!-- ================= TAB 1: HOME & FOCUS (MERGED) ================= -->
         <section id="tab-focus" class="tab-content active w-full max-w-7xl mx-auto">
+          
           <div class="text-center my-4">
             <div id="lock-date" class="text-xs font-bold uppercase tracking-[0.2em] text-purple-300/80 mb-1">Thursday, August 6, 2026</div>
             <div id="lock-clock-seconds" class="text-6xl md:text-7xl font-black tracking-tighter text-white drop-shadow-lg font-mono">11:32:04 AM</div>
@@ -187,6 +191,7 @@
           </div>
 
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch mt-6">
+            
             <div class="lg:col-span-3 flex flex-col gap-5">
               <div class="glass-card p-5 space-y-4">
                 <h3 class="text-white/70 text-[10px] font-bold uppercase tracking-widest border-b border-white/10 pb-1">Soundscape Synthesizer</h3>
@@ -405,6 +410,7 @@
                     <textarea id="right-page-text" placeholder="Click anywhere to type notes..." class="flex-1 w-full bg-transparent text-amber-950 placeholder-amber-900/40 text-sm leading-[28px] outline-none resize-none font-sans" oninput="saveJournalText('right')"></textarea>
                   </div>
 
+                  <!-- Canvas Overlay for Drawing -->
                   <canvas id="journal-canvas" class="absolute inset-0 z-20 pointer-events-none rounded-xl"></canvas>
                 </div>
 

@@ -23,6 +23,8 @@
   </script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Google Identity Services SDK -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <!-- Firebase JS SDK 10.8.0 -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
@@ -75,7 +77,6 @@
       border-radius: 24px;
     }
 
-    /* HYPER-REALISTIC SKEUOMORPHIC LEATHER JOURNAL */
     .leather-binder {
       background: radial-gradient(circle at 50% 50%, #4a2c16 0%, #291507 100%);
       box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.95), 0 20px 50px rgba(0, 0, 0, 0.8);
@@ -386,7 +387,6 @@
                   <h2 class="text-sm font-black text-amber-200 tracking-wider uppercase flex items-center gap-2">📖 Skeuomorphic Leather Journal</h2>
                   
                   <div class="flex items-center gap-2">
-                    <!-- Mode Switcher: Type Text vs Draw Canvas -->
                     <button id="journal-mode-text-btn" onclick="setJournalMode('text')" class="bg-amber-100 text-amber-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-200">✍️ Type Text</button>
                     <button id="journal-mode-draw-btn" onclick="setJournalMode('draw')" class="bg-amber-950/80 text-amber-200 border border-amber-800 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-900">🎨 Draw / Sketch</button>
                     <button onclick="clearCanvas()" class="bg-amber-900/60 text-amber-100 border border-amber-700/50 px-2.5 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-800">Clear</button>
