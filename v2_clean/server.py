@@ -125,7 +125,7 @@ def save_gdrive_credentials():
 @app.route('/api/gdrive/auth', methods=['GET'])
 def gdrive_auth():
     username = request.args.get('username', 'User')
-    client_id = os.environ.get('GOOGLE_CLIENT_ID', '721345678901-hdsfd.apps.googleusercontent.com')
+    client_id = os.environ.get('GOOGLE_CLIENT_ID', '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com')
     redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
     
     scopes = [
