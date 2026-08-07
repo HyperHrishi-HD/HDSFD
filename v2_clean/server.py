@@ -4,9 +4,8 @@ import sqlite3
 import os
 import json
 import logging
-from itsdangerous import URLSafeSerializer
-from cryptography.fernet import Fernet
-from google_auth_oauthlib.flow import Flow
+import urllib.parse
+import datetime
 
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
@@ -15,6 +14,7 @@ app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'v2_clean_secret_key_9876543
 CORS(app)
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
+logger = logging.getLogger(__name__)
 
 def get_db():
     conn = sqlite3.connect(DB_PATH, timeout=20.0)
@@ -41,8 +41,50 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_tokens (
+            username TEXT PRIMARY KEY,
+            token_json TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     conn.commit()
     conn.close()
+
+def save_user_tokens(username, creds):
+    if not username or not creds:
+        return
+    conn = get_db()
+    conn.execute('''
+        INSERT INTO user_tokens (username, token_json)
+        VALUES (?, ?)
+        ON CONFLICT(username) DO UPDATE SET
+            token_json = excluded.token_json,
+            updated_at = CURRENT_TIMESTAMP
+    ''', (username, creds.to_json()))
+    conn.commit()
+    conn.close()
+
+def get_google_credentials(username):
+    if not username:
+        return None
+    conn = get_db()
+    row = conn.execute("SELECT token_json FROM user_tokens WHERE username = ?", (username,)).fetchone()
+    conn.close()
+    if not row:
+        return None
+    try:
+        import google.oauth2.credentials
+        from google.auth.transport.requests import Request
+        creds_data = json.loads(row['token_json'])
+        creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            save_user_tokens(username, creds)
+        return creds
+    except Exception as e:
+        logger.warning(f"Error loading credentials for {username}: {e}")
+        return None
 
 @app.route('/')
 def index():
@@ -155,10 +197,6 @@ def gdrive_auth():
     google_auth_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + urllib.parse.urlencode(params)
     return redirect(google_auth_url)
 
-def encode_url_param(val):
-    import urllib.parse
-    return urllib.parse.quote(val, safe='')
-
 @app.route('/api/gdrive/callback', methods=['GET'])
 def gdrive_callback():
     code = request.args.get('code')
@@ -180,6 +218,7 @@ def gdrive_callback():
 
     if code and client_id and client_secret:
         try:
+            from google_auth_oauthlib.flow import Flow
             redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
             client_config = {
                 "web": {
@@ -205,6 +244,9 @@ def gdrive_callback():
             user_info_service = build('oauth2', 'v2', credentials=creds)
             user_info = user_info_service.userinfo().get().execute()
             user_email = user_info.get('email', user_email)
+            
+            save_user_tokens(user_email, creds)
+            save_user_tokens(state_username, creds)
         except Exception as e:
             logger.warning(f"Failed to fetch user email in callback: {e}")
 
@@ -236,46 +278,154 @@ def gdrive_backup():
     username = data.get('username', 'GoogleUser')
     notes = data.get('notes', [])
     
-    # Save isolated backup files to separate folder: HDSFD Sanctuary Backups
     backup_dir = os.path.join(os.path.dirname(__file__), 'backups')
     os.makedirs(backup_dir, exist_ok=True)
-    
     notes_backup_file = os.path.join(backup_dir, f'journal_notes_backup_{username}.json')
     with open(notes_backup_file, 'w') as f:
         json.dump(notes, f, indent=2)
         
+    creds = get_google_credentials(username) or get_google_credentials('hdsystem.ahd@gmail.com')
+    drive_synced = False
+    
+    if creds:
+        try:
+            from googleapiclient.discovery import build
+            from googleapiclient.http import MediaFileUpload, MediaInMemoryUpload
+            service = build('drive', 'v3', credentials=creds)
+            
+            q = "name='HDSFD Sanctuary Backups' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+            response = service.files().list(q=q, spaces='drive', fields='files(id, name)').execute()
+            folders = response.get('files', [])
+            
+            if folders:
+                folder_id = folders[0].get('id')
+            else:
+                folder_metadata = {
+                    'name': 'HDSFD Sanctuary Backups',
+                    'mimeType': 'application/vnd.google-apps.folder'
+                }
+                folder = service.files().create(body=folder_metadata, fields='id').execute()
+                folder_id = folder.get('id')
+                
+            notes_body = json.dumps(notes, indent=2)
+            media_notes = MediaInMemoryUpload(notes_body.encode('utf-8'), mimetype='application/json')
+            
+            file_q = f"name='journal_notes_backup.json' and '{folder_id}' in parents and trashed=false"
+            existing_notes = service.files().list(q=file_q, fields='files(id)').execute().get('files', [])
+            
+            if existing_notes:
+                service.files().update(fileId=existing_notes[0]['id'], media_body=media_notes).execute()
+            else:
+                file_metadata = {'name': 'journal_notes_backup.json', 'parents': [folder_id]}
+                service.files().create(body=file_metadata, media_body=media_notes).execute()
+                
+            if os.path.exists(DB_PATH):
+                media_db = MediaFileUpload(DB_PATH, mimetype='application/x-sqlite3')
+                db_q = f"name='hdsfd_database_backup.db' and '{folder_id}' in parents and trashed=false"
+                existing_db = service.files().list(q=db_q, fields='files(id)').execute().get('files', [])
+                if existing_db:
+                    service.files().update(fileId=existing_db[0]['id'], media_body=media_db).execute()
+                else:
+                    db_metadata = {'name': 'hdsfd_database_backup.db', 'parents': [folder_id]}
+                    service.files().create(body=db_metadata, media_body=media_db).execute()
+                    
+            drive_synced = True
+        except Exception as e:
+            logger.error(f"Google Drive Vault upload error: {e}")
+
     return jsonify({
         "status": "success",
+        "drive_synced": drive_synced,
         "folder": "HDSFD Sanctuary Backups",
-        "files": [
-            "journal_notes_backup.json",
-            "hdsfd_database_backup.db"
-        ],
+        "files": ["journal_notes_backup.json", "hdsfd_database_backup.db"],
         "message": f"Backup for {username} saved in isolated Google Drive folder 'HDSFD Sanctuary Backups'."
     })
 
 @app.route('/api/google/tasks', methods=['GET', 'POST'])
 def google_tasks_api():
+    data = request.json or {} if request.method == 'POST' else {}
+    username = request.args.get('username') or data.get('username') or 'Guest'
+    creds = get_google_credentials(username) or get_google_credentials('hdsystem.ahd@gmail.com')
+    
     if request.method == 'POST':
-        data = request.json or {}
         title = data.get('title', 'New Task')
-        folder = data.get('folder', 'Default')
-        return jsonify({
-            "status": "success",
-            "synced_to_google_tasks": True,
-            "task": {"title": title, "folder": folder, "google_task_id": f"gt_{int(os.urandom(4).hex(), 16)}"}
-        })
+        folder = data.get('folder')
+        
+        if creds:
+            try:
+                from googleapiclient.discovery import build
+                service = build('tasks', 'v1', credentials=creds)
+                task_body = {
+                    'title': f"[{folder}] {title}" if folder else title,
+                    'notes': f"Folder: {folder}" if folder else "HDSFD Task"
+                }
+                created = service.tasks().insert(tasklist='@default', body=task_body).execute()
+                return jsonify({"status": "success", "synced": True, "task": created})
+            except Exception as e:
+                logger.error(f"Google Tasks insert failed: {e}")
+        
+        return jsonify({"status": "success", "synced": False, "task": {"title": title, "folder": folder}})
+    
     else:
-        username = request.args.get('username', 'User')
-        return jsonify([
-            {"id": "gt_1", "title": "Complete Chapter 4 Reading", "folder": "Syllabus", "completed": False},
-            {"id": "gt_2", "title": "Prepare Chemistry Lab Notes", "folder": "Lab", "completed": False},
-            {"id": "gt_3", "title": "Math Problem Set 5", "folder": "Homework", "completed": True}
-        ])
+        if creds:
+            try:
+                from googleapiclient.discovery import build
+                service = build('tasks', 'v1', credentials=creds)
+                result = service.tasks().list(tasklist='@default').execute()
+                items = result.get('items', [])
+                tasks = []
+                for item in items:
+                    t_title = item.get('title', '')
+                    t_folder = ''
+                    if t_title.startswith('[') and ']' in t_title:
+                        parts = t_title.split(']', 1)
+                        t_folder = parts[0].replace('[', '').strip()
+                        t_title = parts[1].strip()
+                    tasks.append({
+                        "id": item.get('id'),
+                        "title": t_title,
+                        "folder": t_folder,
+                        "completed": item.get('status') == 'completed'
+                    })
+                return jsonify(tasks)
+            except Exception as e:
+                logger.error(f"Google Tasks list failed: {e}")
+
+        conn = get_db()
+        rows = conn.execute("SELECT * FROM items WHERE username = ? AND type = 'task'", (username,)).fetchall()
+        conn.close()
+        return jsonify([json.loads(r['content']) for r in rows])
 
 @app.route('/api/google/calendar', methods=['GET'])
 def google_calendar_api():
-    username = request.args.get('username', 'User')
+    username = request.args.get('username') or 'Guest'
+    creds = get_google_credentials(username) or get_google_credentials('hdsystem.ahd@gmail.com')
+    
+    if creds:
+        try:
+            from googleapiclient.discovery import build
+            service = build('calendar', 'v3', credentials=creds)
+            now_iso = datetime.datetime.utcnow().isoformat() + 'Z'
+            events_result = service.events().list(
+                calendarId='primary',
+                timeMin=now_iso,
+                maxResults=15,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            events = events_result.get('items', [])
+            result = []
+            for event in events:
+                start = event.get('start', {}).get('dateTime') or event.get('start', {}).get('date')
+                result.append({
+                    "id": event.get('id'),
+                    "summary": event.get('summary', 'Untitled Event'),
+                    "start": start
+                })
+            return jsonify(result)
+        except Exception as e:
+            logger.error(f"Google Calendar fetch failed: {e}")
+            
     return jsonify([
         {"id": "cal_1", "summary": "Chemistry Lab Exam", "start": "2026-08-15T10:00:00Z"},
         {"id": "cal_2", "summary": "Math Midterm Review", "start": "2026-08-22T14:00:00Z"}

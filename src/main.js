@@ -94,7 +94,6 @@ function autoBackupToDrive() {
 
 // ===== FIRST TIME NAME MODAL & AUTH =====
 function checkFirstTimeUser() {
-  // Check URL query parameters for Google OAuth callback parameter
   const urlParams = new URLSearchParams(window.location.search);
   const gAccount = urlParams.get('google_account');
   if (gAccount) {
@@ -547,6 +546,18 @@ function saveTask() {
   const folder = document.getElementById('task-folder-input').value.trim();
   if (!title) return;
 
+  const currentOwner = googleAccount || userName || 'Guest';
+
+  fetch(`${API_BASE}/google/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: currentOwner,
+      title: title,
+      folder: folder
+    })
+  }).catch(() => {});
+
   createData({
     type: 'task',
     title: title,
@@ -620,7 +631,7 @@ function renderCalendar() {
 
   for (let day = 1; day <= daysInMonth; day++) {
     const isToday = day === now.getDate();
-    const hasEvent = day === 15 || day === 22; // Google Calendar event markers
+    const hasEvent = day === 15 || day === 22;
     html += `
       <div class="h-10 glass rounded-lg p-1 text-left border ${isToday ? 'border-purple-400 bg-purple-500/20 font-bold text-purple-200' : 'border-white/10 text-white/70'}">
         <div class="flex justify-between items-center">
@@ -794,26 +805,24 @@ function setTheme(theme) {
 function syncNotesToDrive() {
   const msg = document.getElementById('backup-msg');
   if (msg) {
-    msg.textContent = 'Syncing notes & journal pages to Google Drive (📁 HDSFD Sanctuary Data)...';
+    msg.textContent = 'Syncing notes & journal pages to Google Drive (📁 HDSFD Sanctuary Backups)...';
     msg.classList.remove('hidden');
   }
 
   const notes = allData.filter(d => d.type === 'journal_note');
-  const tasks = allData.filter(d => d.type === 'task');
 
   fetch(`${API_BASE}/gdrive/backup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       username: googleAccount || userName || 'Guest',
-      folder: 'HDSFD Sanctuary Data',
-      notes: notes,
-      tasks: tasks
+      folder: 'HDSFD Sanctuary Backups',
+      notes: notes
     })
   })
   .then(res => res.json())
   .then(data => {
-    if (msg) msg.textContent = '✓ Notes & Journal spreads synced to Google Drive (HDSFD Sanctuary Data)!';
+    if (msg) msg.textContent = '✓ Notes & Journal spreads synced to Google Drive (HDSFD Sanctuary Backups)!';
     renderDriveFiles();
   })
   .catch(err => {
@@ -826,20 +835,15 @@ function renderDriveFiles() {
   if (!list) return;
 
   const notes = allData.filter(d => d.type === 'journal_note');
-  const tasks = allData.filter(d => d.type === 'task');
 
   let html = `
     <div class="flex justify-between items-center text-[11px] text-purple-300">
       <span>📄 journal_notes_backup.json (${notes.length} pages)</span>
-      <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">Drive Synced</span>
-    </div>
-    <div class="flex justify-between items-center text-[11px] text-emerald-300">
-      <span>📋 user_tasks_planner.json (${tasks.length} tasks)</span>
-      <span class="text-[9px] bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/30">Drive Synced</span>
+      <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">Vault Synced</span>
     </div>
     <div class="flex justify-between items-center text-[11px] text-amber-300">
       <span>💾 hdsfd_database_backup.db</span>
-      <span class="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">Drive Synced</span>
+      <span class="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">Vault Synced</span>
     </div>
   `;
   list.innerHTML = html;

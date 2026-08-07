@@ -544,6 +544,18 @@ function saveTask() {
   const folder = document.getElementById('task-folder-input').value.trim();
   if (!title) return;
 
+  const currentOwner = googleAccount || userName || 'Guest';
+
+  fetch(`${API_BASE}/google/tasks`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: currentOwner,
+      title: title,
+      folder: folder
+    })
+  }).catch(() => {});
+
   createData({
     type: 'task',
     title: title,
