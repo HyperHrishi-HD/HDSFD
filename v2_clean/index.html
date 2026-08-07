@@ -96,23 +96,35 @@
       z-index: 15;
     }
     .paper-page {
-      background: #faf6ed;
-      background-image: repeating-linear-gradient(transparent, transparent 27px, #cbd5e1 28px);
-      color: #1e293b;
+      background: #fefce8;
+      background-image: repeating-linear-gradient(transparent, transparent 27px, #e2e8f0 28px);
+      color: #0f172a;
       font-family: 'Kalam', 'Playfair Display', cursive, serif;
-      box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.08), 0 8px 20px rgba(0, 0, 0, 0.3);
-      border-radius: 12px;
-      border-left: 2px solid #f87171;
+      box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.05), 0 8px 20px rgba(0, 0, 0, 0.3);
+      border-radius: 16px;
+      border-left: 3px solid #f87171;
       padding-left: 1.5rem;
-      transition: transform 0.4s ease, opacity 0.4s ease;
+      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
+      transform-origin: top center;
     }
-    .page-flip-anim {
-      animation: pageTurn 0.4s ease-in-out;
+    .perspective-1000 {
+      perspective: 1000px;
     }
-    @keyframes pageTurn {
-      0% { transform: rotateY(0deg); opacity: 1; }
-      50% { transform: rotateY(45deg) scale(0.98); opacity: 0.7; }
-      100% { transform: rotateY(0deg); opacity: 1; }
+    .vertical-flip-up {
+      animation: flipUp 0.4s ease-in-out;
+    }
+    .vertical-flip-down {
+      animation: flipDown 0.4s ease-in-out;
+    }
+    @keyframes flipUp {
+      0% { transform: rotateX(0deg); opacity: 1; }
+      50% { transform: rotateX(-90deg) scale(0.95); opacity: 0.5; }
+      100% { transform: rotateX(0deg); opacity: 1; }
+    }
+    @keyframes flipDown {
+      0% { transform: rotateX(0deg); opacity: 1; }
+      50% { transform: rotateX(90deg) scale(0.95); opacity: 0.5; }
+      100% { transform: rotateX(0deg); opacity: 1; }
     }
 
     .orb {
@@ -379,46 +391,65 @@
               </div>
             </div>
 
-            <!-- REALISTIC SKEUOMORPHIC LEATHER JOURNAL WITH TYPE TEXT / DRAW MODES -->
+            <!-- SINGLE-PAGE VERTICAL FLIPPING TOP-SPIRAL NOTEPAD -->
             <div class="xl:col-span-7 flex flex-col">
-              <div class="leather-binder p-6 min-h-[560px] flex flex-col justify-between relative h-full">
+              <div class="glass-card p-5 min-h-[560px] flex flex-col justify-between relative h-full border border-white/15 shadow-2xl">
                 
-                <div class="flex items-center justify-between border-b border-[#5a381e] pb-3 z-20">
-                  <h2 class="text-sm font-black text-amber-200 tracking-wider uppercase flex items-center gap-2">📖 Skeuomorphic Leather Journal</h2>
+                <!-- Spiral Rings Header -->
+                <div class="flex justify-around px-6 -mt-8 mb-2 z-30 pointer-events-none">
+                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
+                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
+                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
+                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
+                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
+                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md flex"></div>
+                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md hidden sm:flex"></div>
+                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md hidden sm:flex"></div>
+                </div>
+
+                <div class="flex flex-wrap items-center justify-between border-b border-white/10 pb-3 z-20 gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-base">📝</span>
+                    <h2 class="text-sm font-black text-amber-300 tracking-wider uppercase">Sanctuary Flip Notepad</h2>
+                  </div>
                   
                   <div class="flex items-center gap-2">
-                    <button id="journal-mode-text-btn" onclick="setJournalMode('text')" class="bg-amber-100 text-amber-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-200">✍️ Type Text</button>
-                    <button id="journal-mode-draw-btn" onclick="setJournalMode('draw')" class="bg-amber-950/80 text-amber-200 border border-amber-800 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-900">🎨 Draw / Sketch</button>
-                    <button onclick="clearCanvas()" class="bg-amber-900/60 text-amber-100 border border-amber-700/50 px-2.5 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-800">Clear</button>
-                    <button onclick="addJournalPages()" class="bg-amber-200 text-amber-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-300">+ Spread</button>
+                    <button id="journal-mode-text-btn" onclick="setJournalMode('text')" class="bg-amber-300 text-slate-950 px-3 py-1 rounded-xl text-xs font-bold hover:bg-amber-200">✍️ Type Text</button>
+                    <button id="journal-mode-draw-btn" onclick="setJournalMode('draw')" class="bg-white/10 text-amber-200 border border-white/20 px-3 py-1 rounded-xl text-xs font-bold hover:bg-white/20">🎨 Draw</button>
+                    <button onclick="clearCanvas()" class="bg-red-500/20 text-red-300 border border-red-500/30 px-2.5 py-1 rounded-xl text-xs font-bold hover:bg-red-500/30">Clear</button>
+                    <button onclick="addNotepadPage()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-1 rounded-xl text-xs font-bold hover:bg-purple-500/30">+ New Page</button>
                   </div>
                 </div>
 
-                <div id="journal-empty" class="text-amber-200/50 text-xs italic text-center py-20">
-                  No journal pages created yet. Click "+ Spread" to start writing!
+                <div id="journal-empty" class="text-white/40 text-xs italic text-center py-24">
+                  No notepad pages created yet. Click "+ New Page" to start writing!
                 </div>
 
-                <div id="journal-spread" class="hidden grid grid-cols-1 md:grid-cols-2 gap-5 my-3 flex-1 relative page-flip-anim">
-                  
-                  <div class="paper-page p-5 flex flex-col text-left min-h-[400px] relative z-10">
-                    <span id="left-page-label" class="text-[10px] text-amber-900/50 font-bold mb-2">Page 1</span>
-                    <textarea id="left-page-text" placeholder="Click anywhere to type notes..." class="flex-1 w-full bg-transparent text-amber-950 placeholder-amber-900/40 text-sm leading-[28px] outline-none resize-none font-sans" oninput="saveJournalText('left')"></textarea>
-                  </div>
-
-                  <div class="paper-page p-5 flex flex-col text-left min-h-[400px] relative z-10">
-                    <span id="right-page-label" class="text-[10px] text-amber-900/50 font-bold mb-2">Page 2</span>
-                    <textarea id="right-page-text" placeholder="Click anywhere to type notes..." class="flex-1 w-full bg-transparent text-amber-950 placeholder-amber-900/40 text-sm leading-[28px] outline-none resize-none font-sans" oninput="saveJournalText('right')"></textarea>
+                <!-- Single Page Vertical Flip Container -->
+                <div id="journal-spread" class="hidden flex-1 my-3 relative min-h-[420px] perspective-1000">
+                  <div id="vertical-page-card" class="paper-page p-6 flex flex-col text-left h-full w-full relative z-10 rounded-2xl shadow-xl transition-all duration-300">
+                    <div class="flex justify-between items-center mb-2 border-b border-slate-300 pb-1">
+                      <span id="left-page-label" class="text-xs font-bold text-slate-600">Page 1</span>
+                      <span id="page-date-stamp" class="text-[10px] text-slate-400 font-mono">Today</span>
+                    </div>
+                    <textarea id="left-page-text" placeholder="Click anywhere on this notepad page to type notes..." class="flex-1 w-full bg-transparent text-slate-900 placeholder-slate-400 text-sm leading-[28px] outline-none resize-none font-sans" oninput="saveJournalText('left')"></textarea>
                   </div>
 
                   <!-- Canvas Overlay for Drawing -->
-                  <canvas id="journal-canvas" class="absolute inset-0 z-20 pointer-events-none rounded-xl"></canvas>
+                  <canvas id="journal-canvas" class="absolute inset-0 z-20 pointer-events-none rounded-2xl"></canvas>
                 </div>
 
-                <div id="journal-nav" class="hidden items-center justify-between border-t border-[#5a381e] pt-3 z-20">
-                  <button onclick="prevJournalPage()" class="bg-amber-950/80 text-amber-200 border border-amber-800 px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-900">◀ Previous Page</button>
-                  <span id="journal-indicator" class="text-xs font-bold text-amber-200/70">Page 1-2</span>
-                  <button onclick="nextJournalPage()" class="bg-amber-950/80 text-amber-200 border border-amber-800 px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-900">Next Page ▶</button>
+                <!-- Vertical Flip Control Bar -->
+                <div id="journal-nav" class="hidden items-center justify-between border-t border-white/10 pt-3 z-20">
+                  <button onclick="prevJournalPage()" class="bg-white/10 text-white border border-white/20 px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-white/20 flex items-center gap-1.5">
+                    <span>▼ Flip Down (Previous)</span>
+                  </button>
+                  <span id="journal-indicator" class="text-xs font-bold text-amber-300">Page 1 of 1</span>
+                  <button onclick="nextJournalPage()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-purple-500/30 flex items-center gap-1.5">
+                    <span>▲ Flip Up (Next)</span>
+                  </button>
                 </div>
+
               </div>
             </div>
 

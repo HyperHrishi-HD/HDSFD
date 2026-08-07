@@ -143,7 +143,46 @@ function initializeUserSession() {
 
   applyLowPowerState();
   startClockWithSeconds();
-  fetchData().then(() => renderCurrentTab());
+  fetchData().then(() => {
+    autoSyncGoogleTasksAndCalendar();
+    renderCurrentTab();
+  });
+}
+
+function autoSyncGoogleTasksAndCalendar() {
+  const owner = googleAccount || userName || 'Guest';
+  
+  fetch(`${API_BASE}/google/tasks?username=${encodeURIComponent(owner)}`)
+    .then(res => res.json())
+    .then(googleTasks => {
+      if (Array.isArray(googleTasks) && googleTasks.length > 0) {
+        googleTasks.forEach(gt => {
+          const exists = allData.some(d => d.type === 'task' && (d.id === gt.id || d.title === gt.title));
+          if (!exists) {
+            allData.push({
+              id: gt.id || 'gt_' + Date.now(),
+              type: 'task',
+              title: gt.title,
+              folder: gt.folder || '',
+              completed: gt.completed || false,
+              username: owner
+            });
+          }
+        });
+        renderTasks();
+      }
+    })
+    .catch(err => console.warn('Google Tasks auto-sync warning:', err));
+
+  fetch(`${API_BASE}/google/calendar?username=${encodeURIComponent(owner)}`)
+    .then(res => res.json())
+    .then(events => {
+      if (Array.isArray(events) && events.length > 0) {
+        window.googleCalendarEvents = events;
+        renderCalendar();
+      }
+    })
+    .catch(err => console.warn('Google Calendar auto-sync warning:', err));
 }
 
 function saveNameFromSettings() {
@@ -605,11 +644,6 @@ function toggleTaskState(id) {
   }
 }
 
-function syncGoogleCalendarTasks() {
-  createData({ type: 'task', title: 'Complete Chapter 4 Reading', folder: 'Syllabus', completed: false, created_at: new Date().toISOString() });
-  createData({ type: 'task', title: 'Prepare Chemistry Lab Notes', folder: 'Lab', completed: false, created_at: new Date().toISOString() });
-}
-
 // ===== CALENDAR GRID =====
 function renderCalendar() {
   const titleEl = document.getElementById('calendar-month-title');
@@ -629,14 +663,21 @@ function renderCalendar() {
     html += '<div class="h-10 glass rounded-lg opacity-20"></div>';
   }
 
+  const events = window.googleCalendarEvents || [];
+
   for (let day = 1; day <= daysInMonth; day++) {
     const isToday = day === now.getDate();
-    const hasEvent = day === 15 || day === 22;
+    const dayEvents = events.filter(e => {
+      if (!e.start) return false;
+      const d = new Date(e.start);
+      return d.getDate() === day && d.getMonth() === now.getMonth();
+    });
+
     html += `
       <div class="h-10 glass rounded-lg p-1 text-left border ${isToday ? 'border-purple-400 bg-purple-500/20 font-bold text-purple-200' : 'border-white/10 text-white/70'}">
         <div class="flex justify-between items-center">
           <span class="text-[10px]">${day}</span>
-          ${hasEvent ? '<span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>' : ''}
+          ${dayEvents.length > 0 ? `<span class="w-1.5 h-1.5 rounded-full bg-cyan-400" title="${dayEvents[0].summary}"></span>` : ''}
         </div>
       </div>
     `;
@@ -645,8 +686,9 @@ function renderCalendar() {
   gridEl.innerHTML = html;
 }
 
-// ===== SKEUOMORPHIC LEATHER JOURNAL, TYPE TEXT & DRAW MODES =====
+// ===== SANCTUARY FLIP NOTEPAD (VERTICAL FLIP, SINGLE PAGE PER SCREEN) =====
 let journalMode = 'text';
+let notepadPageIndex = 0;
 
 function setJournalMode(mode) {
   journalMode = mode;
@@ -655,12 +697,12 @@ function setJournalMode(mode) {
   const canvas = document.getElementById('journal-canvas');
 
   if (mode === 'text') {
-    if (textBtn) textBtn.className = 'bg-amber-100 text-amber-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-200';
-    if (drawBtn) drawBtn.className = 'bg-amber-950/80 text-amber-200 border border-amber-800 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-900';
+    if (textBtn) textBtn.className = 'bg-amber-300 text-slate-950 px-3 py-1 rounded-xl text-xs font-bold hover:bg-amber-200';
+    if (drawBtn) drawBtn.className = 'bg-white/10 text-amber-200 border border-white/20 px-3 py-1 rounded-xl text-xs font-bold hover:bg-white/20';
     if (canvas) canvas.style.pointerEvents = 'none';
   } else {
-    if (textBtn) textBtn.className = 'bg-amber-950/80 text-amber-200 border border-amber-800 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-900';
-    if (drawBtn) drawBtn.className = 'bg-amber-100 text-amber-950 px-3 py-1.5 rounded-xl text-xs font-bold hover:bg-amber-200';
+    if (textBtn) textBtn.className = 'bg-white/10 text-amber-200 border border-white/20 px-3 py-1 rounded-xl text-xs font-bold hover:bg-white/20';
+    if (drawBtn) drawBtn.className = 'bg-amber-300 text-slate-950 px-3 py-1 rounded-xl text-xs font-bold hover:bg-amber-200';
     if (canvas) canvas.style.pointerEvents = 'auto';
   }
 }
@@ -678,63 +720,75 @@ function renderJournal() {
     return;
   }
 
+  if (notepadPageIndex >= notes.length) notepadPageIndex = notes.length - 1;
+  if (notepadPageIndex < 0) notepadPageIndex = 0;
+
   emptyEl.classList.add('hidden');
   spreadEl.classList.remove('hidden');
-  spreadEl.classList.add('grid');
   navEl.classList.remove('hidden');
   navEl.classList.add('flex');
 
-  const leftNote = notes[journalSpreadIndex];
-  const rightNote = notes[journalSpreadIndex + 1];
+  const currentNote = notes[notepadPageIndex];
 
-  document.getElementById('left-page-label').textContent = `Page ${journalSpreadIndex + 1}`;
-  document.getElementById('left-page-text').value = leftNote ? leftNote.content || '' : '';
+  const pageLabel = document.getElementById('left-page-label');
+  const pageText = document.getElementById('left-page-text');
+  const dateStamp = document.getElementById('page-date-stamp');
 
-  document.getElementById('right-page-label').textContent = `Page ${journalSpreadIndex + 2}`;
-  document.getElementById('right-page-text').value = rightNote ? rightNote.content || '' : '';
+  if (pageLabel) pageLabel.textContent = `Page ${notepadPageIndex + 1}`;
+  if (pageText) pageText.value = currentNote ? currentNote.content || '' : '';
+  if (dateStamp) {
+    dateStamp.textContent = currentNote && currentNote.created_at ? new Date(currentNote.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Today';
+  }
 
-  document.getElementById('journal-indicator').textContent = `Page ${journalSpreadIndex + 1}-${journalSpreadIndex + 2} of ${Math.max(2, notes.length)}`;
+  document.getElementById('journal-indicator').textContent = `Page ${notepadPageIndex + 1} of ${notes.length}`;
   setJournalMode(journalMode);
   setupCanvas();
 }
 
-function addJournalPages() {
-  createData({ type: 'journal_note', content: '', created_at: new Date().toISOString() });
-  createData({ type: 'journal_note', content: '', created_at: new Date().toISOString() });
+function addNotepadPage() {
+  createData({ type: 'journal_note', content: '', created_at: new Date().toISOString() }).then(() => {
+    const notes = allData.filter(d => d.type === 'journal_note');
+    notepadPageIndex = Math.max(0, notes.length - 1);
+    renderJournal();
+  });
 }
 
-function saveJournalText(side) {
+function addJournalPages() {
+  addNotepadPage();
+}
+
+function saveJournalText() {
   const notes = allData.filter(d => d.type === 'journal_note');
-  const note = side === 'left' ? notes[journalSpreadIndex] : notes[journalSpreadIndex + 1];
+  const note = notes[notepadPageIndex];
   if (note) {
-    note.content = document.getElementById(`${side}-page-text`).value;
+    note.content = document.getElementById('left-page-text').value;
     createData(note);
   }
 }
 
 function prevJournalPage() {
-  if (journalSpreadIndex >= 2) {
-    triggerPageFlipAnim();
-    journalSpreadIndex -= 2;
+  if (notepadPageIndex > 0) {
+    triggerVerticalFlipAnim('down');
+    notepadPageIndex--;
     renderJournal();
   }
 }
 
 function nextJournalPage() {
   const notes = allData.filter(d => d.type === 'journal_note');
-  if (journalSpreadIndex + 2 < notes.length) {
-    triggerPageFlipAnim();
-    journalSpreadIndex += 2;
+  if (notepadPageIndex + 1 < notes.length) {
+    triggerVerticalFlipAnim('up');
+    notepadPageIndex++;
     renderJournal();
   }
 }
 
-function triggerPageFlipAnim() {
-  const spread = document.getElementById('journal-spread');
-  if (spread) {
-    spread.classList.remove('page-flip-anim');
-    void spread.offsetWidth;
-    spread.classList.add('page-flip-anim');
+function triggerVerticalFlipAnim(dir) {
+  const pageCard = document.getElementById('vertical-page-card');
+  if (pageCard) {
+    pageCard.classList.remove('vertical-flip-up', 'vertical-flip-down');
+    void pageCard.offsetWidth;
+    pageCard.classList.add(dir === 'up' ? 'vertical-flip-up' : 'vertical-flip-down');
   }
 }
 
