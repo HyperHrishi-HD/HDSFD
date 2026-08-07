@@ -126,8 +126,16 @@ def save_gdrive_credentials():
 def gdrive_auth():
     username = request.args.get('username', 'User')
     client_id = os.environ.get('GOOGLE_CLIENT_ID', '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com')
+    creds_file = os.path.join(os.path.dirname(__file__), 'google_credentials.json')
+    if os.path.exists(creds_file):
+        try:
+            with open(creds_file, 'r') as f:
+                cdata = json.load(f)
+                client_id = cdata.get('client_id', client_id)
+        except Exception:
+            pass
+
     redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
-    
     scopes = [
         'email',
         'profile',
@@ -142,6 +150,7 @@ def gdrive_auth():
         f"redirect_uri={encode_url_param(redirect_uri)}&"
         f"response_type=code&"
         f"scope={encode_url_param(' '.join(scopes))}&"
+        f"state={encode_url_param(username)}&"
         f"prompt=select_account%20consent&"
         f"access_type=offline"
     )
@@ -154,11 +163,22 @@ def encode_url_param(val):
 @app.route('/api/gdrive/callback', methods=['GET'])
 def gdrive_callback():
     code = request.args.get('code')
-    username = request.args.get('username', 'GoogleUser')
-    client_id = os.environ.get('GOOGLE_CLIENT_ID')
+    state_username = request.args.get('state') or request.args.get('username') or 'hdsystem.ahd@gmail.com'
+    client_id = os.environ.get('GOOGLE_CLIENT_ID', '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com')
     client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
-    user_email = username
+    creds_file = os.path.join(os.path.dirname(__file__), 'google_credentials.json')
+    if os.path.exists(creds_file):
+        try:
+            with open(creds_file, 'r') as f:
+                cdata = json.load(f)
+                client_id = cdata.get('client_id', client_id)
+                client_secret = cdata.get('client_secret', client_secret)
+        except Exception:
+            pass
+
+    user_email = state_username if state_username != 'User' else 'hdsystem.ahd@gmail.com'
+
     if code and client_id and client_secret:
         try:
             redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
@@ -182,25 +202,26 @@ def gdrive_callback():
             flow.fetch_token(authorization_response=request.url)
             creds = flow.credentials
             
-            # Fetch user email from Google UserInfo API
             from googleapiclient.discovery import build
             user_info_service = build('oauth2', 'v2', credentials=creds)
             user_info = user_info_service.userinfo().get().execute()
-            user_email = user_info.get('email', username)
+            user_email = user_info.get('email', user_email)
         except Exception as e:
             logger.warning(f"Failed to fetch user email in callback: {e}")
 
     html = f"""
     <html>
       <body style="background: #0f172a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin:0;">
-        <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 30px; border-radius: 20px; text-align: center;">
-          <h2 style="color: #c084fc;">Google Account Connected!</h2>
-          <p>Logged in as {user_email}. Returning to Sanctuary...</p>
+        <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 30px; border-radius: 20px; text-align: center; max-w: 360px;">
+          <div style="font-size: 40px; margin-bottom: 10px;">✨</div>
+          <h2 style="color: #c084fc; margin: 0 0 10px 0;">Google Account Connected!</h2>
+          <p style="color: #cbd5e1; font-size: 14px; margin: 0 0 15px 0;">Logged in as <b>{user_email}</b></p>
+          <p style="color: #94a3b8; font-size: 11px;">Closing window and returning to Sanctuary...</p>
         </div>
         <script>
           if (window.opener) {{
             window.opener.postMessage({{ type: 'gdrive_linked', username: {json.dumps(user_email)} }}, '*');
-            setTimeout(function() {{ window.close(); }}, 1000);
+            setTimeout(function() {{ window.close(); }}, 1200);
           }} else {{
             window.location.href = '/?google_account=' + encodeURIComponent({json.dumps(user_email)});
           }}

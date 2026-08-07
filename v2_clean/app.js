@@ -165,13 +165,20 @@ function saveSubtitle() {
   }
 }
 
-// ===== REAL GOOGLE OAUTH FLOW =====
-const GOOGLE_CLIENT_ID = '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com';
-
 function connectGoogleAccount() {
   const owner = userName || 'User';
-  // Direct main-tab redirect to official Google OAuth 2.0 authorization
-  window.location.href = `${API_BASE}/gdrive/auth?username=${encodeURIComponent(owner)}`;
+  const width = 520;
+  const height = 650;
+  const left = (window.screen.width / 2) - (width / 2);
+  const top = (window.screen.height / 2) - (height / 2);
+
+  const authWindow = window.open(
+    `${API_BASE}/gdrive/auth?username=${encodeURIComponent(owner)}`,
+    'GoogleOAuthWindow',
+    `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
+  );
+
+  if (authWindow) authWindow.focus();
 }
 
 window.addEventListener('message', (event) => {
