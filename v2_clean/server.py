@@ -144,16 +144,15 @@ def gdrive_auth():
         'https://www.googleapis.com/auth/tasks'
     ]
     
-    google_auth_url = (
-        f"https://accounts.google.com/o/oauth2/v2/auth?"
-        f"client_id={encode_url_param(client_id)}&"
-        f"redirect_uri={encode_url_param(redirect_uri)}&"
-        f"response_type=code&"
-        f"scope={encode_url_param(' '.join(scopes))}&"
-        f"state={encode_url_param(username)}&"
-        f"prompt=select_account%20consent&"
-        f"access_type=offline"
-    )
+    params = {
+        'client_id': client_id,
+        'redirect_uri': redirect_uri,
+        'response_type': 'code',
+        'scope': ' '.join(scopes),
+        'prompt': 'select_account consent',
+        'access_type': 'offline'
+    }
+    google_auth_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + urllib.parse.urlencode(params)
     return redirect(google_auth_url)
 
 def encode_url_param(val):
