@@ -195,13 +195,15 @@ def gdrive_callback():
       <body style="background: #0f172a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin:0;">
         <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 30px; border-radius: 20px; text-align: center;">
           <h2 style="color: #c084fc;">Google Account Connected!</h2>
-          <p>Logged in as {user_email}. Closing window...</p>
+          <p>Logged in as {user_email}. Returning to Sanctuary...</p>
         </div>
         <script>
           if (window.opener) {{
             window.opener.postMessage({{ type: 'gdrive_linked', username: {json.dumps(user_email)} }}, '*');
+            setTimeout(function() {{ window.close(); }}, 1000);
+          }} else {{
+            window.location.href = '/?google_account=' + encodeURIComponent({json.dumps(user_email)});
           }}
-          setTimeout(function() {{ window.close(); }}, 1200);
         </script>
       </body>
     </html>

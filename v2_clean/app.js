@@ -94,6 +94,15 @@ function autoBackupToDrive() {
 
 // ===== FIRST TIME NAME MODAL & AUTH =====
 function checkFirstTimeUser() {
+  // Check URL query parameters for Google OAuth callback parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const gAccount = urlParams.get('google_account');
+  if (gAccount) {
+    googleAccount = gAccount;
+    localStorage.setItem('hdsfd_google_account', gAccount);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   if (!userName && !googleAccount) {
     const modal = document.getElementById('welcome-modal');
     if (modal) modal.classList.remove('hidden');
@@ -156,49 +165,13 @@ function saveSubtitle() {
   }
 }
 
-// ===== REAL GOOGLE OAUTH & FIREBASE AUTH FLOW =====
+// ===== REAL GOOGLE OAUTH FLOW =====
 const GOOGLE_CLIENT_ID = '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com';
 
-async function connectGoogleAccount() {
+function connectGoogleAccount() {
   const owner = userName || 'User';
-
-  // Official Google Identity Services SDK Token Client
-  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
-    try {
-      const tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: 'email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/tasks',
-        callback: (tokenResponse) => {
-          if (tokenResponse && tokenResponse.access_token) {
-            fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-              headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
-            })
-            .then(res => res.json())
-            .then(profile => {
-              googleAccount = profile.email || profile.name || owner;
-              localStorage.setItem('hdsfd_google_account', googleAccount);
-              if (profile.name) {
-                userName = profile.name;
-                localStorage.setItem('hdsfd_user_name', userName);
-              }
-              initializeUserSession();
-              alert(`Successfully signed in with Google as ${googleAccount}!`);
-            })
-            .catch(err => console.warn('Profile fetch error:', err));
-          }
-        }
-      });
-      tokenClient.requestAccessToken({ prompt: 'select_account' });
-      return;
-    } catch (e) {
-      console.warn('GIS Token Client error:', e);
-    }
-  }
-
-  // Fallback: Direct OAuth URL redirect to accounts.google.com
-  const redirectUri = window.location.origin + '/api/gdrive/callback';
-  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(GOOGLE_CLIENT_ID)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=email%20profile%20https://www.googleapis.com/auth/drive.file%20https://www.googleapis.com/auth/calendar%20https://www.googleapis.com/auth/tasks&prompt=select_account%20consent&access_type=offline`;
-  window.open(authUrl, 'GoogleOAuth', 'width=500,height=650');
+  // Direct main-tab redirect to official Google OAuth 2.0 authorization
+  window.location.href = `${API_BASE}/gdrive/auth?username=${encodeURIComponent(owner)}`;
 }
 
 window.addEventListener('message', (event) => {
