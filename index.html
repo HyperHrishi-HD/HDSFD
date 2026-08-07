@@ -490,36 +490,32 @@
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
               <div class="flex items-center justify-between">
                 <div>
-                  <span class="text-xs font-bold text-white">Google Drive Organized Storage</span>
-                  <p class="text-[10px] text-white/50">📁 Folder: <b>HDSFD Sanctuary Data</b></p>
+                  <span class="text-xs font-bold text-white">Google Drive Backup Vault</span>
+                  <p class="text-[10px] text-white/50">📁 Isolated Folder: <b>HDSFD Sanctuary Backups</b></p>
                 </div>
                 <span id="settings-gdrive-badge" class="text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold">Guest Mode</span>
               </div>
 
               <div class="flex gap-2">
                 <button onclick="connectGoogleAccount()" class="bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-cyan-500/30">Pair Google Account</button>
-                <button onclick="syncNotesToDrive()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-purple-500/30">Sync Notes to Drive</button>
-                <button onclick="triggerGoogleBackup()" class="bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-emerald-500/30">Manual Backup</button>
+                <button onclick="syncNotesToDrive()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-purple-500/30">Sync Journal to Drive</button>
+                <button onclick="triggerGoogleBackup()" class="bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-emerald-500/30">Database Snapshot</button>
               </div>
 
-              <!-- Drive Files List -->
+              <!-- Isolated Drive Backups List -->
               <div class="bg-black/30 p-3 rounded-xl border border-white/10 space-y-1.5 text-left text-xs">
                 <div class="flex justify-between items-center text-[10px] text-white/50 font-bold uppercase border-b border-white/10 pb-1">
-                  <span>Drive Files</span>
-                  <span>Size / Status</span>
+                  <span>Isolated Drive Backup File</span>
+                  <span>Target Folder</span>
                 </div>
                 <div id="drive-files-list" class="space-y-1">
                   <div class="flex justify-between items-center text-[11px] text-purple-300">
-                    <span>📄 journal_spread_p1_p2.json</span>
-                    <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">Synced</span>
-                  </div>
-                  <div class="flex justify-between items-center text-[11px] text-emerald-300">
-                    <span>📋 user_tasks_planner.json</span>
-                    <span class="text-[9px] bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/30">Synced</span>
+                    <span>📄 journal_notes_backup.json</span>
+                    <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Sanctuary Backups</span>
                   </div>
                   <div class="flex justify-between items-center text-[11px] text-amber-300">
                     <span>💾 hdsfd_database_backup.db</span>
-                    <span class="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">Synced</span>
+                    <span class="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">HDSFD Sanctuary Backups</span>
                   </div>
                 </div>
               </div>
