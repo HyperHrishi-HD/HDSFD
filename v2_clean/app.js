@@ -242,7 +242,7 @@ function triggerGoogleBackup() {
     schedules: schedules,
     exams: exams,
     gemini_chat_history: geminiChatHistory,
-    app_info: 'HDSFD Student Focus Sanctuary & Intelligent Workspace'
+    app_info: 'HDSFD (HD Student Focus Dashboard) — Student Focus Sanctuary & Intelligent Workspace'
   };
 
   const msgEl = document.getElementById('backup-msg');
