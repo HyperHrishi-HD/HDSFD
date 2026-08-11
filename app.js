@@ -259,11 +259,13 @@ function triggerGoogleBackup() {
 // ===== FIRST TIME USER & LIVE GOOGLE AUTH DETECTION =====
 async function checkGoogleStatus() {
   const savedAccount = localStorage.getItem('hdsfd_google_account');
-  if (!savedAccount) {
+  if (!savedAccount || !savedAccount.includes('@')) {
     googleAccount = null;
     googleAccountName = null;
     return;
   }
+  googleAccount = savedAccount;
+  googleAccountName = localStorage.getItem('hdsfd_google_name') || null;
   try {
     const res = await fetch(`${API_BASE}/google/status?username=${encodeURIComponent(savedAccount)}`);
     if (res.ok) {
@@ -271,14 +273,10 @@ async function checkGoogleStatus() {
       if (data.connected && data.email) {
         googleAccount = data.email;
         localStorage.setItem('hdsfd_google_account', data.email);
-        if (data.name) {
+        if (data.name && !data.name.includes('PRIZW') && data.name !== 'User') {
           googleAccountName = data.name;
           localStorage.setItem('hdsfd_google_name', data.name);
         }
-      } else {
-        googleAccount = null;
-        googleAccountName = null;
-        localStorage.removeItem('hdsfd_google_account');
       }
     }
   } catch (e) {
