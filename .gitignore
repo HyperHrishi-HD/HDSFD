@@ -7,4 +7,7 @@ __pycache__/
 .DS_Store
 *credentials*.json
 google_credentials.json
+secrets_config.json
+.env*
 backups/
+
