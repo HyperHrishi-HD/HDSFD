@@ -290,10 +290,10 @@ async function checkFirstTimeUser() {
   const urlParams = new URLSearchParams(window.location.search);
   const gAccount = urlParams.get('google_account');
   const gName = urlParams.get('name');
-  if (gAccount) {
+  if (gAccount && gAccount.includes('@')) {
     googleAccount = gAccount;
     localStorage.setItem('hdsfd_google_account', gAccount);
-    if (gName) {
+    if (gName && !gName.includes('PRIZW') && gName !== 'User') {
       googleAccountName = gName;
       localStorage.setItem('hdsfd_google_name', gName);
     }
@@ -322,17 +322,22 @@ function initializeUserSession() {
   const nameDisplay = document.getElementById('header-user-name');
   const settingsInput = document.getElementById('settings-name-input');
   
-  // Custom display name saved by user takes first priority; then account profile name, then formatted email prefix, NOT raw email!
-  const customSavedName = localStorage.getItem('hdsfd_user_name');
+  // Custom display name saved by user takes first priority; then account profile name, then formatted email prefix, NOT raw email or random tokens!
+  let customSavedName = localStorage.getItem('hdsfd_user_name');
+  if (customSavedName && (customSavedName.includes('PRIZW') || (customSavedName.length > 20 && !customSavedName.includes(' ')))) {
+    customSavedName = null;
+    localStorage.removeItem('hdsfd_user_name');
+  }
+
   let displayName = customSavedName;
   if (!displayName) {
-    if (googleAccountName) {
+    if (googleAccountName && !googleAccountName.includes('PRIZW') && googleAccountName !== 'User') {
       displayName = googleAccountName;
-    } else if (googleAccount) {
+    } else if (googleAccount && googleAccount.includes('@')) {
       const prefix = googleAccount.split('@')[0];
       displayName = prefix.replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     } else {
-      displayName = userName || 'User';
+      displayName = (userName && !userName.includes('PRIZW') && userName !== 'User') ? userName : 'User';
     }
   }
   
@@ -4310,21 +4315,27 @@ function connectGoogleAccount() {
 
 window.addEventListener('message', (event) => {
   if (event.data && (event.data.type === 'gdrive_linked' || event.data.username)) {
-    googleAccount = event.data.username || 'GoogleUser';
-    localStorage.setItem('hdsfd_google_account', googleAccount);
+    const rawEmail = (event.data.username || '').trim();
+    if (rawEmail && rawEmail.includes('@')) {
+      googleAccount = rawEmail;
+      localStorage.setItem('hdsfd_google_account', googleAccount);
+    }
 
-    if (event.data.name) {
-      googleAccountName = event.data.name;
+    const rawName = (event.data.name || '').trim();
+    if (rawName && !rawName.includes('PRIZW') && rawName !== 'User') {
+      googleAccountName = rawName;
       localStorage.setItem('hdsfd_google_name', googleAccountName);
       userName = googleAccountName;
       localStorage.setItem('hdsfd_user_name', googleAccountName);
       const nameInput = document.getElementById('settings-name-input');
       if (nameInput) nameInput.value = googleAccountName;
-    } else if (googleAccount.includes('@')) {
+    } else if (googleAccount && googleAccount.includes('@')) {
       const emailPrefix = googleAccount.split('@')[0];
       const formattedName = emailPrefix.replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       userName = formattedName;
+      googleAccountName = formattedName;
       localStorage.setItem('hdsfd_user_name', formattedName);
+      localStorage.setItem('hdsfd_google_name', formattedName);
       const nameInput = document.getElementById('settings-name-input');
       if (nameInput) nameInput.value = formattedName;
     }
