@@ -221,20 +221,18 @@ def get_google_status():
         row = conn.execute("SELECT username, updated_at FROM user_tokens WHERE username = ?", (requested_username,)).fetchone()
     conn.close()
     if row:
-        creds = get_google_credentials(row['username'])
-        if creds and creds.valid:
-            email = row['username']
-            name_part = None
-            if 'display_name' in row.keys() and row['display_name']:
-                name_part = row['display_name']
-            if not name_part:
-                name_part = email.split('@')[0].replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
-            return jsonify({
-                "connected": True,
-                "email": email,
-                "name": name_part,
-                "updated_at": row['updated_at']
-            })
+        email = row['username']
+        name_part = None
+        if 'display_name' in row.keys() and row['display_name']:
+            name_part = row['display_name']
+        if not name_part and '@' in email:
+            name_part = email.split('@')[0].replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
+        return jsonify({
+            "connected": True,
+            "email": email,
+            "name": name_part or "Google User",
+            "updated_at": row['updated_at']
+        })
     return jsonify({
         "connected": False,
         "email": None,
