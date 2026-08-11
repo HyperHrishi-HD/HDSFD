@@ -5,6 +5,58 @@ import json
 import logging
 import urllib.parse
 import datetime
+import threading
+
+# Load-balanced Gemini API key pool from private secrets_config.json or environment variables
+GEMINI_KEY_POOL = []
+
+# 1. Try environment variables
+env_keys = [k.strip() for k in os.environ.get('GEMINI_API_KEYS', '').split(',') if k.strip()]
+if not env_keys and os.environ.get('GEMINI_API_KEY'):
+    env_keys = [os.environ.get('GEMINI_API_KEY').strip()]
+if env_keys:
+    GEMINI_KEY_POOL.extend(env_keys)
+
+# 2. Try private secrets_config.json file
+if not GEMINI_KEY_POOL:
+    for possible_path in [
+        os.path.join(os.path.dirname(__file__), 'secrets_config.json'),
+        os.path.join(os.getcwd(), 'secrets_config.json'),
+        '/home/HDSFD/HDSFD/secrets_config.json',
+        '/home/HDSFD/HDSFD/backend/secrets_config.json'
+    ]:
+        if os.path.exists(possible_path):
+            try:
+                with open(possible_path, 'r', encoding='utf-8') as f:
+                    cfg = json.load(f)
+                    file_keys = cfg.get('gemini_api_keys', [])
+                    if isinstance(file_keys, list):
+                        GEMINI_KEY_POOL.extend([k.strip() for k in file_keys if k and isinstance(k, str) and k.strip()])
+                if GEMINI_KEY_POOL:
+                    break
+            except Exception:
+                pass
+
+_gemini_key_index = 0
+_gemini_key_lock = threading.Lock()
+
+def get_ordered_key_candidates(user_custom_key=None):
+    """Returns an ordered list of API keys starting with the next round-robin key, then other pool keys as failovers."""
+    global _gemini_key_index
+    keys = []
+    if user_custom_key and user_custom_key.strip():
+        keys.append(user_custom_key.strip())
+    
+    with _gemini_key_lock:
+        n = len(GEMINI_KEY_POOL)
+        if n > 0:
+            start_idx = _gemini_key_index % n
+            _gemini_key_index = (_gemini_key_index + 1) % n
+            for i in range(n):
+                k = GEMINI_KEY_POOL[(start_idx + i) % n]
+                if k not in keys:
+                    keys.append(k)
+    return keys
 
 try:
     from flask_cors import CORS
@@ -767,28 +819,37 @@ def gemini_generate():
         except Exception as e:
             logger.warning(f"OAuth Generative AI call error: {e}")
 
-    # 2. Call via API Key if token failed or not configured
-    if not generated_text and api_key:
-        try:
-            import requests
-            payload = {
-                "contents": contents,
-                "generationConfig": { "temperature": 0.7, "maxOutputTokens": 2048 }
-            }
+    # 2. Call via Load-Balanced Gemini API Key Pool (Round-Robin & Automatic Quota Failover)
+    if not generated_text:
+        key_candidates = get_ordered_key_candidates(api_key)
+        import requests
+        payload = {
+            "contents": contents,
+            "generationConfig": { "temperature": 0.7, "maxOutputTokens": 2048 }
+        }
+        for candidate_key in key_candidates:
+            if generated_text:
+                break
             for model_candidate in ["gemini-2.0-flash", "gemini-1.5-flash"]:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={api_key}"
-                res = requests.post(url, json=payload, timeout=20)
-                if res.status_code == 200:
-                    result_json = res.json()
-                    candidates = result_json.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        generated_text = "".join(p.get("text", "") for p in parts)
-                        model_name = model_candidate
-                        source = "google_api_key"
+                try:
+                    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={candidate_key}"
+                    res = requests.post(url, json=payload, timeout=20)
+                    if res.status_code == 200:
+                        result_json = res.json()
+                        candidates = result_json.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            generated_text = "".join(p.get("text", "") for p in parts)
+                            if generated_text:
+                                model_name = model_candidate
+                                source = "google_api_key_pool"
+                                break
+                    elif res.status_code in [429, 403, 500, 503]:
+                        logger.warning(f"Key candidate status {res.status_code}, automatically failing over to next pool key...")
                         break
-        except Exception as e:
-            logger.warning(f"API key Generative AI error: {e}")
+                except Exception as ex:
+                    logger.warning(f"API key candidate error: {ex}")
+                    break
 
     # 3. Dynamic Natural Language Agent Engine for Instant Context-Aware Answers
     if not generated_text:
