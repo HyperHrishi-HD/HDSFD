@@ -142,6 +142,7 @@ def init_db():
 def save_user_tokens(username, creds, display_name=None):
     if not username or not creds:
         return
+    token_str = creds.to_json() if hasattr(creds, 'to_json') else (json.dumps(creds) if isinstance(creds, dict) else str(creds))
     conn = get_db()
     try:
         conn.execute('ALTER TABLE user_tokens ADD COLUMN display_name TEXT')
@@ -155,7 +156,7 @@ def save_user_tokens(username, creds, display_name=None):
                 token_json = excluded.token_json,
                 display_name = excluded.display_name,
                 updated_at = CURRENT_TIMESTAMP
-        ''', (username, creds.to_json(), display_name))
+        ''', (username, token_str, display_name))
     else:
         conn.execute('''
             INSERT INTO user_tokens (username, token_json)
@@ -163,7 +164,7 @@ def save_user_tokens(username, creds, display_name=None):
             ON CONFLICT(username) DO UPDATE SET
                 token_json = excluded.token_json,
                 updated_at = CURRENT_TIMESTAMP
-        ''', (username, creds.to_json()))
+        ''', (username, token_str))
     conn.commit()
     conn.close()
 
@@ -176,9 +177,24 @@ def get_google_credentials(username=None):
     if not row:
         return None
     try:
+        creds_data = json.loads(row['token_json'])
+        if 'client_id' not in creds_data:
+            client_id = os.environ.get('GOOGLE_CLIENT_ID', '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com')
+            client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
+            creds_file = os.path.join(os.path.dirname(__file__), 'google_credentials.json')
+            if os.path.exists(creds_file):
+                try:
+                    with open(creds_file, 'r') as f:
+                        cdata = json.load(f)
+                        client_id = cdata.get('client_id', client_id)
+                        client_secret = cdata.get('client_secret', client_secret)
+                except Exception:
+                    pass
+            creds_data['client_id'] = client_id
+            creds_data['client_secret'] = client_secret
+
         import google.oauth2.credentials
         from google.auth.transport.requests import Request
-        creds_data = json.loads(row['token_json'])
         creds = google.oauth2.credentials.Credentials.from_authorized_user_info(creds_data)
         if creds and (creds.expired or not creds.valid) and creds.refresh_token:
             creds.refresh(Request())
@@ -1419,94 +1435,118 @@ def gdrive_callback():
         except Exception:
             pass
 
+    redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
+    if 'pythonanywhere.com' in redirect_uri and redirect_uri.startswith('http://'):
+        redirect_uri = 'https://' + redirect_uri[7:]
+
     user_email = ''
     user_name = ''
 
     if code and client_id and client_secret:
         try:
-            from google_auth_oauthlib.flow import Flow
-            redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
-            client_config = {
-                "web": {
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/v2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": [redirect_uri]
-                }
-            }
-            flow = Flow.from_client_config(client_config, scopes=[
-                'https://www.googleapis.com/auth/userinfo.profile',
-                'https://www.googleapis.com/auth/userinfo.email',
-                'https://www.googleapis.com/auth/drive.file',
-                'https://www.googleapis.com/auth/calendar',
-                'https://www.googleapis.com/auth/tasks'
-            ])
-            flow.redirect_uri = redirect_uri
-            flow.fetch_token(authorization_response=request.url)
-            # 1. Instant ID Token JWT decoding (zero network latency, never fails)
-            id_tok = getattr(creds, 'id_token', None)
-            if id_tok and isinstance(id_tok, str) and '.' in id_tok:
-                try:
-                    parts = id_tok.split('.')
-                    if len(parts) >= 2:
-                        b64 = parts[1] + '=' * (-len(parts[1]) % 4)
-                        data = json.loads(base64.urlsafe_b64decode(b64).decode('utf-8'))
-                        user_email = data.get('email', '')
-                        user_name = data.get('name', '') or data.get('given_name', '')
-                except Exception as ex:
-                    logger.warning(f"Error parsing ID token JWT: {ex}")
+            import requests
+            token_resp = requests.post('https://oauth2.googleapis.com/token', data={
+                'code': code,
+                'client_id': client_id,
+                'client_secret': client_secret,
+                'redirect_uri': redirect_uri,
+                'grant_type': 'authorization_code'
+            }, timeout=15)
 
-            # 2. Fallback via direct HTTP userinfo endpoint if ID token didn't have both
-            if not user_email or not user_name:
-                try:
-                    import requests
-                    u_res = requests.get(
-                        'https://www.googleapis.com/oauth2/v2/userinfo',
-                        headers={'Authorization': f'Bearer {creds.token}'},
-                        timeout=10
-                    )
-                    if u_res.status_code == 200:
-                        u_data = u_res.json()
-                        user_email = user_email or u_data.get('email', '')
-                        user_name = user_name or u_data.get('name', '') or u_data.get('given_name', '')
-                except Exception as ex:
-                    logger.warning(f"Error querying userinfo API: {ex}")
+            if token_resp.status_code == 200:
+                token_data = token_resp.json()
 
-            # 3. If user_name is still empty, format from email prefix
-            if not user_name and user_email and '@' in user_email:
-                prefix = user_email.split('@')[0]
-                user_name = prefix.replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
+                # 1. Instant ID Token JWT decoding
+                id_tok = token_data.get('id_token')
+                if id_tok and '.' in id_tok:
+                    try:
+                        parts = id_tok.split('.')
+                        if len(parts) >= 2:
+                            p_b64 = parts[1] + '=' * (-len(parts[1]) % 4)
+                            id_payload = json.loads(base64.urlsafe_b64decode(p_b64).decode('utf-8'))
+                            user_email = id_payload.get('email', '')
+                            user_name = id_payload.get('name', '') or id_payload.get('given_name', '')
+                    except Exception as ex:
+                        logger.warning(f"Error parsing ID token JWT: {ex}")
 
-            if user_email:
-                save_user_tokens(user_email, creds, user_name)
+                # 2. Secondary check via userinfo endpoint if needed
+                if not user_email or not user_name:
+                    access_token = token_data.get('access_token')
+                    if access_token:
+                        try:
+                            u_resp = requests.get('https://www.googleapis.com/oauth2/v2/userinfo', headers={
+                                'Authorization': f'Bearer {access_token}'
+                            }, timeout=10)
+                            if u_resp.status_code == 200:
+                                u_data = u_resp.json()
+                                user_email = user_email or u_data.get('email', '')
+                                user_name = user_name or u_data.get('name', '') or u_data.get('given_name', '')
+                        except Exception as ex:
+                            logger.warning(f"Userinfo endpoint query failed: {ex}")
+
+                # 3. Fallback name to formatted email prefix if user_name is blank
+                if not user_name and user_email and '@' in user_email:
+                    prefix = user_email.split('@')[0]
+                    user_name = prefix.replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
+
+                if user_email:
+                    save_user_tokens(user_email, token_data, user_name)
+            else:
+                logger.error(f"Google token exchange failed: {token_resp.status_code} {token_resp.text}")
         except Exception as e:
             logger.error(f"Failed in callback: {e}")
 
-    display_label = user_name or (user_email.split('@')[0].replace('.', ' ').title() if '@' in user_email else (state_username if state_username != 'User' else "Google User"))
-    if not user_email and state_username and '@' in state_username:
-        user_email = state_username
+    display_label = user_name or (user_email.split('@')[0].replace('.', ' ').title() if '@' in user_email else "Google User")
 
-    html = f"""
-    <html>
-      <body style="background: #0f172a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin:0;">
-        <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 30px; border-radius: 20px; text-align: center; max-width: 380px;">
-          <div style="font-size: 40px; margin-bottom: 10px;">✨</div>
-          <h2 style="color: #c084fc; margin: 0 0 10px 0;">Google Account Connected!</h2>
-          <p style="color: #cbd5e1; font-size: 14px; margin: 0 0 15px 0;">Logged in as <b>{display_label}</b> ({user_email})</p>
-          <p style="color: #94a3b8; font-size: 11px;">Closing window and returning to Sanctuary...</p>
-        </div>
-        <script>
-          if (window.opener) {{
-            window.opener.postMessage({{ type: 'gdrive_linked', username: {json.dumps(user_email)}, name: {json.dumps(user_name or display_label)} }}, '*');
-            setTimeout(function() {{ window.close(); }}, 1200);
-          }} else {{
-            window.location.href = '/?google_account=' + encodeURIComponent({json.dumps(user_email)}) + '&name=' + encodeURIComponent({json.dumps(user_name or display_label)});
-          }}
-        </script>
-      </body>
-    </html>
-    """
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Google Account Connected</title>
+  <style>
+    body {{ background: #0f172a; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
+    .card {{ background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 32px; border-radius: 24px; text-align: center; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
+    h2 {{ color: #c084fc; margin: 12px 0 8px 0; font-size: 22px; }}
+    p {{ color: #cbd5e1; font-size: 14px; margin: 0 0 16px 0; }}
+    .pill {{ background: rgba(168,85,247,0.2); border: 1px solid rgba(168,85,247,0.4); padding: 4px 12px; border-radius: 20px; color: #e9d5ff; font-weight: bold; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size: 44px;">✨</div>
+    <h2>Google Connected!</h2>
+    <p>Logged in as <span class="pill">{display_label}</span></p>
+    <p style="color: #94a3b8; font-size: 12px;">Returning to your sanctuary...</p>
+  </div>
+  <script>
+    const userEmail = {json.dumps(user_email)};
+    const userName = {json.dumps(user_name or display_label)};
+    
+    if (userEmail && userEmail.indexOf('@') !== -1) {{
+      localStorage.setItem('hdsfd_google_account', userEmail);
+      localStorage.setItem('hdsfd_google_name', userName);
+      localStorage.setItem('hdsfd_user_name', userName);
+    }}
+    
+    const authData = {{
+      type: 'gdrive_linked',
+      username: userEmail,
+      name: userName
+    }};
+    
+    if (window.opener && !window.opener.closed) {{
+      try {{
+        window.opener.postMessage(authData, '*');
+      }} catch (e) {{}}
+      setTimeout(() => {{ window.close(); }}, 1000);
+    }} else {{
+      setTimeout(() => {{
+        window.location.href = '/?google_account=' + encodeURIComponent(userEmail) + '&name=' + encodeURIComponent(userName);
+      }}, 1000);
+    }}
+  </script>
+</body>
+</html>"""
     return html
 
 @app.route('/api/gdrive/backup', methods=['POST'])
