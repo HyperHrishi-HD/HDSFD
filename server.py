@@ -1236,13 +1236,18 @@ def gdrive_auth():
         'https://www.googleapis.com/auth/tasks'
     ]
     
+    import secrets
+    state_token = f"{secrets.token_urlsafe(12)}_{urllib.parse.quote(username)}"
+    
     params = {
         'client_id': client_id,
         'redirect_uri': redirect_uri,
         'response_type': 'code',
         'scope': ' '.join(scopes),
+        'state': state_token,
         'prompt': 'select_account consent',
-        'access_type': 'offline'
+        'access_type': 'offline',
+        'include_granted_scopes': 'true'
     }
     google_auth_url = 'https://accounts.google.com/o/oauth2/v2/auth?' + urllib.parse.urlencode(params)
     return redirect(google_auth_url)
@@ -1250,7 +1255,16 @@ def gdrive_auth():
 @app.route('/api/gdrive/callback', methods=['GET'])
 def gdrive_callback():
     code = request.args.get('code')
-    state_username = request.args.get('state') or request.args.get('username') or 'hdsystem.ahd@gmail.com'
+    raw_state = request.args.get('state') or ''
+    state_username = 'hdsystem.ahd@gmail.com'
+    if '_' in raw_state:
+        try:
+            state_username = urllib.parse.unquote(raw_state.split('_', 1)[1])
+        except Exception:
+            state_username = 'hdsystem.ahd@gmail.com'
+    elif request.args.get('username'):
+        state_username = request.args.get('username')
+        
     client_id = os.environ.get('GOOGLE_CLIENT_ID', '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com')
     client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
@@ -1264,7 +1278,7 @@ def gdrive_callback():
         except Exception:
             pass
 
-    user_email = state_username if state_username != 'User' else 'hdsystem.ahd@gmail.com'
+    user_email = state_username if state_username and state_username != 'User' else 'hdsystem.ahd@gmail.com'
 
     if code and client_id and client_secret:
         try:
