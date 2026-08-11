@@ -1,6 +1,5 @@
 # pyrefly: ignore [missing-import]
 from flask import Flask, request, jsonify, send_from_directory, redirect
-from flask_cors import CORS
 import sqlite3
 import os
 import json
@@ -9,22 +8,59 @@ import time
 import shutil
 import logging
 from itsdangerous import URLSafeSerializer
-from cryptography.fernet import Fernet
-from google.oauth2.credentials import Credentials
-from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+
+# Safe optional imports for external packages
+try:
+    from flask_cors import CORS
+    has_cors = True
+except ImportError:
+    has_cors = False
+
+try:
+    from cryptography.fernet import Fernet
+    has_fernet = True
+except ImportError:
+    has_fernet = False
+    import base64
+
+try:
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    from google_auth_oauthlib.flow import Flow
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaFileUpload
+    has_google_apis = True
+except ImportError:
+    has_google_apis = False
 
 # Allow HTTP for local OAuth
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 
-# Set static_folder to the Vite build directory
-app = Flask(__name__, static_folder='../dist', static_url_path='')
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'hdsfd_default_secret_key_1234567890')
-CORS(app) # Enable CORS for development
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(BASE_DIR)
+POSSIBLE_STATIC_DIRS = [
+    os.path.join(PROJECT_DIR, 'dist'),
+    os.path.join(PROJECT_DIR, 'frontend', 'dist'),
+    os.path.join(PROJECT_DIR, 'frontend'),
+    os.path.join(BASE_DIR, 'dist'),
+    PROJECT_DIR
+]
+STATIC_DIR = next((d for d in POSSIBLE_STATIC_DIRS if os.path.exists(os.path.join(d, 'index.html'))), PROJECT_DIR)
 
-DB_PATH = os.environ.get('HDSFD_DB_PATH', os.path.join(os.path.dirname(__file__), 'database.db'))
+app = Flask(__name__, static_folder=STATIC_DIR, static_url_path='')
+app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'hdsfd_default_secret_key_1234567890')
+
+if has_cors:
+    CORS(app)
+else:
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
+        return response
+
+DB_PATH = os.environ.get('HDSFD_DB_PATH', os.path.join(BASE_DIR, 'database.db'))
 
 
 def safe_int(val, default=0):
@@ -36,6 +72,9 @@ def safe_int(val, default=0):
         return default
 
 def get_db_connection():
+    db_dir = os.path.dirname(DB_PATH)
+    if db_dir and not os.path.exists(db_dir):
+        os.makedirs(db_dir, exist_ok=True)
     conn = sqlite3.connect(DB_PATH, timeout=20.0)
     conn.execute("PRAGMA journal_mode=DELETE;")
     conn.execute("PRAGMA synchronous=NORMAL;")
@@ -84,36 +123,55 @@ def init_db():
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("hdsfd_backup")
 
-ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY')
-if not ENCRYPTION_KEY:
-    enc_key_file = os.path.join(os.path.dirname(__file__), '.enc_key')
-    if os.path.exists(enc_key_file):
-        try:
-            with open(enc_key_file, 'r') as f:
-                ENCRYPTION_KEY = f.read().strip()
-        except Exception as e:
-            logger.warning(f"Failed to read encryption key file: {e}")
-    
+cipher_suite = None
+if has_fernet:
+    ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY')
     if not ENCRYPTION_KEY:
-        try:
-            ENCRYPTION_KEY = Fernet.generate_key().decode()
-            with open(enc_key_file, 'w') as f:
-                f.write(ENCRYPTION_KEY)
-            logger.warning("ENCRYPTION_KEY environment variable not set. Generated new key and saved to backend/.enc_key")
-        except Exception as e:
-            ENCRYPTION_KEY = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
-            logger.warning(f"ENCRYPTION_KEY not set and could not write to .enc_key ({e}). Using fallback static key.")
+        enc_key_file = os.path.join(BASE_DIR, '.enc_key')
+        if os.path.exists(enc_key_file):
+            try:
+                with open(enc_key_file, 'r') as f:
+                    ENCRYPTION_KEY = f.read().strip()
+            except Exception as e:
+                logger.warning(f"Failed to read encryption key file: {e}")
+        
+        if not ENCRYPTION_KEY:
+            try:
+                ENCRYPTION_KEY = Fernet.generate_key().decode()
+                with open(enc_key_file, 'w') as f:
+                    f.write(ENCRYPTION_KEY)
+                logger.warning("ENCRYPTION_KEY environment variable not set. Generated new key and saved to backend/.enc_key")
+            except Exception as e:
+                ENCRYPTION_KEY = "YWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWE="
+                logger.warning(f"ENCRYPTION_KEY not set and could not write to .enc_key ({e}). Using fallback static key.")
 
-cipher_suite = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
+    try:
+        cipher_suite = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
+    except Exception as e:
+        logger.warning(f"Failed to initialize Fernet cipher suite: {e}")
+        cipher_suite = None
 
 def encrypt_data(data: str) -> str:
-    return cipher_suite.encrypt(data.encode('utf-8')).decode('utf-8')
+    if cipher_suite:
+        return cipher_suite.encrypt(data.encode('utf-8')).decode('utf-8')
+    import base64
+    return base64.b64encode(data.encode('utf-8')).decode('utf-8')
 
 def decrypt_data(token: str) -> str:
-    return cipher_suite.decrypt(token.encode('utf-8')).decode('utf-8')
+    if cipher_suite:
+        return cipher_suite.decrypt(token.encode('utf-8')).decode('utf-8')
+    import base64
+    return base64.b64decode(token.encode('utf-8')).decode('utf-8')
 
 def get_serializer():
     return URLSafeSerializer(app.secret_key)
+
+# Auto-initialize database schema on module load (vital for WSGI deployments)
+try:
+    init_db()
+except Exception as e:
+    logger.error(f"Database initialization error on module load: {e}")
+
 
 @app.route('/api/gdrive/auth', methods=['GET'])
 def gdrive_auth():
@@ -304,14 +362,23 @@ def gdrive_status():
 # Serve Frontend
 @app.route('/')
 def serve_index():
-    return send_from_directory(app.static_folder, 'index.html')
+    for d in POSSIBLE_STATIC_DIRS:
+        idx_path = os.path.join(d, 'index.html')
+        if os.path.exists(idx_path):
+            return send_from_directory(d, 'index.html')
+    return "<h1>HDSFD API is running</h1>", 200
 
 @app.route('/<path:path>')
 def serve_static(path):
-    if path != "" and os.path.exists(os.path.join(app.static_folder, path)):
-        return send_from_directory(app.static_folder, path)
-    else:
-        return send_from_directory(app.static_folder, 'index.html')
+    for d in POSSIBLE_STATIC_DIRS:
+        target = os.path.join(d, path)
+        if os.path.exists(target) and os.path.isfile(target):
+            return send_from_directory(d, path)
+    for d in POSSIBLE_STATIC_DIRS:
+        idx_path = os.path.join(d, 'index.html')
+        if os.path.exists(idx_path):
+            return send_from_directory(d, 'index.html')
+    return jsonify({"status": "error", "message": "Not found"}), 404
 
 # Auth Endpoints
 @app.route('/api/auth/login', methods=['POST'])
@@ -503,6 +570,7 @@ def get_peer_stats(username):
     })
 
 @app.route('/api/tasks/reschedule', methods=['POST'])
+@app.route('/api/v2/tasks/reschedule', methods=['POST'])
 def reschedule_task():
     data = request.json
     task_id = data.get('task_id')
@@ -897,20 +965,6 @@ def settings_backup():
         if os.path.exists(compressed_backup_path):
             os.remove(compressed_backup_path)
         return jsonify({"status": "error", "message": f"Google Drive upload failed: {str(e)}"}), 500
-
-@app.route('/')
-def serve_index_root():
-    dist_index = os.path.join(os.path.dirname(__file__), '../dist/index.html')
-    if os.path.exists(dist_index):
-        return send_from_directory(os.path.join(os.path.dirname(__file__), '../dist'), 'index.html')
-    return redirect("http://localhost:5177/")
-
-@app.route('/assets/<path:filename>')
-def serve_assets(filename):
-    dist_assets = os.path.join(os.path.dirname(__file__), '../dist/assets')
-    if os.path.exists(dist_assets):
-        return send_from_directory(dist_assets, filename)
-    return jsonify({"error": "Assets not found"}), 404
 
 if __name__ == '__main__':
     init_db()

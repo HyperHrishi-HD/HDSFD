@@ -2089,7 +2089,34 @@ function toggleTaskState(id) {
   localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
   
   if (task.completed) {
-    awardActivityCoins(10, 'Task Completed');
+    // Calculate base coins: Starred = 20, Normal = 10
+    let baseCoins = task.is_important ? 20 : 10;
+    
+    // Deadline bonus / penalty
+    if (task.deadline) {
+      const now = new Date();
+      const deadlineDate = new Date(task.deadline + 'T23:59:59');
+      const diffMs = deadlineDate - now;
+      const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+      if (diffDays >= 0) {
+        // Completed early: Bonus proportional to days early (max +50 coins)
+        const earlyBonus = Math.min(30, Math.round(diffDays * 5));
+        baseCoins = Math.min(50, baseCoins + earlyBonus);
+      } else {
+        // Completed past deadline: minimum 1-10 coins
+        baseCoins = Math.max(1, Math.min(10, Math.round(baseCoins - Math.abs(diffDays) * 2)));
+      }
+    }
+
+    task.earned_coins = baseCoins;
+    awardActivityCoins(baseCoins, task.is_important ? 'Starred Task Completed ⭐' : 'Task Completed');
+    healSanctuaryTree(15);
+  } else {
+    // Unchecking task: deduct previously earned coins
+    const coinsToDeduct = task.earned_coins || (task.is_important ? 20 : 10);
+    deductActivityCoins(coinsToDeduct, 'Task Unchecked');
+    task.earned_coins = 0;
   }
 
   renderDirectGTasks();
@@ -3309,28 +3336,8 @@ function updateStatsOverview() {
   if (headerCoins) headerCoins.textContent = `${currentCoins}`;
   if (multBadge) multBadge.textContent = `${mult.toFixed(1)}x Growth`;
 
-  // Tree Stage and Progress Bar Calculation
-  const stages = [
-    { min: 0, max: 50, name: 'Stage 0: Mystical Sprout', icon: '🌱' },
-    { min: 50, max: 150, name: 'Stage 1: Radiant Sapling', icon: '🌿' },
-    { min: 150, max: 300, name: 'Stage 2: Flourishing Tree', icon: '🌳' },
-    { min: 300, max: 600, name: 'Stage 3: Blossoming Canopy', icon: '🌸' },
-    { min: 600, max: 1000, name: 'Stage 4: Ancient Elder Redwood', icon: '🍃' },
-    { min: 1000, max: 2500, name: 'Stage 5: Cosmic World Tree', icon: '🌟' }
-  ];
-
-  let currentStage = stages[0];
-  let stagePct = 0;
-
-  for (let i = 0; i < stages.length; i++) {
-    const s = stages[i];
-    if (lifetimeCoins >= s.min) {
-      currentStage = s;
-      const stageRange = s.max - s.min;
-      const progressInStage = Math.min(stageRange, lifetimeCoins - s.min);
-      stagePct = Math.min(100, Math.round((progressInStage / stageRange) * 100));
-    }
-  }
+  // 100+ Dynamic Tree Stage and Progress Bar Calculation
+  const stageInfo = getTreeStageInfo(lifetimeCoins);
 
   const stageEl = document.getElementById('stat-tree-stage');
   const xpLabelEl = document.getElementById('stat-tree-xp-label');
@@ -3338,11 +3345,14 @@ function updateStatsOverview() {
   const iconEl = document.getElementById('stat-tree-icon');
   const barEl = document.getElementById('stat-tree-progress-bar');
 
-  if (stageEl) stageEl.textContent = currentStage.name;
-  if (xpLabelEl) xpLabelEl.textContent = `${lifetimeCoins} / ${currentStage.max} Lifetime Coins XP`;
-  if (pctEl) pctEl.textContent = `${stagePct}%`;
-  if (iconEl) iconEl.textContent = currentStage.icon;
-  if (barEl) barEl.style.width = `${stagePct}%`;
+  const stageIcons = ['🌱', '🌿', '🌳', '🌸', '🍃', '🌟', '✨', '👑'];
+  const curIcon = stageIcons[Math.min(stageIcons.length - 1, Math.floor(stageInfo.stageNumber / 10))];
+
+  if (stageEl) stageEl.textContent = stageInfo.stageName;
+  if (xpLabelEl) xpLabelEl.textContent = `${lifetimeCoins} / ${stageInfo.stageNextXP} Lifetime Coins XP`;
+  if (pctEl) pctEl.textContent = `${stageInfo.progressPct}%`;
+  if (iconEl) iconEl.textContent = curIcon;
+  if (barEl) barEl.style.width = `${stageInfo.progressPct}%`;
 
   renderSanctuaryTree();
 }
@@ -3750,6 +3760,8 @@ function updatePomoDisplay() {
   }
 }
 
+let pomoSessionElapsedSeconds = 0;
+
 function startTimer() {
   if (pomoTimerId) return;
   document.getElementById('pomo-start-btn').classList.add('hidden');
@@ -3758,16 +3770,28 @@ function startTimer() {
   pomoTimerId = setInterval(() => {
     if (pomoRemainingSeconds > 0) {
       pomoRemainingSeconds--;
+      pomoSessionElapsedSeconds++;
       updatePomoDisplay();
     } else {
       pauseTimer();
-      const minsEarned = Math.round(pomoDurationSeconds / 60);
-      awardActivityCoins(minsEarned * 2, `Focus Session (${minsEarned}m)`);
+      const minsEarned = Math.max(1, Math.round(pomoDurationSeconds / 60));
+      const isSunlight = isSunlightEssenceActive();
+      const baseCoinRate = isSunlight ? 4 : 2; // 2x on Sunlight (4 coins/min)
+
+      awardActivityCoins(minsEarned * baseCoinRate, `Focus Session Completed (${minsEarned}m)${isSunlight ? ' ⚡ Sunlight 2x' : ''}`);
+      
+      // Consume Sunlight Essence after 1 completed session
+      if (isSunlight) {
+        consumeSunlightEssence();
+      }
+
+      healSanctuaryTree(20);
       createData({
         type: 'focus_session',
         minutes: minsEarned,
         created_at: new Date().toISOString()
       });
+      pomoSessionElapsedSeconds = 0;
       updateStatsOverview();
     }
   }, 1000);
@@ -3777,6 +3801,15 @@ function pauseTimer() {
   if (pomoTimerId) {
     clearInterval(pomoTimerId);
     pomoTimerId = null;
+
+    // Partial session reward if stopped early (at least 60 seconds elapsed)
+    if (pomoSessionElapsedSeconds >= 60) {
+      const partialMins = pomoSessionElapsedSeconds / 60;
+      const partialCoins = Math.max(1, Math.round(partialMins * 2));
+      awardActivityCoins(partialCoins, `Focus Progress (${Math.round(partialMins)}m)`);
+      healSanctuaryTree(Math.round(partialMins * 2));
+      pomoSessionElapsedSeconds = 0;
+    }
   }
   document.getElementById('pomo-start-btn').classList.remove('hidden');
   document.getElementById('pomo-pause-btn').classList.add('hidden');
@@ -3784,6 +3817,7 @@ function pauseTimer() {
 
 function resetTimer() {
   pauseTimer();
+  pomoSessionElapsedSeconds = 0;
   pomoRemainingSeconds = pomoDurationSeconds;
   updatePomoDisplay();
 }
@@ -4122,9 +4156,14 @@ function setTheme(theme) {
     normalized = 'midnight';
   }
 
+  // Theme Locking for Non-Signed-In Users
+  if (normalized !== 'midnight' && !googleAccount && !localStorage.getItem('hdsfd_theme_unlocked_override')) {
+    showInAppNotification('🔒 Sign in with Google to unlock all 8 fluid gradient themes + get 200 Free Coins!');
+    return;
+  }
+
   const app = document.getElementById('app');
   if (app) {
-    // Remove any previous theme classes
     validThemes.forEach(t => app.classList.remove(`theme-${t}`));
     app.classList.remove('theme-cyberpunk');
     app.classList.add(`theme-${normalized}`);
@@ -4132,7 +4171,6 @@ function setTheme(theme) {
   
   localStorage.setItem('hdsfd_theme', normalized);
 
-  // Update Settings UI active badge and buttons
   const badge = document.getElementById('current-theme-badge');
   if (badge) {
     badge.textContent = normalized.charAt(0).toUpperCase() + normalized.slice(1);
@@ -4150,48 +4188,106 @@ function setTheme(theme) {
 }
 
 // ===== DIGITAL SANCTUARY TREE & LIFETIME COIN ENGINE =====
-function getInventory() {
-  try {
-    return JSON.parse(localStorage.getItem('hdsfd_inventory') || '[]');
-  } catch(e) {
-    return [];
-  }
+
+// Multipliers & Active Buffs
+function getFertileDewTier() {
+  return parseInt(localStorage.getItem('hdsfd_dew_tier') || '0', 10);
+}
+
+function isSunlightEssenceActive() {
+  return localStorage.getItem('hdsfd_sunlight_active') === 'true';
+}
+
+function consumeSunlightEssence() {
+  localStorage.removeItem('hdsfd_sunlight_active');
+  const aura = document.getElementById('timer-sunlight-aura');
+  if (aura) aura.classList.add('hidden');
+}
+
+function isGlowingVinesActive() {
+  const exp = parseInt(localStorage.getItem('hdsfd_vines_expiry') || '0', 10);
+  return exp > Date.now();
+}
+
+function getGlowingVinesMultiplier() {
+  if (!isGlowingVinesActive()) return 1.0;
+  const tier = parseInt(localStorage.getItem('hdsfd_vines_tier') || '1', 10);
+  return 1.0 + (tier * 0.5); // Tier 1 = 1.5x, Tier 2 = 2.0x, Tier 3 = 2.5x...
+}
+
+function isBlossomPetalsActive() {
+  const exp = parseInt(localStorage.getItem('hdsfd_petals_expiry') || '0', 10);
+  return exp > Date.now();
+}
+
+function isStarlightAuraActive() {
+  const exp = parseInt(localStorage.getItem('hdsfd_starlight_expiry') || '0', 10);
+  return exp > Date.now();
+}
+
+function isStreakShieldActive() {
+  const exp = parseInt(localStorage.getItem('hdsfd_freeze_expiry') || '0', 10);
+  return exp > Date.now();
 }
 
 function getGrowthMultiplier() {
   let mult = 1.0;
-  const inventory = getInventory();
-  if (inventory.includes('growth_dew')) mult += 0.5; // +50%
-  if (inventory.includes('sunlight')) mult += 1.0;   // +100%
-  return mult;
+  // Fertile Dew (+10% per tier)
+  mult += (getFertileDewTier() * 0.10);
+  // Glowing Vines (1.5x, 2.0x, 2.5x...)
+  if (isGlowingVinesActive()) {
+    mult *= getGlowingVinesMultiplier();
+  }
+  // Starlight Aura (2x Growth)
+  if (isStarlightAuraActive()) {
+    mult *= 2.0;
+  }
+  return parseFloat(mult.toFixed(2));
+}
+
+function getCoinsMultiplier() {
+  let mult = 1.0;
+  // Blossom Petals (1.5x coins)
+  if (isBlossomPetalsActive()) {
+    mult *= 1.5;
+  }
+  // Starlight Aura (2x coins)
+  if (isStarlightAuraActive()) {
+    mult *= 2.0;
+  }
+  return parseFloat(mult.toFixed(2));
 }
 
 function getLifetimeCoins() {
-  const mult = getGrowthMultiplier();
+  const growthMult = getGrowthMultiplier();
   const bonusXP = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
   
-  // 1. Focus Sessions (Pomodoro) -> 2 coins per minute * mult
+  // 1. Focus Sessions (Pomodoro) -> 2 coins per minute * growthMult
   const sessions = allData.filter(d => d.type === 'focus_session');
   const sessionMins = sessions.reduce((sum, s) => sum + (s.minutes || 0), 0);
-  const sessionCoins = Math.round(sessionMins * 2 * mult);
+  const sessionCoins = Math.round(sessionMins * 2 * growthMult);
 
-  // 2. Completed Tasks -> 10 coins per task * mult
-  const tasksDone = allData.filter(d => d.type === 'task' && d.completed).length;
-  const taskCoins = Math.round(tasksDone * 10 * mult);
+  // 2. Completed Tasks
+  const tasksDone = allData.filter(d => d.type === 'task' && d.completed);
+  const taskCoins = tasksDone.reduce((sum, t) => sum + (t.earned_coins || (t.is_important ? 20 : 10)), 0);
 
-  // 3. Schedule Classes -> 15 coins per class * mult
+  // 3. Schedule Classes -> 5 coins per class * growthMult
   const schedClasses = allData.filter(d => d.type === 'schedule_entry').length;
-  const schedCoins = Math.round(schedClasses * 15 * mult);
+  const schedCoins = Math.round(schedClasses * 5 * growthMult);
 
-  // 4. Notes Created -> 5 coins per note * mult
+  // 4. Completed Exams
+  const examsDone = allData.filter(d => d.type === 'exam_entry' && d.completed);
+  const examCoins = examsDone.reduce((sum, e) => sum + (e.reward || 250), 0);
+
+  // 5. Notes Created -> 5 coins per note * growthMult
   const notesCount = allData.filter(d => d.type === 'note').length;
-  const notesCoins = Math.round(notesCount * 5 * mult);
+  const notesCoins = Math.round(notesCount * 5 * growthMult);
 
-  // 5. Zen Mode Minutes
+  // 6. Zen Mode Minutes -> 3 coins per min * growthMult
   const zenMins = parseInt(localStorage.getItem('hdsfd_zen_minutes') || '0', 10);
-  const zenCoins = Math.round(zenMins * 3 * mult);
+  const zenCoins = Math.round(zenMins * 3 * growthMult);
 
-  return sessionCoins + taskCoins + schedCoins + notesCoins + zenCoins + bonusXP;
+  return Math.max(0, sessionCoins + taskCoins + schedCoins + examCoins + notesCoins + zenCoins + bonusXP);
 }
 
 function getUserCoinsBalance() {
@@ -4201,62 +4297,663 @@ function getUserCoinsBalance() {
 }
 
 function awardActivityCoins(baseAmount, activityName) {
-  const mult = getGrowthMultiplier();
-  const actualAmount = Math.round(baseAmount * mult);
+  const coinMult = getCoinsMultiplier();
+  const actualAmount = Math.round(baseAmount * coinMult);
   const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
   localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + actualAmount));
   updateStatsOverview();
   if (activityName) {
     showInAppNotification(`✨ +${actualAmount} 🪙 earned (${activityName})!`);
   }
+  checkStageMilestoneBonus();
 }
 
-function buyStoreItem(itemType, cost) {
-  const currentCoins = getUserCoinsBalance();
-  const itemNames = {
-    growth_dew: '💧 Fertile Spring Dew (1.5x Growth)',
-    sunlight: '⚡ Sunlight Essence (2x Multiplier)',
-    vines: '🌿 Bioluminescent Vines',
-    petals: '🌸 Sakura Blossom Petals',
-    starlight: '🌟 Starlight Cosmic Aura',
-    freeze: '🧊 Streak Freeze Shield',
-    theme: '🎨 Cosmic Theme Key',
-    crown: '👑 Zen Master Crown'
-  };
+function deductActivityCoins(baseAmount, reason) {
+  const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
+  localStorage.setItem('hdsfd_lifetime_bonus_xp', String(Math.max(0, curBonus - baseAmount)));
+  updateStatsOverview();
+  if (reason) {
+    showInAppNotification(`🔻 -${baseAmount} 🪙 (${reason})`);
+  }
+}
 
-  const name = itemNames[itemType] || itemType;
+// 100+ Dynamic Sanctuary Tree Stages Engine
+const SANCTUARY_STAGE_NAMES = [
+  'Mystical Sprout', 'Radiant Sapling', 'Flourishing Young Oak', 'Emerald Blossom', 'Luminous Birch',
+  'Verdant Willow', 'Golden Ash', 'Bioluminescent Maple', 'Silverleaf Cedar', 'Sacred Pine',
+  'Ancient Redwood', 'Sylvan Monarch', 'Solaris Canopy', 'Celestial Arbor', 'Starfall Grove Tree',
+  'Moonlit Cypress', 'Whispering Aspen', 'Titan Ironwood', 'Frostbloom Spire', 'Arcane Elderwood',
+  'Sunburst Sequoia', 'Aetherium Yew', 'Cosmic Pillar', 'Evergreen Heart', 'Spiritwood Great Oak',
+  'Astral Banyan', 'Chronos Sequoia', 'Prismatic Elm', 'Voidbloom Arbor', 'Elysian Willow',
+  'Stardust Redwood', 'Aurora Canopy', 'Glimmering Baobab', 'Zenith World-Stem', 'Chrono-Blossom',
+  'Eldritch Spire', 'Mythic Sylvan', 'Hyperion Great Tree', 'Harmonic Timber', 'Resonant Ygg',
+  'Gilded Blossom', 'Nebula Root Tree', 'Solstice Sequoia', 'Equinox Birch', 'Valhalla Oak',
+  'Olympus Cedar', 'Nirvana Banyan', 'Genesis Sprout Monarch', 'Apex Arbor', 'World Hearth Tree',
+  'Cosmic World Tree (Yggdrasil Prime)'
+];
+
+function getTreeStageInfo(lifetimeXP) {
+  // Base XP curve: Stage 0 = 0, Stage 1 = 50, Stage 2 = 150, Stage 3 = 300, Stage 4 = 600, Stage 5 = 1000...
+  // For higher stages: nextStageXP = Math.round(50 * Math.pow(stage + 1, 1.45))
+  let stage = 0;
+  let currentTierXP = 0;
+  let nextTierXP = 50;
+
+  while (lifetimeXP >= nextTierXP && stage < 150) {
+    stage++;
+    currentTierXP = nextTierXP;
+    nextTierXP = Math.round(50 * Math.pow(stage + 1, 1.45));
+  }
+
+  let stageName = '';
+  if (stage < SANCTUARY_STAGE_NAMES.length) {
+    stageName = `Stage ${stage}: ${SANCTUARY_STAGE_NAMES[stage]}`;
+  } else {
+    const prefixes = ['Cosmic', 'Astral', 'Eternal', 'Divine', 'Primordial', 'Infinite', 'Mythic', 'Omniscient'];
+    const suffixes = ['World Tree', 'Arbor of Eternity', 'Yggdrasil Apex', 'Star-Bough', 'Sylvan Titan'];
+    const p = prefixes[stage % prefixes.length];
+    const s = suffixes[(Math.floor(stage / prefixes.length)) % suffixes.length];
+    stageName = `Stage ${stage}: ${p} ${s} (+${stage * 10} Mastery)`;
+  }
+
+  const range = nextTierXP - currentTierXP;
+  const progressInStage = lifetimeXP - currentTierXP;
+  const pct = Math.min(100, Math.max(0, Math.round((progressInStage / range) * 100)));
+
+  return {
+    stageNumber: stage,
+    stageName: stageName,
+    currentXP: lifetimeXP,
+    stageMinXP: currentTierXP,
+    stageNextXP: nextTierXP,
+    progressPct: pct
+  };
+}
+
+function checkStageMilestoneBonus() {
+  const xp = getLifetimeCoins();
+  const info = getTreeStageInfo(xp);
+  if (info.stageNumber >= 100 && !localStorage.getItem('hdsfd_stage_100_awarded')) {
+    localStorage.setItem('hdsfd_stage_100_awarded', 'true');
+    const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
+    localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + 10000));
+    showInAppNotification('🎊 CONGRATULATIONS! You reached Stage 100 and unlocked the 10,000 🪙 World Tree Blessing!');
+    updateStatsOverview();
+  }
+}
+
+// Tree Vitality, Decay & Healing Mechanics
+function getTreeVitality() {
+  const saved = parseInt(localStorage.getItem('hdsfd_tree_vitality') || '100', 10);
+  return Math.max(10, Math.min(100, saved));
+}
+
+function healSanctuaryTree(amount = 15) {
+  const current = getTreeVitality();
+  const nextVal = Math.min(100, current + amount);
+  localStorage.setItem('hdsfd_tree_vitality', String(nextVal));
+  localStorage.setItem('hdsfd_last_active_ts', String(Date.now()));
+  renderSanctuaryTree();
+}
+
+function checkTreeDecayLoop() {
+  if (isStreakShieldActive()) {
+    localStorage.setItem('hdsfd_tree_vitality', '100');
+    return;
+  }
+  const lastActive = parseInt(localStorage.getItem('hdsfd_last_active_ts') || String(Date.now()), 10);
+  const diffHours = (Date.now() - lastActive) / (1000 * 60 * 60);
+
+  if (diffHours >= 24) {
+    const daysMissed = Math.floor(diffHours / 24);
+    let vitality = parseInt(localStorage.getItem('hdsfd_tree_vitality') || '100', 10);
+    vitality = Math.max(20, vitality - (daysMissed * 10));
+    localStorage.setItem('hdsfd_tree_vitality', String(vitality));
+  }
+}
+
+// Passive Income Check (Blossom Petals 10 coins/hour)
+function processBlossomPassiveIncome() {
+  if (!isBlossomPetalsActive()) return;
+  const lastClaim = parseInt(localStorage.getItem('hdsfd_petals_last_claim') || String(Date.now()), 10);
+  const hoursElapsed = Math.floor((Date.now() - lastClaim) / (1000 * 60 * 60));
+
+  if (hoursElapsed >= 1) {
+    const hoursToAward = Math.min(24, hoursElapsed);
+    const earned = hoursToAward * 10;
+    const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
+    localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + earned));
+    localStorage.setItem('hdsfd_petals_last_claim', String(Date.now()));
+    showInAppNotification(`🌸 Drifting Blossom Petals harvested +${earned} 🪙 passive income!`);
+    updateStatsOverview();
+  }
+}
+
+// ===== SHOP BUY HANDLERS =====
+
+// 1. Fertile Spring Dew (Tiered +10% Multiplier)
+function buyFertileDew() {
+  const currentCoins = getUserCoinsBalance();
+  const currentTier = getFertileDewTier();
+  const cost = 50 * (currentTier + 1);
 
   if (currentCoins < cost) {
-    const need = cost - currentCoins;
-    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙). Earn ${need} more coins through focus sessions & tasks!`);
+    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
     return;
   }
 
-  // Deduct from wallet balance
   const currentSpent = parseInt(localStorage.getItem('hdsfd_spent_coins') || '0', 10);
   localStorage.setItem('hdsfd_spent_coins', String(currentSpent + cost));
-
-  // Save to inventory
-  let inventory = getInventory();
-  if (!inventory.includes(itemType)) {
-    inventory.push(itemType);
-    localStorage.setItem('hdsfd_inventory', JSON.stringify(inventory));
-  }
-
-  // Handle special perk activations
-  if (itemType === 'crown') {
-    localStorage.setItem('hdsfd_has_crown', 'true');
-    initializeUserSession();
-  } else if (itemType === 'starlight') {
-    const aura = document.getElementById('tree-starlight-aura');
-    if (aura) aura.classList.remove('opacity-0');
-  } else if (itemType === 'petals') {
-    initFallingPetals();
-  }
+  localStorage.setItem('hdsfd_dew_tier', String(currentTier + 1));
 
   updateStatsOverview();
+  updateShopCardsUI();
   renderSanctuaryTree();
-  showInAppNotification(`🎉 Unlocked ${name}! Active in your sanctuary.`);
+  showInAppNotification(`💧 Upgraded Fertile Spring Dew to Tier ${currentTier + 1}! Growth multiplier increased by +10%.`);
+}
+
+// 2. Sunlight Essence (2x Focus/Zen for 1 Session)
+function buySunlightEssence() {
+  const currentCoins = getUserCoinsBalance();
+  const cost = 100;
+
+  if (currentCoins < cost) {
+    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+    return;
+  }
+
+  if (isSunlightEssenceActive()) {
+    showInAppNotification(`⚡ Sunlight Essence is already active! Complete your next focus session to consume it.`);
+    return;
+  }
+
+  const currentSpent = parseInt(localStorage.getItem('hdsfd_spent_coins') || '0', 10);
+  localStorage.setItem('hdsfd_spent_coins', String(currentSpent + cost));
+  localStorage.setItem('hdsfd_sunlight_active', 'true');
+
+  const aura = document.getElementById('timer-sunlight-aura');
+  if (aura) aura.classList.remove('hidden');
+
+  updateStatsOverview();
+  updateShopCardsUI();
+  showInAppNotification(`⚡ Sunlight Essence activated! Your next focus session will earn 2x Coins with a radiant timer aura.`);
+}
+
+// 3. Glowing Vines (1.5x Growth - 1 Day)
+function buyGlowingVines() {
+  const currentCoins = getUserCoinsBalance();
+  const currentTier = parseInt(localStorage.getItem('hdsfd_vines_tier') || '1', 10);
+  const cost = 150 + ((currentTier - 1) * 50);
+
+  if (currentCoins < cost) {
+    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+    return;
+  }
+
+  const currentSpent = parseInt(localStorage.getItem('hdsfd_spent_coins') || '0', 10);
+  localStorage.setItem('hdsfd_spent_coins', String(currentSpent + cost));
+  localStorage.setItem('hdsfd_vines_expiry', String(Date.now() + (24 * 3600 * 1000)));
+  localStorage.setItem('hdsfd_vines_tier', String(currentTier + 1));
+
+  updateStatsOverview();
+  updateShopCardsUI();
+  renderSanctuaryTree();
+  showInAppNotification(`🌿 Enchanted tree with Glowing Vines for 24 Hours! (Growth x${(1.0 + currentTier * 0.5).toFixed(1)})`);
+}
+
+// 4. Blossom Petals (1.5x Coins + 10 🪙/hr passive - 1 Day)
+function buyBlossomPetals() {
+  const currentCoins = getUserCoinsBalance();
+  const cost = 200;
+
+  if (currentCoins < cost) {
+    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+    return;
+  }
+
+  const currentSpent = parseInt(localStorage.getItem('hdsfd_spent_coins') || '0', 10);
+  localStorage.setItem('hdsfd_spent_coins', String(currentSpent + cost));
+  localStorage.setItem('hdsfd_petals_expiry', String(Date.now() + (24 * 3600 * 1000)));
+  localStorage.setItem('hdsfd_petals_last_claim', String(Date.now()));
+
+  initFallingPetals();
+  updateStatsOverview();
+  updateShopCardsUI();
+  renderSanctuaryTree();
+  showInAppNotification(`🌸 Drifting Blossom Petals active for 24 Hours! (1.5x Coins + 10🪙/hr Passive Harvest).`);
+}
+
+// 5. Starlight Aura (2x Coins & 2x Growth - 1 Week)
+function buyStarlightAura() {
+  const currentCoins = getUserCoinsBalance();
+  const cost = 500;
+
+  if (currentCoins < cost) {
+    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+    return;
+  }
+
+  const currentSpent = parseInt(localStorage.getItem('hdsfd_spent_coins') || '0', 10);
+  localStorage.setItem('hdsfd_spent_coins', String(currentSpent + cost));
+  localStorage.setItem('hdsfd_starlight_expiry', String(Date.now() + (7 * 24 * 3600 * 1000)));
+
+  const aura = document.getElementById('tree-starlight-aura');
+  if (aura) aura.classList.remove('opacity-0');
+
+  updateStatsOverview();
+  updateShopCardsUI();
+  renderSanctuaryTree();
+  showInAppNotification(`🌟 Starlight Cosmic Aura active for 1 Whole Week! (2x Coins & 2x Tree Growth).`);
+}
+
+// 6. Streak Shield (2 Days Protection)
+function buyStreakShield() {
+  const currentCoins = getUserCoinsBalance();
+  const cost = 250;
+
+  if (currentCoins < cost) {
+    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+    return;
+  }
+
+  const currentSpent = parseInt(localStorage.getItem('hdsfd_spent_coins') || '0', 10);
+  localStorage.setItem('hdsfd_spent_coins', String(currentSpent + cost));
+  localStorage.setItem('hdsfd_freeze_expiry', String(Date.now() + (2 * 24 * 3600 * 1000)));
+  localStorage.setItem('hdsfd_tree_vitality', '100');
+
+  updateStatsOverview();
+  updateShopCardsUI();
+  showInAppNotification(`🧊 Streak Freeze Shield activated! Protects daily streak & tree vitality for 48 Hours.`);
+}
+
+// 7. Cosmic Theme Key Action
+function handleThemeKeyAction() {
+  if (googleAccount) {
+    showInAppNotification('🎨 All premium fluid themes are already unlocked with your connected Google account!');
+  } else {
+    connectGoogleAccount();
+  }
+}
+
+// 8. YouTube Subscription Verification Flow (Zen Master Crown)
+let ytSubTimer = null;
+function openYouTubeSubFlow() {
+  if (localStorage.getItem('hdsfd_has_crown') === 'true') {
+    showInAppNotification('👑 Zen Master Crown is already unlocked and active on your profile!');
+    return;
+  }
+  const modal = document.getElementById('yt-sub-modal');
+  const verifyBtn = document.getElementById('yt-verify-btn');
+  if (verifyBtn) {
+    verifyBtn.disabled = true;
+    verifyBtn.className = 'w-full bg-white/10 text-white/40 border border-white/10 font-bold py-2 px-4 rounded-xl text-xs transition-all cursor-not-allowed';
+    verifyBtn.textContent = 'Verify & Claim Reward (+1000 🪙)';
+  }
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeYouTubeSubModal() {
+  const modal = document.getElementById('yt-sub-modal');
+  if (modal) modal.classList.add('hidden');
+  if (ytSubTimer) {
+    clearTimeout(ytSubTimer);
+    ytSubTimer = null;
+  }
+}
+
+function onYouTubeSubChannelClicked() {
+  const verifyBtn = document.getElementById('yt-verify-btn');
+  if (!verifyBtn) return;
+
+  verifyBtn.textContent = 'Verifying Subscription (5s)...';
+  let countdown = 5;
+
+  const intId = setInterval(() => {
+    countdown--;
+    if (countdown > 0) {
+      verifyBtn.textContent = `Verifying Subscription (${countdown}s)...`;
+    } else {
+      clearInterval(intId);
+      verifyBtn.disabled = false;
+      verifyBtn.className = 'w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2 px-4 rounded-xl text-xs transition-all active:scale-95 shadow-lg shadow-emerald-500/30';
+      verifyBtn.textContent = 'Claim Reward (+1000 🪙 & Crown) ✓';
+    }
+  }, 1000);
+}
+
+function verifyYouTubeSubscription() {
+  localStorage.setItem('hdsfd_has_crown', 'true');
+  const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
+  localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + 1000));
+
+  closeYouTubeSubModal();
+  initializeUserSession();
+  updateStatsOverview();
+  updateShopCardsUI();
+  showInAppNotification('👑 Zen Master Crown unlocked! +1,000 Coins added to your sanctuary.');
+}
+
+// Update Dynamic Shop Cards Labels & Buttons
+function updateShopCardsUI() {
+  // 1. Dew
+  const dewTier = getFertileDewTier();
+  const dewCost = 50 * (dewTier + 1);
+  const dewBadge = document.getElementById('dew-tier-badge');
+  const dewDesc = document.getElementById('dew-desc');
+  const dewBtn = document.getElementById('buy-dew-btn');
+  if (dewBadge) dewBadge.textContent = `Tier ${dewTier + 1}`;
+  if (dewDesc) dewDesc.textContent = `+${(dewTier + 1) * 10}% Permanent growth multiplier`;
+  if (dewBtn) dewBtn.textContent = `Buy (${dewCost} 🪙)`;
+
+  // 2. Sunlight
+  const sunlightBtn = document.getElementById('buy-sunlight-btn');
+  if (sunlightBtn) {
+    if (isSunlightEssenceActive()) {
+      sunlightBtn.textContent = 'Active (1 Session)';
+      sunlightBtn.className = 'mt-2.5 bg-amber-500/40 text-amber-200 border border-amber-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+    } else {
+      sunlightBtn.textContent = 'Buy (100 🪙)';
+      sunlightBtn.className = 'mt-2.5 bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-500/30 active:scale-95 transition-all';
+    }
+  }
+
+  // 3. Vines
+  const vinesTier = parseInt(localStorage.getItem('hdsfd_vines_tier') || '1', 10);
+  const vinesCost = 150 + ((vinesTier - 1) * 50);
+  const vinesBadge = document.getElementById('vines-tier-badge');
+  const vinesBtn = document.getElementById('buy-vines-btn');
+  if (vinesBadge) vinesBadge.textContent = `${(1.0 + vinesTier * 0.5).toFixed(1)}x`;
+  if (vinesBtn) {
+    if (isGlowingVinesActive()) {
+      const exp = parseInt(localStorage.getItem('hdsfd_vines_expiry') || '0', 10);
+      const hoursLeft = Math.max(1, Math.round((exp - Date.now()) / (1000 * 3600)));
+      vinesBtn.textContent = `Active (${hoursLeft}h left)`;
+      vinesBtn.className = 'mt-2.5 bg-teal-500/40 text-teal-200 border border-teal-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+    } else {
+      vinesBtn.textContent = `Buy (${vinesCost} 🪙)`;
+      vinesBtn.className = 'mt-2.5 bg-teal-500/20 text-teal-200 border border-teal-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-teal-500/30 active:scale-95 transition-all';
+    }
+  }
+
+  // 4. Petals
+  const petalsBtn = document.getElementById('buy-petals-btn');
+  if (petalsBtn) {
+    if (isBlossomPetalsActive()) {
+      const exp = parseInt(localStorage.getItem('hdsfd_petals_expiry') || '0', 10);
+      const hoursLeft = Math.max(1, Math.round((exp - Date.now()) / (1000 * 3600)));
+      petalsBtn.textContent = `Active (${hoursLeft}h left)`;
+      petalsBtn.className = 'mt-2.5 bg-rose-500/40 text-rose-200 border border-rose-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+    } else {
+      petalsBtn.textContent = 'Buy (200 🪙)';
+      petalsBtn.className = 'mt-2.5 bg-rose-500/20 text-rose-200 border border-rose-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-rose-500/30 active:scale-95 transition-all';
+    }
+  }
+
+  // 5. Starlight
+  const starlightBtn = document.getElementById('buy-starlight-btn');
+  if (starlightBtn) {
+    if (isStarlightAuraActive()) {
+      const exp = parseInt(localStorage.getItem('hdsfd_starlight_expiry') || '0', 10);
+      const daysLeft = Math.max(1, Math.round((exp - Date.now()) / (1000 * 3600 * 24)));
+      starlightBtn.textContent = `Active (${daysLeft}d left)`;
+      starlightBtn.className = 'mt-2.5 bg-yellow-400/40 text-yellow-100 border border-yellow-300 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+    } else {
+      starlightBtn.textContent = 'Buy (500 🪙)';
+      starlightBtn.className = 'mt-2.5 bg-yellow-400/20 text-yellow-100 border border-yellow-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-yellow-400/30 active:scale-95 transition-all';
+    }
+  }
+
+  // 6. Freeze
+  const freezeBtn = document.getElementById('buy-freeze-btn');
+  if (freezeBtn) {
+    if (isStreakShieldActive()) {
+      const exp = parseInt(localStorage.getItem('hdsfd_freeze_expiry') || '0', 10);
+      const hoursLeft = Math.max(1, Math.round((exp - Date.now()) / (1000 * 3600)));
+      freezeBtn.textContent = `Shield Active (${hoursLeft}h)`;
+      freezeBtn.className = 'mt-2.5 bg-cyan-500/40 text-cyan-200 border border-cyan-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+    } else {
+      freezeBtn.textContent = 'Buy (250 🪙)';
+      freezeBtn.className = 'mt-2.5 bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30 active:scale-95 transition-all';
+    }
+  }
+
+  // 7. Theme Key
+  const themeBtn = document.getElementById('buy-theme-btn');
+  if (themeBtn) {
+    if (googleAccount) {
+      themeBtn.textContent = 'Unlocked ✓';
+      themeBtn.className = 'mt-2.5 bg-purple-500/40 text-purple-200 border border-purple-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+    } else {
+      themeBtn.textContent = 'Sign in.';
+      themeBtn.className = 'mt-2.5 bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-purple-500/30 active:scale-95 transition-all';
+    }
+  }
+
+  // 8. Crown
+  const crownBtn = document.getElementById('buy-crown-btn');
+  if (crownBtn) {
+    if (localStorage.getItem('hdsfd_has_crown') === 'true') {
+      crownBtn.textContent = 'Claimed 👑';
+      crownBtn.className = 'mt-2.5 bg-amber-400/40 text-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+    } else {
+      crownBtn.textContent = 'Subscribe to HyperHrishi HD';
+      crownBtn.className = 'mt-2.5 bg-amber-400/20 text-amber-100 border border-amber-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-400/30 active:scale-95 transition-all';
+    }
+  }
+}
+
+// ===== EXAMS & ASSESSMENTS MANAGEMENT SYSTEM =====
+function openAddExamModal(editId = null) {
+  const modal = document.getElementById('add-exam-modal');
+  const titleInput = document.getElementById('exam-title-input');
+  const dateInput = document.getElementById('exam-date-input');
+  const timeInput = document.getElementById('exam-time-input');
+  const locInput = document.getElementById('exam-loc-input');
+  const rewardSelect = document.getElementById('exam-reward-select');
+  const editIdInput = document.getElementById('exam-edit-id');
+
+  if (editId) {
+    const exam = allData.find(d => d.id === editId && d.type === 'exam_entry');
+    if (exam) {
+      if (editIdInput) editIdInput.value = exam.id;
+      if (titleInput) titleInput.value = exam.title || '';
+      if (dateInput) dateInput.value = exam.date || '';
+      if (timeInput) timeInput.value = exam.time || '09:00';
+      if (locInput) locInput.value = exam.location || '';
+      if (rewardSelect) rewardSelect.value = String(exam.reward || 250);
+    }
+  } else {
+    if (editIdInput) editIdInput.value = '';
+    if (titleInput) titleInput.value = '';
+    if (dateInput) {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 7);
+      dateInput.value = tomorrow.toISOString().split('T')[0];
+    }
+    if (timeInput) timeInput.value = '09:00';
+    if (locInput) locInput.value = '';
+    if (rewardSelect) rewardSelect.value = '250';
+  }
+
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeAddExamModal() {
+  const modal = document.getElementById('add-exam-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function saveExamEntry() {
+  const titleInput = document.getElementById('exam-title-input');
+  const dateInput = document.getElementById('exam-date-input');
+  const timeInput = document.getElementById('exam-time-input');
+  const locInput = document.getElementById('exam-loc-input');
+  const rewardSelect = document.getElementById('exam-reward-select');
+  const editIdInput = document.getElementById('exam-edit-id');
+
+  const title = titleInput ? titleInput.value.trim() : '';
+  const dateVal = dateInput ? dateInput.value : '';
+  if (!title || !dateVal) {
+    showInAppNotification('⚠️ Please enter an exam name and date.');
+    return;
+  }
+
+  const timeVal = timeInput ? timeInput.value : '09:00';
+  const location = locInput ? locInput.value.trim() : '';
+  const reward = parseInt(rewardSelect ? rewardSelect.value : '250', 10);
+  const editId = editIdInput ? editIdInput.value : '';
+  const currentOwner = googleAccount || userName || 'Guest';
+
+  const examObj = {
+    id: editId || `exam_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+    type: 'exam_entry',
+    title: title,
+    date: dateVal,
+    time: timeVal,
+    location: location,
+    reward: reward,
+    completed: false,
+    created_at: new Date().toISOString(),
+    username: currentOwner
+  };
+
+  if (editId) {
+    const idx = allData.findIndex(d => d.id === editId);
+    if (idx !== -1) allData[idx] = { ...allData[idx], ...examObj };
+  } else {
+    allData.push(examObj);
+
+    // Auto-create matching Task Folder for this Exam Subject!
+    let customFolders = getCustomTaskFolders();
+    if (!customFolders.includes(title)) {
+      customFolders.push(title);
+      localStorage.setItem('hdsfd_custom_folders', JSON.stringify(customFolders));
+    }
+
+    // Auto-create initial study checkpoint task
+    const studyTask = {
+      id: `task_exam_${Date.now()}`,
+      type: 'task',
+      title: `Study for ${title}`,
+      folder: title,
+      due: `${dateVal}T${timeVal}:00.000Z`,
+      deadline: dateVal,
+      completed: false,
+      is_important: true,
+      created_at: new Date().toISOString(),
+      username: currentOwner,
+      subtasks: [
+        { id: 'st_1', title: 'Review lecture notes & formulas', completed: false },
+        { id: 'st_2', title: 'Complete practice exam / problem set', completed: false }
+      ]
+    };
+    allData.unshift(studyTask);
+  }
+
+  localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
+  createData(examObj);
+
+  // Sync to Google Calendar as Exam Event
+  fetch(`${API_BASE}/google/calendar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: currentOwner,
+      title: `🎯 EXAM: ${title}`,
+      start_date: `${dateVal}T${timeVal}:00`,
+      location: location
+    })
+  }).catch(err => console.warn('Exam calendar sync warning:', err));
+
+  closeAddExamModal();
+  renderScheduleGrid();
+  renderExamCardsList();
+  populateTaskFolderMenus();
+  renderDirectGTasks();
+  renderDarkCalendarGrid();
+  renderHomeStatusAndNotifications();
+  showInAppNotification(`🎯 Exam added: ${title}! Task folder created.`);
+  triggerGoogleBackup();
+}
+
+function deleteExamEntry(id) {
+  const currentOwner = googleAccount || userName || 'Guest';
+  allData = allData.filter(d => d.id !== id);
+  localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
+  deleteData(id);
+  renderScheduleGrid();
+  renderExamCardsList();
+  renderDarkCalendarGrid();
+  renderHomeStatusAndNotifications();
+  triggerGoogleBackup();
+}
+
+function toggleExamCompleted(id) {
+  const currentOwner = googleAccount || userName || 'Guest';
+  const exam = allData.find(d => d.id === id && d.type === 'exam_entry');
+  if (!exam) return;
+
+  exam.completed = !exam.completed;
+  localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
+
+  if (exam.completed) {
+    awardActivityCoins(exam.reward || 250, `Exam Completed: ${exam.title} 🎯`);
+    healSanctuaryTree(50);
+  } else {
+    deductActivityCoins(exam.reward || 250, 'Exam Unchecked');
+  }
+
+  renderExamCardsList();
+  renderDarkCalendarGrid();
+  updateStatsOverview();
+}
+
+function renderExamCardsList() {
+  const container = document.getElementById('exam-cards-list');
+  if (!container) return;
+
+  const exams = allData.filter(d => d.type === 'exam_entry');
+  if (exams.length === 0) {
+    container.innerHTML = `
+      <div class="glass p-3 rounded-xl border border-white/10 text-center text-xs text-white/40 italic">
+        No upcoming exams added. Click "+ Add Exam" to set your exam dates and reward!
+      </div>
+    `;
+    return;
+  }
+
+  // Sort by date ascending
+  exams.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  container.innerHTML = exams.map(ex => {
+    const isCompleted = !!ex.completed;
+    const dateObj = new Date(ex.date + 'T' + (ex.time || '09:00'));
+    const dateFormatted = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const timeFormatted = formatTime12h(ex.time || '09:00');
+
+    return `
+      <div class="glass p-3 rounded-xl border border-rose-500/20 border-l-4 border-l-rose-500 flex items-center justify-between hover:bg-white/[0.08] transition-all group ${isCompleted ? 'opacity-50' : ''}">
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <button onclick="toggleExamCompleted('${ex.id}')" class="w-4 h-4 rounded border ${isCompleted ? 'bg-rose-500 border-rose-400 text-white' : 'border-rose-400/60 bg-transparent'} flex items-center justify-center text-[10px] font-bold">
+              ${isCompleted ? '✓' : ''}
+            </button>
+            <h4 class="text-xs font-bold ${isCompleted ? 'line-through text-white/50' : 'text-white'}">${escapeHtml(ex.title)}</h4>
+            <span class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">+${ex.reward || 250} 🪙</span>
+          </div>
+          <div class="flex items-center gap-2.5 text-[10px] text-white/60">
+            <span class="text-rose-300 font-semibold">📅 ${dateFormatted} • ${timeFormatted}</span>
+            ${ex.location ? `<span>📍 ${escapeHtml(ex.location)}</span>` : ''}
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+          <button onclick="openAddExamModal('${ex.id}')" class="w-6 h-6 rounded bg-white/5 hover:bg-white/15 text-white/70 flex items-center justify-center text-xs" title="Edit Exam">✏️</button>
+          <button onclick="deleteExamEntry('${ex.id}')" class="w-6 h-6 rounded bg-red-500/10 hover:bg-red-500/30 text-red-300 flex items-center justify-center text-xs" title="Delete Exam">🗑️</button>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 // ===== LIVING SANCTUARY TREE SVG RENDERER =====
@@ -4265,37 +4962,45 @@ function renderSanctuaryTree() {
   if (!wrapper) return;
 
   const lifetimeXP = getLifetimeCoins();
-  const inventory = getInventory();
-  const hasVines = inventory.includes('vines');
-  const hasStarlight = inventory.includes('starlight');
-  const hasPetals = inventory.includes('petals');
+  const stageInfo = getTreeStageInfo(lifetimeXP);
+  const vitality = getTreeVitality();
+  const hasVines = isGlowingVinesActive();
+  const hasStarlight = isStarlightAuraActive();
+  const hasPetals = isBlossomPetalsActive();
 
   // Handle cosmetic aura overlays
   const starlightAura = document.getElementById('tree-starlight-aura');
   if (starlightAura) {
-    starlightAura.style.opacity = hasStarlight ? '0.35' : '0';
+    starlightAura.style.opacity = hasStarlight ? '0.45' : '0';
   }
 
   if (hasPetals) {
     initFallingPetals();
   }
 
-  // Determine stage (0 to 5)
-  let stageIdx = 0;
-  if (lifetimeXP >= 1000) stageIdx = 5;
-  else if (lifetimeXP >= 600) stageIdx = 4;
-  else if (lifetimeXP >= 300) stageIdx = 3;
-  else if (lifetimeXP >= 150) stageIdx = 2;
-  else if (lifetimeXP >= 50) stageIdx = 1;
-  else stageIdx = 0;
+  // Determine base SVG model from stage bracket (0 to 5)
+  let modelIdx = 0;
+  if (stageInfo.stageNumber >= 50) modelIdx = 5;
+  else if (stageInfo.stageNumber >= 20) modelIdx = 4;
+  else if (stageInfo.stageNumber >= 10) modelIdx = 3;
+  else if (stageInfo.stageNumber >= 3) modelIdx = 2;
+  else if (stageInfo.stageNumber >= 1) modelIdx = 1;
+  else modelIdx = 0;
 
-  // Render SVG based on stage
+  // Apply Vitality / Browning Filter
+  let treeFilter = '';
+  if (vitality < 50) {
+    treeFilter = 'filter: sepia(0.85) hue-rotate(-45deg) saturate(0.55);';
+  } else if (vitality < 80) {
+    treeFilter = 'filter: sepia(0.35) hue-rotate(-20deg);';
+  }
+
   let svgContent = '';
 
-  if (stageIdx === 0) {
-    // Stage 0: Mystical Sprout 🌱 (0-49 XP)
+  if (modelIdx === 0) {
+    // Sprout Model
     svgContent = `
-      <svg viewBox="0 0 400 300" class="w-full h-full filter drop-shadow-[0_0_15px_rgba(52,211,153,0.35)] animate-pulse-slow" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 400 300" style="${treeFilter}" class="w-full h-full filter drop-shadow-[0_0_15px_rgba(52,211,153,0.35)] animate-pulse-slow" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="soilGlow" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stop-color="#10b981" stop-opacity="0.2"/>
@@ -4307,24 +5012,18 @@ function renderSanctuaryTree() {
             <stop offset="100%" stop-color="#6ee7b7"/>
           </linearGradient>
         </defs>
-        <!-- Mystical Ground Soil Mound -->
         <ellipse cx="200" cy="285" rx="80" ry="12" fill="url(#soilGlow)"/>
-        <!-- Sprout Seed Shell -->
         <path d="M192,275 Q200,265 208,275 Z" fill="#854d0e" opacity="0.8"/>
-        <!-- Sprout Stem -->
         <path d="M200,275 Q198,235 200,210" stroke="url(#stemGrad)" stroke-width="4.5" stroke-linecap="round" fill="none"/>
-        <!-- Left Cotyledon Leaf -->
         <path d="M200,210 Q175,195 180,215 Q190,225 200,210 Z" fill="#34d399" opacity="0.9"/>
-        <!-- Right Cotyledon Leaf -->
         <path d="M200,210 Q225,195 220,215 Q210,225 200,210 Z" fill="#6ee7b7" opacity="0.95"/>
-        <!-- Bioluminescent Spore -->
         <circle cx="200" cy="202" r="3.5" fill="#a7f3d0" opacity="0.9"/>
       </svg>
     `;
-  } else if (stageIdx === 1) {
-    // Stage 1: Radiant Sapling 🌿 (50-149 XP)
+  } else if (modelIdx === 1) {
+    // Sapling Model
     svgContent = `
-      <svg viewBox="0 0 400 350" class="w-full h-full filter drop-shadow-[0_0_20px_rgba(52,211,153,0.4)]" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 400 350" style="${treeFilter}" class="w-full h-full filter drop-shadow-[0_0_20px_rgba(52,211,153,0.4)]" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="saplingStem" x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stop-color="#065f46"/>
@@ -4332,27 +5031,23 @@ function renderSanctuaryTree() {
             <stop offset="100%" stop-color="#6ee7b7"/>
           </linearGradient>
         </defs>
-        <!-- Ground Glow -->
         <ellipse cx="200" cy="330" rx="100" ry="14" fill="#10b981" opacity="0.25"/>
-        <!-- Stem & Branches -->
         <path d="M200,325 Q196,250 200,160 Q202,120 200,80" stroke="url(#saplingStem)" stroke-width="6" stroke-linecap="round" fill="none"/>
         <path d="M198,220 Q160,190 150,180" stroke="url(#saplingStem)" stroke-width="3.5" stroke-linecap="round" fill="none"/>
         <path d="M200,180 Q240,150 250,140" stroke="url(#saplingStem)" stroke-width="3.5" stroke-linecap="round" fill="none"/>
-        <!-- Leaves -->
         <path d="M150,180 Q130,160 145,175 Q160,190 150,180 Z" fill="#34d399"/>
         <path d="M160,195 Q140,180 155,200 Z" fill="#6ee7b7"/>
         <path d="M250,140 Q270,120 255,135 Q240,150 250,140 Z" fill="#34d399"/>
         <path d="M240,155 Q260,140 245,160 Z" fill="#6ee7b7"/>
-        <!-- Top Crown Leaves -->
         <path d="M200,80 Q180,50 195,70 Q205,85 200,80 Z" fill="#a7f3d0"/>
         <path d="M200,80 Q220,50 205,70 Q195,85 200,80 Z" fill="#6ee7b7"/>
         <circle cx="200" cy="65" r="4" fill="#ecfdf5"/>
       </svg>
     `;
-  } else if (stageIdx === 2) {
-    // Stage 2: Flourishing Tree 🌳 (150-299 XP)
+  } else if (modelIdx === 2) {
+    // Young Oak Model
     svgContent = `
-      <svg viewBox="0 0 500 400" class="w-full h-full filter drop-shadow-[0_0_25px_rgba(16,185,129,0.35)]" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 500 400" style="${treeFilter}" class="w-full h-full filter drop-shadow-[0_0_25px_rgba(16,185,129,0.35)]" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="trunkGrad" x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stop-color="#1e293b"/>
@@ -4360,15 +5055,11 @@ function renderSanctuaryTree() {
             <stop offset="100%" stop-color="#475569"/>
           </linearGradient>
         </defs>
-        <!-- Root Base -->
         <path d="M220,380 Q250,370 280,380 Q260,350 255,300 L245,300 Q240,350 220,380 Z" fill="url(#trunkGrad)"/>
-        <!-- Main Trunk -->
         <path d="M245,300 Q240,220 250,160" stroke="url(#trunkGrad)" stroke-width="18" stroke-linecap="round" fill="none"/>
-        <!-- Major Branches -->
         <path d="M248,220 Q180,180 150,140" stroke="url(#trunkGrad)" stroke-width="9" stroke-linecap="round" fill="none"/>
         <path d="M250,190 Q320,150 350,120" stroke="url(#trunkGrad)" stroke-width="9" stroke-linecap="round" fill="none"/>
         <path d="M250,160 Q250,110 250,80" stroke="url(#trunkGrad)" stroke-width="8" stroke-linecap="round" fill="none"/>
-        <!-- Foliage Clusters (Lush Emerald & Teal Canopies) -->
         <circle cx="150" cy="130" r="45" fill="#059669" opacity="0.6"/>
         <circle cx="140" cy="120" r="35" fill="#10b981" opacity="0.75"/>
         <circle cx="350" cy="110" r="48" fill="#059669" opacity="0.6"/>
@@ -4379,10 +5070,10 @@ function renderSanctuaryTree() {
         ${hasVines ? '<path d="M242,320 Q252,260 244,200 Q254,160 248,120" stroke="#2dd4bf" stroke-width="2.5" stroke-dasharray="4,4" fill="none"/>' : ''}
       </svg>
     `;
-  } else if (stageIdx === 3) {
-    // Stage 3: Blossoming Canopy 🌸 (300-599 XP)
+  } else if (modelIdx === 3) {
+    // Sakura Blossom Canopy Model
     svgContent = `
-      <svg viewBox="0 0 600 450" class="w-full h-full filter drop-shadow-[0_0_30px_rgba(244,114,182,0.4)]" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 600 450" style="${treeFilter}" class="w-full h-full filter drop-shadow-[0_0_30px_rgba(244,114,182,0.4)]" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="sakuraTrunk" x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stop-color="#0f172a"/>
@@ -4390,14 +5081,12 @@ function renderSanctuaryTree() {
             <stop offset="100%" stop-color="#334155"/>
           </linearGradient>
         </defs>
-        <!-- Arched Spreading Trunk -->
         <path d="M270,420 Q300,400 330,420 Q310,340 305,260 L295,260 Q290,340 270,420 Z" fill="url(#sakuraTrunk)"/>
         <path d="M300,260 Q285,180 300,120" stroke="url(#sakuraTrunk)" stroke-width="22" stroke-linecap="round" fill="none"/>
         <path d="M295,220 Q190,170 140,120 Q110,90 90,80" stroke="url(#sakuraTrunk)" stroke-width="12" stroke-linecap="round" fill="none"/>
         <path d="M305,190 Q410,140 460,100 Q490,75 510,60" stroke="url(#sakuraTrunk)" stroke-width="12" stroke-linecap="round" fill="none"/>
         <path d="M300,140 Q250,90 230,50" stroke="url(#sakuraTrunk)" stroke-width="9" stroke-linecap="round" fill="none"/>
         <path d="M300,140 Q350,90 370,50" stroke="url(#sakuraTrunk)" stroke-width="9" stroke-linecap="round" fill="none"/>
-        <!-- Pink Sakura Blossom Clouds -->
         <ellipse cx="120" cy="90" rx="75" ry="55" fill="#f472b6" opacity="0.65"/>
         <ellipse cx="130" cy="80" rx="55" ry="40" fill="#fbcfe8" opacity="0.8"/>
         <ellipse cx="480" cy="70" rx="80" ry="60" fill="#ec4899" opacity="0.6"/>
@@ -4408,10 +5097,10 @@ function renderSanctuaryTree() {
         ${hasVines ? '<path d="M290,380 Q310,300 292,210 Q310,150 298,90" stroke="#34d399" stroke-width="3" fill="none"/>' : ''}
       </svg>
     `;
-  } else if (stageIdx === 4) {
-    // Stage 4: Ancient Elder Redwood with Vines 🍃 (600-999 XP)
+  } else if (modelIdx === 4) {
+    // Ancient Redwood Model
     svgContent = `
-      <svg viewBox="0 0 700 500" class="w-full h-full filter drop-shadow-[0_0_35px_rgba(52,211,153,0.45)]" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 700 500" style="${treeFilter}" class="w-full h-full filter drop-shadow-[0_0_35px_rgba(52,211,153,0.45)]" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="elderTrunk" x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stop-color="#022c22"/>
@@ -4419,13 +5108,10 @@ function renderSanctuaryTree() {
             <stop offset="100%" stop-color="#0f766e"/>
           </linearGradient>
         </defs>
-        <!-- Massive Deep Roots -->
         <path d="M280,480 Q350,450 420,480 Q380,360 365,270 L335,270 Q320,360 280,480 Z" fill="url(#elderTrunk)"/>
-        <!-- Towering Ancient Trunk -->
         <path d="M350,270 Q340,170 350,100" stroke="url(#elderTrunk)" stroke-width="34" stroke-linecap="round" fill="none"/>
         <path d="M340,220 Q200,160 140,100 Q90,60 60,40" stroke="url(#elderTrunk)" stroke-width="18" stroke-linecap="round" fill="none"/>
         <path d="M360,180 Q500,130 560,80 Q610,40 640,20" stroke="url(#elderTrunk)" stroke-width="18" stroke-linecap="round" fill="none"/>
-        <!-- Grand Layered Canopies -->
         <circle cx="100" cy="70" r="95" fill="#047857" opacity="0.6"/>
         <circle cx="110" cy="60" r="75" fill="#10b981" opacity="0.75"/>
         <circle cx="600" cy="50" r="100" fill="#047857" opacity="0.6"/>
@@ -4433,15 +5119,14 @@ function renderSanctuaryTree() {
         <circle cx="350" cy="40" r="130" fill="#065f46" opacity="0.65"/>
         <circle cx="350" cy="30" r="105" fill="#10b981" opacity="0.8"/>
         <circle cx="350" cy="20" r="75" fill="#6ee7b7" opacity="0.9"/>
-        <!-- Luminous Vines Climbing -->
         <path d="M330,440 Q370,360 338,260 Q368,180 345,90" stroke="#34d399" stroke-width="4.5" stroke-dasharray="8,6" fill="none"/>
         <path d="M370,430 Q330,340 362,240 Q332,160 355,80" stroke="#2dd4bf" stroke-width="3.5" fill="none"/>
       </svg>
     `;
   } else {
-    // Stage 5: Cosmic World Tree (Yggdrasil) 🌟 (1000+ XP)
+    // Celestial World Tree Model
     svgContent = `
-      <svg viewBox="0 0 800 550" class="w-full h-full filter drop-shadow-[0_0_50px_rgba(251,191,36,0.5)]" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 800 550" style="${treeFilter}" class="w-full h-full filter drop-shadow-[0_0_50px_rgba(251,191,36,0.5)]" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <linearGradient id="cosmicTrunk" x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stop-color="#312e81"/>
@@ -4455,15 +5140,11 @@ function renderSanctuaryTree() {
             <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
           </radialGradient>
         </defs>
-        <!-- Celestial Star Halo -->
         <circle cx="400" cy="180" r="230" fill="url(#celestialHalo)"/>
-        <!-- Golden Cosmic Roots -->
         <path d="M320,530 Q400,490 480,530 Q430,390 415,280 L385,280 Q370,390 320,530 Z" fill="url(#cosmicTrunk)"/>
-        <!-- World Tree Trunk -->
         <path d="M400,280 Q390,170 400,90" stroke="url(#cosmicTrunk)" stroke-width="40" stroke-linecap="round" fill="none"/>
         <path d="M390,220 Q220,150 140,80 Q70,40 30,10" stroke="url(#cosmicTrunk)" stroke-width="22" stroke-linecap="round" fill="none"/>
         <path d="M410,180 Q580,120 660,60 Q730,20 770,0" stroke="url(#cosmicTrunk)" stroke-width="22" stroke-linecap="round" fill="none"/>
-        <!-- Star Constellation Canopies -->
         <ellipse cx="100" cy="50" rx="120" ry="85" fill="#818cf8" opacity="0.65"/>
         <ellipse cx="100" cy="40" rx="95" ry="65" fill="#c084fc" opacity="0.8"/>
         <ellipse cx="700" cy="30" rx="120" ry="85" fill="#818cf8" opacity="0.65"/>
@@ -4471,7 +5152,6 @@ function renderSanctuaryTree() {
         <ellipse cx="400" cy="30" rx="170" ry="110" fill="#a855f7" opacity="0.6"/>
         <ellipse cx="400" cy="15" rx="130" ry="85" fill="#fbbf24" opacity="0.85"/>
         <ellipse cx="400" cy="0" rx="80" ry="50" fill="#fef9c3" opacity="0.95"/>
-        <!-- Hanging Bioluminescent Crystals & Starlight Vines -->
         <path d="M375,480 Q425,380 385,270 Q425,180 395,80" stroke="#fde047" stroke-width="5" stroke-dasharray="10,6" fill="none"/>
         <path d="M425,470 Q375,360 415,250 Q375,160 405,70" stroke="#67e8f9" stroke-width="4.5" fill="none"/>
         <circle cx="260" cy="180" r="6" fill="#fef08a" opacity="0.9"/>
@@ -4484,7 +5164,7 @@ function renderSanctuaryTree() {
   wrapper.innerHTML = svgContent;
 }
 
-// ===== FLOATING SAKURA BLOSSOM PETALS ENGINE =====
+// Falling Sakura Petals
 let petalsInterval = null;
 function initFallingPetals() {
   const container = document.getElementById('tree-petals-container');
@@ -4554,6 +5234,19 @@ function refreshIcons() {
   }
 }
 
+// Google First-Time 200 Coin Bonus & Auto-Sync
+function handleGoogleFirstTimeReward() {
+  if (googleAccount && !localStorage.getItem('hdsfd_google_signin_bonus_claimed')) {
+    localStorage.setItem('hdsfd_google_signin_bonus_claimed', 'true');
+    const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
+    localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + 200));
+    showInAppNotification('🎉 Welcome! Claimed +200 Free Coins for pairing your Google Account.');
+    autoSyncGoogleTasksAndCalendar();
+    updateStatsOverview();
+    updateShopCardsUI();
+  }
+}
+
 // ===== APP INITIALIZATION & PWA SERVICE WORKER =====
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -4592,5 +5285,17 @@ document.addEventListener('DOMContentLoaded', () => {
   setTheme(savedTheme);
   startClockWithSeconds();
   checkFirstTimeUser();
+  checkTreeDecayLoop();
+  processBlossomPassiveIncome();
+  renderExamCardsList();
+  updateShopCardsUI();
+  handleGoogleFirstTimeReward();
   refreshIcons();
+
+  // Passive income & decay checker interval (every 10 minutes)
+  setInterval(() => {
+    processBlossomPassiveIncome();
+    checkTreeDecayLoop();
+  }, 10 * 60 * 1000);
 });
+
