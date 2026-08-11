@@ -782,7 +782,7 @@
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch mt-3">
             
             <!-- Left: Soundscape (Rain & Brown Noise always visible, YouTube expandable with Next/Prev and 10 history) -->
-            <div class="lg:col-span-4 flex flex-col gap-4">
+            <div class="lg:col-span-4 order-4 lg:order-1 flex flex-col gap-4">
               <div class="glass-card p-4 space-y-3.5 text-left h-full flex flex-col justify-between">
                 <div class="space-y-3">
                   <!-- Header -->
@@ -888,7 +888,7 @@
             </div>
 
             <!-- Center: Session Focus (Dynamic 120m Slider & Decimal Custom Stepper) -->
-            <div class="lg:col-span-5 flex flex-col gap-4">
+            <div class="lg:col-span-5 order-2 lg:order-2 flex flex-col gap-4">
               <div class="glass-card p-5 w-full flex flex-col items-center justify-center min-h-[380px] text-center">
                 
                 <!-- Radial Timer Ring (With Sunlight Essence Glowing Aura) -->
@@ -944,7 +944,7 @@
             </div>
 
             <!-- Right: Live Schedule Notifications & Starred Tasks -->
-            <div class="lg:col-span-3 flex flex-col gap-3">
+            <div class="lg:col-span-3 order-1 lg:order-3 flex flex-col gap-3">
               <!-- Live Schedule & Notifications Status Card -->
               <div class="glass-card p-3.5 text-left space-y-2.5">
                 <div class="border-b border-white/10 pb-1.5 flex justify-between items-center">
@@ -1108,7 +1108,7 @@
             </div>
 
             <!-- Resizer Handle (Draggable Divider between Calendar and Tasks) -->
-            <div id="split-resizer-handle" class="hidden lg:flex w-2.5 cursor-col-resize hover:bg-purple-500/40 active:bg-purple-500/60 rounded-full items-center justify-center transition-colors group" title="Drag to adjust split window size">
+            <div id="split-resizer-handle" class="flex w-2.5 cursor-col-resize hover:bg-purple-500/40 active:bg-purple-500/60 rounded-full items-center justify-center transition-colors group touch-none select-none" title="Drag to adjust split window size">
               <div class="w-1 h-8 rounded-full bg-white/20 group-hover:bg-purple-300"></div>
             </div>
 
@@ -1167,13 +1167,13 @@
                   </button>
 
                   <!-- Custom Glassmorphic Folder Dropdown -->
-                  <div class="relative">
+                  <div class="relative z-30">
                     <button type="button" id="gtask-folder-btn" onclick="toggleTaskFolderDropdown(event)" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white font-bold transition-all">
                       <span class="text-purple-300">📁</span>
                       <span id="gtask-folder-btn-label">My Tasks</span>
                       <span class="text-white/40 text-[8px]">▾</span>
                     </button>
-                    <div id="gtask-folder-dropdown-menu" class="hidden absolute left-0 mt-1 z-50 glass-card p-1.5 w-40 space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95 max-h-48 overflow-y-auto animate-fade-in" onclick="event.stopPropagation()">
+                    <div id="gtask-folder-dropdown-menu" class="hidden absolute left-0 mt-1 z-[999999] glass-card p-1.5 w-40 space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95 max-h-48 overflow-y-auto animate-fade-in" onclick="event.stopPropagation()">
                       <!-- Injected dynamically -->
                     </div>
                   </div>
@@ -1281,9 +1281,6 @@
                     <span class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400"></span>
                     <span id="gemini-user-email-text" class="max-w-[70px] sm:max-w-[140px] truncate">Connected</span>
                   </div>
-                  <button onclick="openGeminiApiKeyModal()" class="px-1.5 py-1 sm:px-2 sm:py-1 rounded-xl bg-white/5 hover:bg-sky-500/20 border border-white/10 hover:border-sky-500/30 text-slate-400 hover:text-sky-300 text-xs font-semibold transition-all active:scale-95 flex items-center gap-1" title="Gemini API Key Settings">
-                    <span>⚙️</span>
-                  </button>
                   <button onclick="openClearGeminiModal()" class="px-1.5 py-1 sm:px-2 sm:py-1 rounded-xl bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-slate-400 hover:text-red-300 text-xs font-semibold transition-all active:scale-95" title="Clear Chat History">
                     <span>🗑️</span>
                   </button>
@@ -1291,7 +1288,7 @@
               </div>
 
               <!-- Gemini Agent Messages Stream -->
-              <div id="gemini-agent-chat-stream" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 scroll-smooth text-sm">
+              <div id="gemini-agent-chat-stream" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 scroll-smooth text-sm max-h-[380px] md:max-h-none">
                 <!-- Dynamically Rendered History and Active Turns -->
               </div>
 
@@ -1323,6 +1320,13 @@
                   <input 
                     id="gemini-agent-input" 
                     type="text" 
+                    name="gemini_chat_query_field"
+                    autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                    data-lpignore="true"
+                    data-form-type="other"
                     placeholder="Ask Gemini or command: 'Add task...', 'Start timer...', 'Create note...' " 
                     class="flex-1 bg-transparent border-0 outline-none text-white text-xs placeholder:text-slate-500 py-1.5"
                     onkeydown="if(event.key === 'Enter') sendGeminiAgentMessage()"
@@ -1740,24 +1744,7 @@
       </div>
     </div>
 
-    <!-- Custom Gemini API Key Modal -->
-    <div id="gemini-api-key-modal" class="fixed inset-0 z-[9999999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
-      <div class="glass-card max-w-sm w-full p-6 text-center space-y-4 border border-white/20 shadow-2xl rounded-2xl animate-scale-in">
-        <div class="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner">⚙️</div>
-        <div>
-          <h3 class="text-base font-black text-white">Google Gemini API Key</h3>
-          <p class="text-xs text-white/60 mt-1.5 leading-relaxed">Enter your free Gemini API key from Google AI Studio (aistudio.google.com) for unlimited live 2.0 Flash generation.</p>
-        </div>
-        <div class="text-left space-y-1.5 pt-1">
-          <input id="gemini-api-key-input" type="password" placeholder="AIzaSy..." class="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-sky-500 font-mono">
-          <p class="text-[10px] text-white/40 italic">Key is stored locally in your browser session.</p>
-        </div>
-        <div class="flex items-center justify-center gap-3 pt-2">
-          <button onclick="closeGeminiApiKeyModal()" class="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all active:scale-95">Cancel</button>
-          <button onclick="saveGeminiApiKey()" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs font-black shadow-lg shadow-sky-600/30 transition-all active:scale-95">Save Key</button>
-        </div>
-      </div>
-    </div>
+
 
     <!-- Custom Glassmorphic Add/Edit Class & Schedule Modal -->
     <div id="add-schedule-modal" class="fixed inset-0 z-[9999999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
@@ -1832,7 +1819,7 @@
     </div>
 
     <!-- Add / Edit Exam Modal -->
-    <div id="add-exam-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+    <div id="add-exam-modal" class="hidden fixed inset-0 z-[9999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
       <div class="glass-modal p-6 max-w-md w-full text-left space-y-4 border border-rose-500/40 shadow-2xl animate-fade-in">
         <div class="flex justify-between items-center border-b border-white/10 pb-2">
           <div class="flex items-center gap-2">
@@ -1878,10 +1865,6 @@
           </div>
         </div>
 
-        <div class="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-[11px] text-rose-200 leading-relaxed">
-          ⚡ <b>Auto Task Folder:</b> Creating this exam will automatically create a matching task list folder to organize your study checkpoints and will sync to your Google Calendar!
-        </div>
-
         <!-- Action Buttons -->
         <div class="flex items-center justify-end gap-2.5 pt-2">
           <button type="button" onclick="closeAddExamModal()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all active:scale-95">Cancel</button>
@@ -1891,7 +1874,7 @@
     </div>
 
     <!-- YouTube Subscription Verification Modal -->
-    <div id="yt-sub-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
+    <div id="yt-sub-modal" class="hidden fixed inset-0 z-[9999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
       <div class="glass-modal p-6 max-w-sm w-full text-center space-y-4 border border-amber-500/40 shadow-2xl animate-fade-in">
         <div class="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-300 flex items-center justify-center mx-auto text-3xl shadow-lg border border-amber-500/30">👑</div>
         <div>
