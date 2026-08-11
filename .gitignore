@@ -5,3 +5,6 @@ __pycache__/
 *.db
 *.log
 .DS_Store
+*credentials*.json
+google_credentials.json
+backups/

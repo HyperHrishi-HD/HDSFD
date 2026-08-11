@@ -2,8 +2,19 @@
 <html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HDSFD - Student Productivity Sanctuary</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>HDSFD</title>
+  
+  <!-- Progressive Web App (PWA) Tags for Mobile & Desktop -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#7c3aed">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="HDSFD">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="icon" type="image/png" href="/icon-192.png">
+  
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -25,21 +36,55 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Google Identity Services SDK -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  <!-- Firebase JS SDK 10.8.0 -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <!-- YouTube IFrame API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,600;0,700;1,400&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
   <style>
     html, body {
       height: 100%;
       margin: 0;
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background-color: #0f172a;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", 'Inter', sans-serif;
+      background-color: #0c1021;
       color: #ffffff;
       overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Sleek Ultra-Glass Custom Scrollbars Everywhere */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 8px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(168, 85, 247, 0.45);
+      border-radius: 8px;
+      backdrop-filter: blur(4px);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(168, 85, 247, 0.75);
+    }
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(168, 85, 247, 0.45) rgba(0, 0, 0, 0.2);
+    }
+
+    .apple-clock-font {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro", "Helvetica Neue", 'Inter', sans-serif;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .clock-background-blend {
+      mix-blend-mode: screen;
+      opacity: 0.94;
+      text-shadow: 0 4px 30px rgba(168, 85, 247, 0.4);
     }
 
     .bg-gradient-animated {
@@ -53,94 +98,308 @@
       100% { background-position: 0% 50%; }
     }
 
-    .theme-midnight { background: linear-gradient(-45deg, #0f172a, #1e1b4b, #311042, #180b2b); }
-    .theme-ocean { background: linear-gradient(-45deg, #0c4a6e, #0369a1, #0d9488, #075985); }
-    .theme-forest { background: linear-gradient(-45deg, #064e3b, #047857, #115e59, #022c22); }
+    /* High-Aesthetic Theme Palettes */
+    .theme-midnight { background: linear-gradient(-45deg, #090d1a, #151336, #240c33, #10061e); }
+    .theme-obsidian { background: linear-gradient(-45deg, #050608, #11141a, #1a1d26, #0a0c10); }
+    .theme-cyber, .theme-cyberpunk { background: linear-gradient(-45deg, #2e0854, #831843, #0f172a, #0284c7); }
+    .theme-ocean { background: linear-gradient(-45deg, #083344, #0369a1, #0d9488, #075985); }
     .theme-sunset { background: linear-gradient(-45deg, #7c2d12, #9a3412, #831843, #581c87); }
-    .theme-cyberpunk { background: linear-gradient(-45deg, #4c1d95, #831843, #1e1b4b, #701a75); }
+    .theme-forest { background: linear-gradient(-45deg, #064e3b, #047857, #115e59, #022c22); }
+    .theme-aurora { background: linear-gradient(-45deg, #064e3b, #0e7490, #4338ca, #1e1b4b); }
+    .theme-rose { background: linear-gradient(-45deg, #4c0519, #831843, #3b0764, #1e1b4b); }
 
-    .low-power .orb { display: none !important; }
-    .low-power .bg-gradient-animated { animation: none !important; background-size: 100% 100% !important; }
-    .low-power * { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-
+    /* Ultra-Refined Glassmorphism Classes */
     .glass {
-      background: rgba(255, 255, 255, 0.1);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.18);
-    }
-    .glass-card {
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.06);
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+    .glass-card {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 24px;
+      box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+    }
+    .glass-panel {
+      background: rgba(18, 24, 45, 0.45);
+      backdrop-filter: blur(32px);
+      -webkit-backdrop-filter: blur(32px);
       border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 24px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    }
+    .glass-modal {
+      background: rgba(15, 21, 42, 0.85);
+      backdrop-filter: blur(36px);
+      -webkit-backdrop-filter: blur(36px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.2);
     }
 
-    .leather-binder {
-      background: radial-gradient(circle at 50% 50%, #4a2c16 0%, #291507 100%);
-      box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.95), 0 20px 50px rgba(0, 0, 0, 0.8);
-      border: 6px solid #5a381e;
-      border-radius: 24px;
-      position: relative;
+    /* Assistive Floating Ball */
+    .assistive-touch-btn {
+      position: absolute;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      cursor: grab;
+      z-index: 60;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+      touch-action: none;
+      user-select: none;
     }
-    .leather-binder::before {
+    .assistive-touch-btn:active {
+      cursor: grabbing;
+      transform: scale(0.94);
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    /* Realistic 3D Skeuomorphic Physics Post-It Notes */
+    .phys-post-it {
+      position: absolute;
+      width: 175px;
+      min-width: 60px;
+      min-height: 50px;
+      border-radius: 3px 3px 18px 3px;
+      font-family: 'Kalam', 'Inter', cursive, sans-serif;
+      user-select: none;
+      touch-action: none;
+      transform-origin: center 20px;
+      will-change: transform, box-shadow;
+      transition: box-shadow 0.2s ease, width 0.05s ease, height 0.05s ease;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.18);
+      display: flex;
+      flex-direction: column;
+      z-index: 30;
+      overflow: hidden;
+    }
+    .phys-post-it.is-dragging {
+      z-index: 9999999 !important;
+      transition: none !important;
+      animation: none !important;
+      will-change: transform !important;
+      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.6), 0 12px 24px rgba(0, 0, 0, 0.4) !important;
+      pointer-events: none !important;
+    }
+
+    /* Clean Grab Tape Strip (Empty, Highlighted on Hover & Drag) */
+    .phys-post-it .note-tape {
+      position: absolute;
+      top: -10px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 56px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(3px);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+      border-radius: 2px;
+      border-left: 1px dashed rgba(0,0,0,0.18);
+      border-right: 1px dashed rgba(0,0,0,0.18);
+      cursor: grab;
+      z-index: 25;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .phys-post-it .note-tape:hover,
+    .phys-post-it.is-dragging .note-tape {
+      background: rgba(255, 255, 255, 0.95);
+      box-shadow: 0 0 14px rgba(255, 255, 255, 0.8), 0 2px 6px rgba(0,0,0,0.3);
+      cursor: grabbing;
+      transform: translateX(-50%) scale(1.06);
+    }
+
+    /* Top Left Mode Button (Sketch / Text Toggle) */
+    .note-corner-btn-left {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      z-index: 20;
+      opacity: 0.35;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .phys-post-it:hover .note-corner-btn-left {
+      opacity: 0.9;
+    }
+    .note-corner-btn-left:hover {
+      opacity: 1 !important;
+      transform: scale(1.18);
+    }
+
+    /* Top Right Delete Button (With Confirm) */
+    .note-corner-btn-right {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      z-index: 20;
+      opacity: 0.35;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 900;
+    }
+    .phys-post-it:hover .note-corner-btn-right {
+      opacity: 0.9;
+    }
+    .note-corner-btn-right:hover {
+      opacity: 1 !important;
+      transform: scale(1.22);
+      color: #dc2626;
+    }
+
+    /* Bottom Right Resizer Handle */
+    .note-resize-handle {
+      position: absolute;
+      bottom: 2px;
+      right: 2px;
+      width: 16px;
+      height: 16px;
+      cursor: nwse-resize;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.4;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      user-select: none;
+      touch-action: none;
+    }
+    .phys-post-it:hover .note-resize-handle {
+      opacity: 0.85;
+    }
+    .note-resize-handle:hover {
+      opacity: 1 !important;
+      transform: scale(1.2);
+    }
+
+    .phys-post-it .note-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 3px 3px 18px 3px;
+      z-index: 6;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    .phys-post-it .note-textarea {
+      position: relative;
+      z-index: 5;
+      width: 100%;
+      height: 100%;
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      resize: none;
+      font-family: 'Kalam', cursive, sans-serif;
+      font-size: 14px;
+      line-height: 20px;
+      padding: 16px 10px 10px 10px;
+      box-sizing: border-box;
+      color: inherit;
+      font-weight: 500;
+      pointer-events: auto;
+    }
+    .phys-post-it .note-textarea::placeholder {
+      color: rgba(0,0,0,0.32);
+    }
+    .phys-post-it-yellow { background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%); color: #713f12; }
+    .phys-post-it-pink { background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%); color: #831843; }
+    .phys-post-it-blue { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #075985; }
+    .phys-post-it-green { background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); color: #14532d; }
+    .phys-post-it-purple { background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); color: #581c87; }
+    .phys-post-it-orange { background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%); color: #7c2d12; }
+
+    .post-it {
+      position: relative;
+      padding: 1.25rem 1rem 1rem 1rem;
+      border-radius: 4px;
+      font-family: 'Kalam', 'Inter', cursive, sans-serif;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22), 0 10px 24px rgba(0, 0, 0, 0.16);
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+    }
+    .post-it:hover {
+      transform: scale(1.03) rotate(0deg) !important;
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.32), 0 4px 12px rgba(0, 0, 0, 0.18);
+      z-index: 20;
+    }
+    .post-it::before {
       content: '';
       position: absolute;
-      top: 10px; bottom: 10px; left: 50%;
-      width: 12px;
+      top: -8px;
+      left: 50%;
       transform: translateX(-50%);
-      background: linear-gradient(90deg, #1a0c04, #4a2c16, #1a0c04);
+      width: 48px;
+      height: 16px;
+      background: rgba(255, 255, 255, 0.65);
+      backdrop-filter: blur(2px);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+      border-radius: 2px;
+      border-left: 1px dashed rgba(0,0,0,0.15);
+      border-right: 1px dashed rgba(0,0,0,0.15);
+    }
+    .post-it-yellow { background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%); color: #713f12; }
+    .post-it-pink { background: linear-gradient(135deg, #fce7f3 0%, #fbcfe8 100%); color: #831843; }
+    .post-it-blue { background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%); color: #075985; }
+    .post-it-green { background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); color: #14532d; }
+    .post-it-purple { background: linear-gradient(135deg, #f3e8ff 0%, #e9d5ff 100%); color: #581c87; }
+    .post-it-orange { background: linear-gradient(135deg, #ffedd5 0%, #fed7aa 100%); color: #7c2d12; }
+
+    /* Calendar Grid Styling (Glassmorphism) */
+    .calendar-day-cell {
+      min-height: 84px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .calendar-day-cell:hover {
+      background: rgba(255, 255, 255, 0.1);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .cal-event-chip {
+      font-size: 9px;
+      padding: 1px 5px;
       border-radius: 6px;
-      box-shadow: inset 0 0 8px #000;
-      z-index: 15;
-    }
-    .paper-page {
-      background: #fefce8;
-      background-image: repeating-linear-gradient(transparent, transparent 27px, #e2e8f0 28px);
-      color: #0f172a;
-      font-family: 'Kalam', 'Playfair Display', cursive, serif;
-      box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.05), 0 8px 20px rgba(0, 0, 0, 0.3);
-      border-radius: 16px;
-      border-left: 3px solid #f87171;
-      padding-left: 1.5rem;
-      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.4s ease;
-      transform-origin: top center;
-    }
-    .perspective-1000 {
-      perspective: 1000px;
-    }
-    .vertical-flip-up {
-      animation: flipUp 0.4s ease-in-out;
-    }
-    .vertical-flip-down {
-      animation: flipDown 0.4s ease-in-out;
-    }
-    @keyframes flipUp {
-      0% { transform: rotateX(0deg); opacity: 1; }
-      50% { transform: rotateX(-90deg) scale(0.95); opacity: 0.5; }
-      100% { transform: rotateX(0deg); opacity: 1; }
-    }
-    @keyframes flipDown {
-      0% { transform: rotateX(0deg); opacity: 1; }
-      50% { transform: rotateX(90deg) scale(0.95); opacity: 0.5; }
-      100% { transform: rotateX(0deg); opacity: 1; }
+      margin-bottom: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-weight: 600;
+      backdrop-filter: blur(4px);
     }
 
     .orb {
       position: absolute;
       border-radius: 50%;
-      filter: blur(90px);
+      filter: blur(95px);
       opacity: 0.35;
       pointer-events: none;
       animation: floatOrb 12s ease-in-out infinite alternate;
     }
-    .orb-1 { background: #c084fc; width: 320px; height: 320px; top: -60px; left: -60px; }
-    .orb-2 { background: #38bdf8; width: 280px; height: 280px; bottom: -60px; right: -60px; animation-delay: 3s; }
+    .orb-1 { background: #c084fc; width: 340px; height: 340px; top: -60px; left: -60px; }
+    .orb-2 { background: #38bdf8; width: 300px; height: 300px; bottom: -60px; right: -60px; animation-delay: 3s; }
+    .orb-3 { background: #f43f5e; width: 220px; height: 220px; top: 40%; left: 45%; opacity: 0.15; animation-delay: 6s; }
 
     @keyframes floatOrb {
       0% { transform: translate(0, 0) scale(1); }
-      100% { transform: translate(40px, -40px) scale(1.15); }
+      100% { transform: translate(35px, -35px) scale(1.12); }
     }
 
     .tab-content { display: none; }
@@ -151,13 +410,29 @@
   <div id="app" class="h-full w-full relative overflow-hidden theme-midnight bg-gradient-animated">
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
 
+    <!-- ===== DIGITAL SANCTUARY TREE (BACKGROUND LIVING EVOLUTION) ===== -->
+    <div id="sanctuary-tree-layer" class="fixed inset-0 pointer-events-none z-0 flex items-end justify-center overflow-hidden transition-all duration-1000 select-none">
+      <!-- Starlight Cosmic Aura Overlay -->
+      <div id="tree-starlight-aura" class="absolute inset-0 bg-radial-glow opacity-0 transition-opacity duration-1000"></div>
+
+      <!-- Drifting Ambient Blossom Petals Container -->
+      <div id="tree-petals-container" class="absolute inset-0 overflow-hidden pointer-events-none hidden"></div>
+
+      <!-- Living Tree SVG Canvas -->
+      <div id="tree-svg-wrapper" class="w-full max-w-2xl h-[55vh] sm:h-[65vh] flex items-end justify-center opacity-35 hover:opacity-50 transition-all duration-700 transform translate-y-4">
+        <!-- SVG dynamically generated by renderSanctuaryTree() in app.js -->
+      </div>
+    </div>
+
+    <!-- Welcome Modal -->
     <div id="welcome-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-      <div class="glass-card p-8 max-w-sm w-full text-center space-y-5 border border-purple-500/30">
+      <div class="glass-modal p-8 max-w-sm w-full text-center space-y-5 border border-purple-500/30 shadow-2xl">
         <div class="w-14 h-14 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center mx-auto text-2xl">✨</div>
         <div>
           <h2 class="text-2xl font-black text-white">Welcome to HDSFD</h2>
-          <p class="text-xs text-white/60 mt-1">Your personal student focus sanctuary & journal ecosystem.</p>
+          <p class="text-xs text-white/60 mt-1">Your lightweight student focus sanctuary & productivity hub.</p>
         </div>
         <div class="text-left">
           <label class="text-[10px] font-bold uppercase tracking-wider text-white/50 mb-1 block">Enter your name</label>
@@ -167,386 +442,1060 @@
       </div>
     </div>
 
+    <!-- Top-Level Floating 3-Dots Menu Layer (Prevents overlap/clipping) -->
+    <div id="task-floating-menu" class="hidden fixed z-[9999] glass-card p-2 w-52 text-left space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95 animate-fade-in" onclick="event.stopPropagation()">
+      <!-- Injected Dynamically -->
+    </div>
+
+    <!-- Custom Repeat Configuration Modal (Matches User's Provided Image) -->
+    <div id="repeat-config-modal" class="hidden fixed inset-0 z-[9999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="glass-modal p-6 max-w-sm w-full text-left space-y-4 border border-purple-500/30 shadow-2xl animate-fade-in">
+        <h3 class="text-xs font-bold text-white uppercase tracking-wider">Repeats every</h3>
+        
+        <div class="flex items-center gap-2">
+          <input id="repeat-interval-num" type="number" min="1" max="99" value="1" class="w-16 bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-sm font-bold text-center outline-none focus:border-purple-400">
+          <select id="repeat-unit-select" class="flex-1 bg-slate-900 border border-white/20 rounded-xl px-3 py-2 text-white text-sm outline-none cursor-pointer">
+            <option value="day" class="bg-slate-900">day</option>
+            <option value="week" class="bg-slate-900">week</option>
+            <option value="month" class="bg-slate-900">month</option>
+            <option value="year" class="bg-slate-900">year</option>
+          </select>
+        </div>
+
+        <div class="pt-1">
+          <button type="button" onclick="openCustomDateTimeModal('repeat')" class="w-full bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-4 py-2.5 text-xs text-white/80 font-medium flex items-center justify-between transition-all">
+            <span id="repeat-time-label">Set time</span>
+            <span>🕒</span>
+          </button>
+        </div>
+
+        <div>
+          <label class="text-[11px] font-bold text-white/60 block mb-1">Starts</label>
+          <button type="button" onclick="openCustomDateTimeModal('repeat-start')" class="w-full bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-4 py-2.5 text-xs text-white font-semibold flex items-center justify-between transition-all">
+            <span id="repeat-start-date-label">Today</span>
+            <span>📅</span>
+          </button>
+        </div>
+
+        <div class="space-y-2 pt-1">
+          <label class="text-[11px] font-bold text-white/60 block">Ends</label>
+          
+          <label class="flex items-center gap-2 text-xs text-white/80 cursor-pointer">
+            <input type="radio" name="repeat-end-type" value="never" checked onchange="onRepeatEndTypeChange()" class="accent-purple-400">
+            <span>Never</span>
+          </label>
+
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-2 text-xs text-white/80 cursor-pointer">
+              <input type="radio" name="repeat-end-type" value="on" onchange="onRepeatEndTypeChange()" class="accent-purple-400">
+              <span>On</span>
+            </label>
+            <button type="button" id="repeat-end-on-btn" onclick="openCustomDateTimeModal('repeat-end')" disabled class="flex-1 bg-white/5 border border-white/10 opacity-50 rounded-xl px-3 py-1.5 text-xs text-white text-left transition-all">
+              <span id="repeat-end-on-label">Select Date</span>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-2 text-xs text-white/80 cursor-pointer">
+              <input type="radio" name="repeat-end-type" value="after" onchange="onRepeatEndTypeChange()" class="accent-purple-400">
+              <span>After</span>
+            </label>
+            <input id="repeat-end-occurrences" type="number" min="1" max="999" value="30" disabled class="w-20 bg-white/5 border border-white/10 opacity-50 rounded-xl px-2 py-1 text-xs text-white text-center outline-none">
+            <span class="text-xs text-white/60">occurrences</span>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 pt-3 border-t border-white/10">
+          <button type="button" onclick="closeRepeatModal()" class="text-xs font-bold text-white/60 hover:text-white px-3 py-2">Cancel</button>
+          <button type="button" onclick="saveRepeatConfiguration()" class="bg-sky-300 hover:bg-sky-200 text-slate-950 font-black px-6 py-2 rounded-full text-xs shadow-lg transition-all">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Glassmorphic Date & Time Picker Modal (Our UI, Zero Google Default Date Inputs) -->
+    <div id="custom-datetime-modal" class="hidden fixed inset-0 z-[10000] bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="glass-modal p-6 max-w-sm w-full space-y-4 text-left border border-purple-500/30 shadow-2xl animate-fade-in">
+        <div class="flex justify-between items-center border-b border-white/10 pb-2">
+          <h3 id="datetime-modal-title" class="text-xs font-black uppercase tracking-wider text-purple-300">Select Date & Time</h3>
+          <button onclick="closeCustomDateTimeModal()" class="text-white/50 hover:text-white text-xs font-bold px-1">✕</button>
+        </div>
+
+        <!-- Quick Pre-Set Date Chips -->
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1">
+          <button onclick="setQuickPickerDate(0)" class="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap">Today</button>
+          <button onclick="setQuickPickerDate(1)" class="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap">Tomorrow</button>
+          <button onclick="setQuickPickerDate(7)" class="bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap">Next Week</button>
+          <button onclick="clearPickerDate()" class="bg-red-500/20 text-red-300 hover:bg-red-500/30 text-[10px] font-bold px-2.5 py-1 rounded-lg whitespace-nowrap">No Date</button>
+        </div>
+
+        <!-- Mini Calendar Month Navigator -->
+        <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-2">
+          <div class="flex justify-between items-center">
+            <button onclick="changePickerMonth(-1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center">◀</button>
+            <span id="picker-month-label" class="text-xs font-black text-white">August 2026</span>
+            <button onclick="changePickerMonth(1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center">▶</button>
+          </div>
+
+          <div class="grid grid-cols-7 gap-1 text-center text-[9px] font-bold text-white/40 uppercase">
+            <div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div>
+          </div>
+
+          <div id="picker-calendar-grid" class="grid grid-cols-7 gap-1 text-center text-xs font-medium">
+            <!-- Dynamically Injected Days -->
+          </div>
+        </div>
+
+        <!-- Custom Time Picker Steppers -->
+        <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-2">
+          <div class="flex justify-between items-center">
+            <span class="text-[10px] font-bold text-white/60 uppercase tracking-wider">🕒 Time:</span>
+            <label class="flex items-center gap-1.5 text-[10px] text-purple-300 font-bold cursor-pointer">
+              <input type="checkbox" id="picker-has-time" onchange="togglePickerHasTime()" class="accent-purple-400">
+              <span>Include Time</span>
+            </label>
+          </div>
+
+          <div id="picker-time-controls" class="hidden flex items-center justify-center gap-2 pt-1">
+            <select id="picker-hour-select" class="bg-slate-900 text-white text-xs font-bold px-2 py-1 rounded-lg border border-white/20 outline-none cursor-pointer">
+              <option value="1">01</option><option value="2">02</option><option value="3">03</option><option value="4">04</option>
+              <option value="5">05</option><option value="6">06</option><option value="7">07</option><option value="8">08</option>
+              <option value="9" selected>09</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
+            </select>
+            <span class="font-bold">:</span>
+            <select id="picker-minute-select" class="bg-slate-900 text-white text-xs font-bold px-2 py-1 rounded-lg border border-white/20 outline-none cursor-pointer">
+              <option value="00">00</option><option value="15">15</option><option value="30">30</option><option value="45">45</option>
+            </select>
+            <select id="picker-ampm-select" class="bg-purple-600 text-white text-xs font-bold px-2 py-1 rounded-lg border border-purple-400 outline-none cursor-pointer">
+              <option value="AM">AM</option><option value="PM" selected>PM</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-white/10">
+          <button onclick="closeCustomDateTimeModal()" class="text-xs font-bold text-white/60 hover:text-white px-3 py-1.5">Cancel</button>
+          <button onclick="saveCustomDateTimeSelection()" class="bg-purple-500 hover:bg-purple-600 text-white font-bold px-5 py-1.5 rounded-xl text-xs shadow transition-all">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Google Drive Attachment Selector Modal (With Browse Google Drive + Recent Sanctuary Backups + Direct Doc Link) -->
+    <div id="gdrive-attach-modal" class="hidden fixed inset-0 z-[9999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="glass-modal p-6 max-w-md w-full space-y-4 text-left border border-cyan-500/30 shadow-2xl animate-fade-in">
+        <div class="flex justify-between items-center border-b border-white/10 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-base">📁</span>
+            <h3 class="text-xs font-black uppercase tracking-wider text-cyan-300">Add Google Drive Attachment</h3>
+          </div>
+          <button onclick="closeGDriveAttachModal()" class="text-white/50 hover:text-white text-xs font-bold px-1">✕</button>
+        </div>
+
+        <!-- Browse Google Drive Direct Action Box -->
+        <div class="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <span class="text-2xl">🔍</span>
+            <div>
+              <span class="text-xs font-black text-cyan-200 block">Browse Google Drive</span>
+              <span class="text-[10px] text-cyan-300/70">Pick any file from your connected Drive</span>
+            </div>
+          </div>
+          <button type="button" onclick="openGoogleDriveWebBrowser()" class="bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-md transition-all">
+            <span>Browse</span> <span>↗</span>
+          </button>
+        </div>
+
+        <!-- Recent Sanctuary Backups & Files -->
+        <div class="space-y-2">
+          <label class="text-[10px] font-bold text-white/60 uppercase block">Recent Sanctuary Backups & Files</label>
+          <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+            <div onclick="selectPresetDriveFile('journal_notes_backup.json')" class="glass p-2 rounded-xl border border-white/10 hover:border-cyan-400 cursor-pointer flex items-center justify-between transition-all">
+              <span class="text-xs text-white">📄 journal_notes_backup.json</span>
+              <span class="text-[9px] bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded">HDSFD Backups</span>
+            </div>
+            <div onclick="selectPresetDriveFile('hdsfd_database_backup.db')" class="glass p-2 rounded-xl border border-white/10 hover:border-cyan-400 cursor-pointer flex items-center justify-between transition-all">
+              <span class="text-xs text-white">💾 hdsfd_database_backup.db</span>
+              <span class="text-[9px] bg-amber-500/20 text-amber-200 px-1.5 py-0.5 rounded">HDSFD Backups</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Paste Google Drive / Doc Link -->
+        <div class="space-y-1.5 pt-1 border-t border-white/10">
+          <label class="text-[10px] font-bold text-white/60 uppercase block">Or Paste Google Drive / Doc Link</label>
+          <input id="custom-drive-link-input" type="text" placeholder="https://docs.google.com/..." class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-400">
+          <input id="custom-drive-name-input" type="text" placeholder="Attachment Display Name (e.g. SAT Study Guide)" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-cyan-400">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2 border-t border-white/10">
+          <button type="button" onclick="closeGDriveAttachModal()" class="text-xs font-bold text-white/60 hover:text-white px-3 py-1.5">Cancel</button>
+          <button type="button" onclick="saveDriveAttachment()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-1.5 rounded-xl text-xs shadow transition-all">Attach File</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Calendar Day Inspector & Event Creator Modal (With List/Folder Selector for Quick Schedule) -->
+    <div id="calendar-day-modal" class="hidden fixed inset-0 z-[9999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
+      <div class="glass-modal p-6 max-w-lg w-full space-y-4 text-left border border-purple-500/30 shadow-2xl animate-fade-in">
+        <div class="flex justify-between items-center border-b border-white/10 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">📅</span>
+            <h3 id="cal-day-modal-title" class="text-sm font-black text-white">August 10, 2026</h3>
+          </div>
+          <button onclick="closeCalendarDayModal()" class="text-white/50 hover:text-white text-xs font-bold px-1">✕</button>
+        </div>
+
+        <!-- Section 1: Day Items (Events, Tasks, Deadlines) -->
+        <div class="space-y-2">
+          <span class="text-[10px] font-bold text-white/50 uppercase tracking-wider block">Events & Tasks on this Day</span>
+          <div id="cal-day-items-list" class="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+            <!-- Injected Dynamically -->
+          </div>
+        </div>
+
+        <!-- Section 2: Quick Add Event/Task for this Day (With List/Folder Selector) -->
+        <div class="bg-white/5 p-3.5 rounded-2xl border border-white/10 space-y-2.5 pt-2">
+          <span class="text-[10px] font-bold text-purple-300 uppercase tracking-wider block">+ Quick Schedule for this Day</span>
+          
+          <div class="flex flex-wrap items-center gap-2">
+            <input id="cal-day-add-title" type="text" placeholder="Title (e.g. Math Exam or SAT Review)" class="flex-1 min-w-[160px] bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-purple-400">
+            
+            <!-- Type Selector Dropdown -->
+            <div class="relative">
+              <button type="button" id="cal-day-type-btn" onclick="toggleCalDayTypeDropdown(event)" class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5 transition-all">
+                <span id="cal-day-type-label">📋 Task</span> <span class="text-[8px] text-white/40">▾</span>
+              </button>
+              <div id="cal-day-type-menu" class="hidden absolute left-0 mt-1 z-50 glass-card p-1.5 w-32 space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95" onclick="event.stopPropagation()">
+                <button type="button" onclick="selectCalDayType('task', '📋 Task')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-white font-medium">📋 Task</button>
+                <button type="button" onclick="selectCalDayType('event', '🔵 Event')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-sky-300 font-medium">🔵 Event</button>
+                <button type="button" onclick="selectCalDayType('deadline', '🎯 Deadline')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-amber-300 font-medium">🎯 Deadline</button>
+              </div>
+            </div>
+
+            <!-- List / Folder Selector for Calendar Day Add -->
+            <div class="relative" id="cal-day-folder-wrap">
+              <button type="button" id="cal-day-folder-btn" onclick="toggleCalDayFolderDropdown(event)" class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5 transition-all">
+                <span class="text-purple-300">📁</span> <span id="cal-day-folder-label" class="max-w-[80px] truncate">My Tasks</span> <span class="text-[8px] text-white/40">▾</span>
+              </button>
+              <div id="cal-day-folder-menu" class="hidden absolute right-0 mt-1 z-50 glass-card p-1.5 w-36 space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95 max-h-48 overflow-y-auto" onclick="event.stopPropagation()">
+                <!-- Injected Dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 text-[10px] text-white/60">
+              <span>🕒 Time:</span>
+              <input id="cal-day-add-time" type="time" class="bg-white/10 border border-white/15 rounded-lg px-2 py-1 text-white text-xs outline-none">
+            </div>
+
+            <button type="button" onclick="saveQuickDayItem()" class="bg-purple-500 hover:bg-purple-600 text-white font-black px-4 py-1.5 rounded-xl text-xs shadow-md transition-all">
+              Add to Schedule
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dashboard App Shell -->
     <div id="dashboard" class="h-full w-full flex flex-col relative z-10">
       
-      <header class="glass mx-4 mt-3 px-6 py-2.5 rounded-2xl flex items-center justify-between z-30 shadow-lg">
+      <!-- Top Navigation & Status Header -->
+      <header class="glass mx-4 mt-3 px-5 py-2.5 rounded-2xl flex items-center justify-between z-30 shadow-lg">
         <div class="flex items-center gap-3">
           <span class="text-xs font-black tracking-wider text-purple-300">HDSFD</span>
           <span id="header-user-name" class="text-xs text-white/80 font-bold bg-white/10 px-3 py-1 rounded-full border border-white/10">User</span>
         </div>
 
-        <div class="flex items-center gap-3">
-          <button onclick="connectGoogleAccount()" id="google-status-badge" class="bg-amber-500/20 text-amber-200 border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all hover:bg-amber-500/30" title="Guest Mode: Data stored locally. Click to pair Google OAuth">
+        <div class="flex items-center gap-2.5">
+          <button onclick="triggerGlobalSync(true)" id="global-sync-badge" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all hover:bg-purple-500/30" title="Click to sync Google Tasks, Calendar & Drive">
+            <span id="sync-spin-icon">🔄</span>
+            <span id="global-sync-text">Synced</span>
+          </button>
+
+          <button onclick="connectGoogleAccount()" id="google-status-badge" class="bg-amber-500/20 text-amber-200 border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all hover:bg-amber-500/30" title="Click to pair Google account">
             <span>⚠️</span>
             <span id="google-badge-text">Guest Mode (Pair Google)</span>
           </button>
 
+          <!-- Coins Balance Display (Requirement: 🪙 0 format) -->
           <div class="flex items-center gap-1.5 bg-amber-500/20 border border-amber-500/30 px-3 py-1 rounded-full">
             <span class="text-xs">🪙</span>
-            <span id="header-seeds" class="text-xs font-bold text-amber-300">0</span>
+            <span id="header-coins" class="text-xs font-bold text-amber-300">0</span>
           </div>
         </div>
       </header>
 
+      <!-- Main Content Views -->
       <main id="content-area" class="flex-1 overflow-y-auto p-4 pb-24">
         
-        <!-- ================= TAB 1: HOME & FOCUS (MERGED) ================= -->
-        <section id="tab-focus" class="tab-content active w-full max-w-7xl mx-auto">
+        <!-- ================= TAB 1: HOME (FOCUS SANCTUARY) ================= -->
+        <section id="tab-focus" class="tab-content active w-full max-w-6xl mx-auto space-y-4">
           
-          <div class="text-center my-4">
-            <div id="lock-date" class="text-xs font-bold uppercase tracking-[0.2em] text-purple-300/80 mb-1">Thursday, August 6, 2026</div>
-            <div id="lock-clock-seconds" class="text-6xl md:text-7xl font-black tracking-tighter text-white drop-shadow-lg font-mono">11:32:04 AM</div>
-            <div class="mt-2 flex items-center justify-center gap-2">
-              <span id="editable-subtitle" contenteditable="true" onblur="saveSubtitle()" class="text-xs text-white/60 italic border-b border-dashed border-white/20 px-2 py-0.5 outline-none hover:border-purple-400">Welcome back to your Sanctuary</span>
-              <span class="text-[10px] text-white/30" title="Click to edit subtitle">✏️</span>
+          <!-- Apple Style Time & Quote Header (Blended with Background) -->
+          <div class="text-center my-2 relative">
+            <div id="lock-date" class="text-xs font-bold uppercase tracking-[0.28em] text-purple-200/70 mb-0.5 clock-background-blend">Sunday, August 9, 2026</div>
+            <div id="lock-clock-seconds" class="text-6xl md:text-7xl apple-clock-font tracking-tight text-white/95 clock-background-blend drop-shadow-2xl">12:00:00 PM</div>
+            
+            <!-- Hourly BrainyQuote / Custom Text Container -->
+            <div class="mt-2.5 flex items-center justify-center gap-2 max-w-2xl mx-auto px-4">
+              <!-- Quote Display Mode -->
+              <div id="quote-display-wrap" class="flex items-center justify-center gap-2 group cursor-pointer" onclick="toggleQuoteEditMode(true)">
+                <span id="hourly-quote-text" class="text-xs text-white/70 italic font-medium transition-all group-hover:text-purple-200">"The only way to do great work is to love what you do." — Steve Jobs</span>
+                <span class="text-[11px] text-white/30 group-hover:text-purple-300 transition-all" title="Click to edit quote / set custom text">✏️</span>
+              </div>
+
+              <!-- Quote Edit / Fill-in Box Preview Mode -->
+              <div id="quote-edit-wrap" class="hidden flex items-center gap-2 w-full max-w-lg bg-black/50 backdrop-blur-md p-1.5 rounded-xl border border-purple-500/30">
+                <input id="quote-custom-input" type="text" placeholder="Type your custom quote (or leave empty for hourly quote)..." class="flex-1 bg-transparent text-white placeholder-white/40 text-xs px-2 py-1 outline-none">
+                <button onclick="saveCustomQuote()" class="bg-purple-500 text-white px-3 py-1 rounded-lg text-xs font-bold hover:bg-purple-600">Save</button>
+                <button onclick="cancelQuoteEdit()" class="bg-white/10 text-white/70 hover:text-white px-2 py-1 rounded-lg text-xs font-bold">Cancel</button>
+              </div>
             </div>
           </div>
 
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch mt-6">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch mt-3">
             
-            <div class="lg:col-span-3 flex flex-col gap-5">
-              <div class="glass-card p-5 space-y-4">
-                <h3 class="text-white/70 text-[10px] font-bold uppercase tracking-widest border-b border-white/10 pb-1">Soundscape Synthesizer</h3>
-                <button id="mixer-toggle-btn" onclick="toggleSoundscape()" class="w-full bg-purple-500/20 text-purple-200 border border-purple-500/30 hover:bg-purple-500/30 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-2">
-                  <i data-lucide="play" class="w-3.5 h-3.5"></i> <span>Play Soundscape</span>
-                </button>
-                
-                <div class="space-y-3 pt-1 text-left">
-                  <div>
-                    <div class="flex justify-between text-[10px] font-bold mb-1">
-                      <span class="text-cyan-300">🌧️ Rain</span>
-                      <span id="val-rain" class="text-white/50">30%</span>
+            <!-- Left: Soundscape (Rain & Brown Noise always visible, YouTube expandable with Next/Prev and 10 history) -->
+            <div class="lg:col-span-4 flex flex-col gap-4">
+              <div class="glass-card p-4 space-y-3.5 text-left h-full flex flex-col justify-between">
+                <div class="space-y-3">
+                  <!-- Header -->
+                  <div class="flex items-center justify-between border-b border-white/10 pb-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-base">🎧</span>
+                      <h3 class="text-white/80 text-xs font-black uppercase tracking-wider">Soundscape</h3>
                     </div>
-                    <input id="vol-rain" type="range" min="0" max="1" step="0.05" value="0.3" oninput="updateMixerVolume()" class="w-full accent-cyan-400">
+                    <span id="mixer-status-badge" class="text-[9px] bg-white/10 text-white/50 px-2 py-0.5 rounded-full font-bold">Idle</span>
                   </div>
-                  <div>
-                    <div class="flex justify-between text-[10px] font-bold mb-1">
-                      <span class="text-purple-300">📻 Brown Noise</span>
-                      <span id="val-noise" class="text-white/50">10%</span>
-                    </div>
-                    <input id="vol-noise" type="range" min="0" max="1" step="0.05" value="0.1" oninput="updateMixerVolume()" class="w-full accent-purple-400">
-                  </div>
-                  <div>
-                    <div class="flex justify-between text-[10px] font-bold mb-1">
-                      <span class="text-emerald-300">🎵 Lo-Fi Beats</span>
-                      <span id="val-lofi" class="text-white/50">50%</span>
-                    </div>
-                    <input id="vol-lofi" type="range" min="0" max="1" step="0.05" value="0.5" oninput="updateMixerVolume()" class="w-full accent-emerald-400">
-                  </div>
-                </div>
-                <audio id="audio-rain" loop src="https://assets.mixkit.co/active_storage/sfx/1250/1250-preview.mp3"></audio>
-                <audio id="audio-lofi" loop src="https://assets.mixkit.co/music/preview/mixkit-study-session-115.mp3"></audio>
-              </div>
 
-              <div class="glass-card p-5 flex flex-col flex-1 min-h-[220px]">
-                <h3 class="text-white/70 text-[10px] font-bold uppercase tracking-widest border-b border-white/10 pb-1 mb-2">Study Lounge Chat</h3>
-                <div id="chat-box" class="flex-1 overflow-y-auto space-y-2 max-h-[140px] text-left pr-1">
-                  <p class="text-white/40 text-[10px] italic text-center py-4">Connecting to Lounge...</p>
-                </div>
-                <div class="flex gap-2 mt-3">
-                  <input id="chat-input" type="text" placeholder="Share a message..." class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-white placeholder-white/40 text-xs outline-none" onkeydown="if(event.key==='Enter') sendChatMessage()">
-                  <button onclick="sendChatMessage()" class="bg-white text-slate-900 rounded-xl px-3 py-1.5 text-xs font-bold hover:bg-white/90">Send</button>
+                  <!-- Quick Ambient Play / Stop Toggle Button -->
+                  <button id="mixer-toggle-btn" onclick="toggleSoundscape()" class="w-full bg-purple-500/20 text-purple-200 border border-purple-500/30 hover:bg-purple-500/30 font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-2 transition-all shadow-sm">
+                    <i data-lucide="play" class="w-4 h-4"></i> <span>Play Soundscape</span>
+                  </button>
+                  
+                  <!-- Rain & Brown Noise Controls (Always Visible) -->
+                  <div class="space-y-3 pt-1">
+                    <!-- Rain Slider -->
+                    <div>
+                      <div class="flex justify-between text-[11px] font-bold mb-1">
+                        <span class="text-cyan-300">🌧️ Rain</span>
+                        <span id="val-rain" class="text-white/60 font-mono">30%</span>
+                      </div>
+                      <input id="vol-rain" type="range" min="0" max="1" step="0.05" value="0.3" oninput="updateMixerVolume()" class="w-full accent-cyan-400 cursor-pointer">
+                    </div>
+                    <!-- Brown Noise Slider -->
+                    <div>
+                      <div class="flex justify-between text-[11px] font-bold mb-1">
+                        <span class="text-purple-300">📻 Brown Noise</span>
+                        <span id="val-noise" class="text-white/60 font-mono">10%</span>
+                      </div>
+                      <input id="vol-noise" type="range" min="0" max="1" step="0.05" value="0.1" oninput="updateMixerVolume()" class="w-full accent-purple-400 cursor-pointer">
+                    </div>
+                  </div>
+
+                  <!-- Expandable YouTube Player Section -->
+                  <div class="pt-2 border-t border-white/10">
+                    <button onclick="toggleYouTubeDrawer()" class="w-full flex items-center justify-between py-1 text-[11px] font-bold text-amber-300 hover:text-amber-200 transition-all">
+                      <div class="flex items-center gap-1.5">
+                        <span>🎵</span>
+                        <!-- YouTube SVG Logo -->
+                        <svg class="w-4 h-4 text-red-500 inline fill-current" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                        <span>YouTube Song / Playlist</span>
+                      </div>
+                      <span id="yt-drawer-icon" class="text-[10px] text-white/50">▼</span>
+                    </button>
+
+                    <!-- YouTube Drawer Content -->
+                    <div id="yt-drawer-content" class="hidden space-y-2.5 pt-2">
+                      <!-- Input & Controls (Prev, Play/Stop, Next) -->
+                      <div class="flex gap-1.5 items-center">
+                        <input id="yt-song-input" type="text" placeholder="Paste video or playlist link..." class="flex-1 bg-white/10 border border-white/20 rounded-lg px-2.5 py-1 text-white placeholder-white/30 text-xs outline-none focus:border-amber-400">
+                        <button onclick="playPreviousTrack()" class="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg flex items-center justify-center text-[10px] transition-all" title="Previous Track">⏮</button>
+                        <button id="yt-toggle-btn" onclick="toggleYouTubePlayback()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black w-8 h-7 rounded-lg flex items-center justify-center text-xs shadow transition-all" title="Play / Pause">
+                          <span id="yt-btn-icon">▶</span>
+                        </button>
+                        <button onclick="playNextTrack()" class="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg flex items-center justify-center text-[10px] transition-all" title="Next Track">⏭</button>
+                      </div>
+
+                      <div class="flex justify-between items-center text-[10px]">
+                        <span id="yt-track-title" class="text-white/70 truncate max-w-[170px] font-medium">No song loaded</span>
+                        <span id="yt-time-display" class="text-amber-300/80 font-mono">0:00 / 0:00</span>
+                      </div>
+
+                      <!-- YouTube Seek / Scrub Progress Slider -->
+                      <div class="flex items-center gap-1.5">
+                        <button onclick="seekRelative(-10)" class="text-[9px] bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded text-white/70 font-mono" title="Back 10s">-10s</button>
+                        <input id="yt-seek-bar" type="range" min="0" max="100" value="0" step="0.5" oninput="onYouTubeSeek(this.value)" class="flex-1 accent-amber-400 cursor-pointer h-1.5 bg-white/10 rounded-lg">
+                        <button onclick="seekRelative(10)" class="text-[9px] bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded text-white/70 font-mono" title="Forward 10s">+10s</button>
+                      </div>
+
+                      <!-- YouTube Volume Slider -->
+                      <div>
+                        <div class="flex justify-between text-[10px] font-bold mb-0.5">
+                          <span class="text-white/60">🔊 YT Volume</span>
+                          <span id="val-yt-vol" class="text-amber-300 font-mono">70%</span>
+                        </div>
+                        <input id="vol-yt" type="range" min="0" max="100" step="1" value="70" oninput="updateYouTubeVolume(this.value)" class="w-full accent-amber-400 cursor-pointer">
+                      </div>
+
+                      <!-- Last 10 Saved Song History (Scrollable with Video Names) -->
+                      <div class="pt-1">
+                        <div class="flex justify-between items-center mb-1">
+                          <span class="text-[9px] uppercase font-bold text-white/40">Recent Tracks (Last 10)</span>
+                          <span id="yt-history-count" class="text-[8px] text-purple-300">0</span>
+                        </div>
+                        <div id="yt-history-list" class="space-y-1 max-h-28 overflow-y-auto pr-1">
+                          <span class="text-[10px] text-white/30 italic">No previous tracks</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Hidden YouTube Player Container (Official IFrame API) -->
+                  <div id="yt-hidden-player-wrap" class="hidden">
+                    <div id="yt-player-target"></div>
+                  </div>
+
+                  <audio id="audio-rain" loop src="https://assets.mixkit.co/active_storage/sfx/1250/1250-preview.mp3"></audio>
                 </div>
               </div>
             </div>
 
-            <div class="lg:col-span-6 flex flex-col gap-5">
-              <div class="glass-card p-8 w-full flex flex-col items-center justify-center min-h-[380px] text-center">
-                <div class="relative w-56 h-56 flex items-center justify-center my-2">
+            <!-- Center: Session Focus (Dynamic 120m Slider & Decimal Custom Stepper) -->
+            <div class="lg:col-span-5 flex flex-col gap-4">
+              <div class="glass-card p-5 w-full flex flex-col items-center justify-center min-h-[380px] text-center">
+                
+                <!-- Radial Timer Ring -->
+                <div class="relative w-48 h-48 flex items-center justify-center my-1">
                   <svg class="w-full h-full transform -rotate-90" viewBox="0 0 200 200">
                     <circle cx="100" cy="100" r="85" class="stroke-white/10" stroke-width="8" fill="transparent"/>
                     <circle id="pomo-ring" cx="100" cy="100" r="85" class="stroke-purple-400" stroke-width="8" fill="transparent" stroke-linecap="round" stroke-dasharray="534" stroke-dashoffset="0"/>
                   </svg>
                   <div class="absolute flex flex-col items-center">
-                    <span id="pomo-time-display" class="text-5xl font-black tracking-tight drop-shadow-md">25:00</span>
-                    <span id="pomo-status" class="text-xs uppercase tracking-widest text-white/50 font-bold mt-1">Focus Session</span>
+                    <span id="pomo-time-display" class="text-5xl apple-clock-font tracking-tight drop-shadow-md">25:00</span>
+                    <span id="pomo-status" class="text-[10px] uppercase tracking-widest text-purple-300 font-bold mt-1">Focus Session</span>
                   </div>
                 </div>
 
-                <div class="flex items-center gap-3 mt-4">
-                  <button id="pomo-start-btn" onclick="startTimer()" class="bg-white text-slate-900 font-bold px-7 py-2.5 rounded-xl shadow-md hover:bg-white/90 active:scale-95 text-xs">Start Session</button>
-                  <button id="pomo-pause-btn" onclick="pauseTimer()" class="hidden bg-amber-400 text-slate-950 font-bold px-7 py-2.5 rounded-xl shadow-md hover:bg-amber-300 active:scale-95 text-xs">Pause</button>
-                  <button onclick="resetTimer()" class="glass p-2.5 rounded-xl text-white/70 hover:text-white" title="Reset"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>
+                <!-- Timer Controls -->
+                <div class="flex items-center gap-3 mt-2">
+                  <button id="pomo-start-btn" onclick="startTimer()" class="bg-white text-slate-900 font-bold px-7 py-2 rounded-xl shadow-md hover:bg-white/90 active:scale-95 text-xs transition-all">Start Session</button>
+                  <button id="pomo-pause-btn" onclick="pauseTimer()" class="hidden bg-amber-400 text-slate-950 font-bold px-7 py-2 rounded-xl shadow-md hover:bg-amber-300 active:scale-95 text-xs transition-all">Pause</button>
+                  <button onclick="resetTimer()" class="glass p-2 rounded-xl text-white/70 hover:text-white transition-all" title="Reset"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>
                 </div>
 
-                <div class="w-full max-w-xs mt-6 flex items-center gap-3">
+                <!-- Preset Time Chips -->
+                <div class="flex items-center gap-2 mt-3">
+                  <button onclick="setPomoPreset(15)" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">15m</button>
+                  <button onclick="setPomoPreset(25)" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-500/20 border border-purple-500/40 text-purple-300">25m</button>
+                  <button onclick="setPomoPreset(45)" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">45m</button>
+                  <button onclick="setPomoPreset(60)" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">60m</button>
+                  <button onclick="setPomoPreset(90)" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">90m</button>
+                </div>
+
+                <!-- Dynamic Slider (0-50% = 5-90m, 50-100% = 90-120m) -->
+                <div class="w-full max-w-xs mt-3 flex items-center gap-2.5">
                   <span class="text-[10px] text-white/40 font-bold">5m</span>
-                  <input id="pomo-slider" type="range" min="5" max="90" step="5" value="25" oninput="onSliderChange(this.value)" class="flex-1 accent-purple-400">
-                  <span id="slider-val" class="text-[10px] text-purple-300 font-bold">25m</span>
+                  <input id="pomo-slider" type="range" min="0" max="100" step="1" value="23" oninput="onDynamicSliderChange(this.value)" class="flex-1 accent-purple-400 cursor-pointer">
+                  <span id="slider-val" class="text-[10px] text-purple-300 font-bold w-9 text-right">25m</span>
                 </div>
 
-                <button onclick="enterZenMode()" class="mt-6 glass px-4 py-2 rounded-xl text-xs font-bold text-white/80 hover:text-white flex items-center gap-2">
-                  <span>✨ Enter Custom Zen Dashboard</span>
+                <!-- Custom Time Stepper (Allows decimals e.g. 25.5 = 25m 50s, 25.43 = 25m 43s) -->
+                <div class="flex items-center gap-1.5 mt-2.5 bg-black/30 px-3 py-1.5 rounded-xl border border-white/10">
+                  <span class="text-[10px] text-white/50 uppercase font-bold mr-1">Custom:</span>
+                  <button onclick="adjustCustomTimeStep(-5)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white font-black text-xs flex items-center justify-center transition-all">-</button>
+                  <input id="custom-pomo-input" type="text" value="25" class="w-14 bg-white/10 border border-white/20 rounded-lg py-0.5 text-xs text-white text-center font-bold outline-none focus:border-purple-400" onkeydown="if(event.key==='Enter') setCustomPomoFromInput()" title="Type minutes (e.g. 25 or 25.30 for 25m 30s)">
+                  <button onclick="adjustCustomTimeStep(5)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white font-black text-xs flex items-center justify-center transition-all">+</button>
+                  <button onclick="setCustomPomoFromInput()" class="bg-purple-500/30 text-purple-200 border border-purple-500/40 hover:bg-purple-500/50 px-2.5 py-1 rounded-lg text-[10px] font-bold ml-1 transition-all">Set</button>
+                </div>
+
+                <!-- Zen Mode Button -->
+                <button onclick="enterZenMode()" class="mt-3 glass px-4 py-1.5 rounded-xl text-xs font-bold text-white/80 hover:text-white flex items-center gap-2 transition-all">
+                  <span>✨ Enter Zen Mode</span>
                 </button>
-              </div>
-
-              <!-- Sanctuary Analytics & Stats Overview -->
-              <div class="glass-card p-5 text-left">
-                <h3 class="text-white/70 text-[10px] font-bold uppercase tracking-widest border-b border-white/10 pb-2 mb-3">Sanctuary Analytics & Stats</h3>
-                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div class="glass p-3 rounded-xl border border-white/10">
-                    <span class="text-[10px] text-white/50 uppercase font-bold block">Focus Time</span>
-                    <span id="stat-focus-time" class="text-base font-black text-purple-300">0 mins</span>
-                  </div>
-                  <div class="glass p-3 rounded-xl border border-white/10">
-                    <span class="text-[10px] text-white/50 uppercase font-bold block">Tasks Done</span>
-                    <span id="stat-tasks-done" class="text-base font-black text-emerald-300">0 completed</span>
-                  </div>
-                  <div class="glass p-3 rounded-xl border border-white/10">
-                    <span class="text-[10px] text-white/50 uppercase font-bold block">Study Streak</span>
-                    <span id="stat-streak" class="text-base font-black text-amber-300">1 Day</span>
-                  </div>
-                  <div class="glass p-3 rounded-xl border border-white/10">
-                    <span class="text-[10px] text-white/50 uppercase font-bold block">Seeds Earned</span>
-                    <span id="stat-seeds" class="text-base font-black text-yellow-300">0 Seeds</span>
-                  </div>
-                </div>
               </div>
             </div>
 
-            <div class="lg:col-span-3 flex flex-col gap-5">
-              <div class="glass-card p-5 h-full flex flex-col justify-between min-h-[420px] text-left">
-                <div class="flex justify-between items-center border-b border-white/10 pb-1 mb-3">
-                  <h3 class="text-white/70 text-[10px] font-bold uppercase tracking-widest">Exam Task Boss Fight</h3>
-                  <button id="boss-forfeit-btn" onclick="forfeitBoss()" class="hidden text-[9px] bg-red-500/20 text-red-300 border border-red-500/30 px-2 py-0.5 rounded">Forfeit</button>
+            <!-- Right: Live Schedule Notifications & Starred Tasks -->
+            <div class="lg:col-span-3 flex flex-col gap-3">
+              <!-- Live Schedule & Notifications Status Card -->
+              <div class="glass-card p-3.5 text-left space-y-2.5">
+                <div class="border-b border-white/10 pb-1.5 flex justify-between items-center">
+                  <div class="flex items-center gap-1.5">
+                    <span class="relative flex h-2 w-2">
+                      <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                    </span>
+                    <h3 class="text-white/90 text-[10px] font-black uppercase tracking-wider">Schedule & Status</h3>
+                  </div>
+                  <button onclick="switchTab('tasks-notes'); switchTab2Subview('schedule')" class="text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-lg font-bold hover:bg-purple-500/30 transition-all flex items-center gap-1">
+                    <span>🕒 Schedule</span>
+                  </button>
                 </div>
 
-                <div id="boss-setup" class="flex-1 flex flex-col justify-center gap-3">
-                  <p class="text-xs text-white/50 text-center mb-1">Create an Exam Boss linked to your tasks!</p>
-                  <div>
-                    <label class="text-white/50 text-[9px] font-bold uppercase mb-1 block">Subject / Exam Name</label>
-                    <input id="boss-input-name" type="text" placeholder="e.g. Organic Chemistry Final" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white placeholder-white/30 text-xs outline-none">
-                  </div>
-                  <div>
-                    <label class="text-white/50 text-[9px] font-bold uppercase mb-1 block">Target Date</label>
-                    <input id="boss-input-date" type="date" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white placeholder-white/30 text-xs outline-none">
-                  </div>
-                  <button onclick="summonBoss()" class="bg-white text-slate-900 w-full rounded-xl py-2 mt-1 text-xs font-bold hover:bg-white/90">Summon Boss</button>
-                </div>
-
-                <div id="boss-active" class="hidden flex-1 flex flex-col justify-between">
-                  <div class="text-center my-3">
-                    <div id="boss-avatar" class="text-4xl animate-bounce mb-1">👾</div>
-                    <h4 id="boss-name" class="text-sm font-black text-white">Subject</h4>
-                    <p class="text-[9px] text-white/50 font-bold uppercase">Linked to Task Objectives</p>
+                <!-- Dynamically Rendered Live Status & Notifications -->
+                <div id="home-schedule-notifications" class="space-y-2">
+                  <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 flex items-center justify-between">
+                    <div class="space-y-0.5">
+                      <span class="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block">🟢 Current Status</span>
+                      <p id="home-status-class-title" class="text-xs font-bold text-white">No active class right now</p>
+                      <p id="home-status-class-time" class="text-[10px] text-white/50">Free study time</p>
+                    </div>
+                    <span id="home-status-badge" class="text-[9px] bg-white/10 text-white/70 px-2 py-0.5 rounded-full font-bold">Focus</span>
                   </div>
 
-                  <div class="my-2">
-                    <div class="flex justify-between text-[11px] font-bold mb-1">
-                      <span class="text-red-400">💔 BOSS HP (Pending Tasks)</span>
-                      <span id="boss-hp-text" class="text-white">100/100 HP</span>
-                    </div>
-                    <div class="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/10">
-                      <div id="boss-hp-bar" class="h-full bg-gradient-to-r from-red-600 to-amber-500 rounded-full transition-all duration-500" style="width: 100%"></div>
-                    </div>
-                  </div>
-
-                  <div class="my-2">
-                    <div class="flex justify-between text-[11px] font-bold mb-1">
-                      <span class="text-cyan-400">⏳ DAYS REMAINING</span>
-                      <span id="boss-days-text" class="text-white">0 Days</span>
-                    </div>
-                    <div class="w-full h-3 bg-black/40 rounded-full overflow-hidden border border-white/10">
-                      <div id="boss-time-bar" class="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-500" style="width: 100%"></div>
-                    </div>
+                  <!-- Upcoming Schedule Quick Peek -->
+                  <div id="home-upcoming-events-list" class="space-y-1.5">
+                    <!-- Injected upcoming classes & calendar events -->
                   </div>
                 </div>
               </div>
+
+              <!-- Starred Tasks Box (Grouped by list subsections, + button to Tasks tab) -->
+              <div class="glass-card p-3.5 text-left flex-1 flex flex-col justify-between min-h-[240px]">
+                <div class="flex-1 flex flex-col overflow-hidden">
+                  <div class="flex justify-between items-center border-b border-white/10 pb-1.5 mb-2">
+                    <div class="flex items-center gap-1.5">
+                      <span>⭐</span>
+                      <h3 class="text-white/80 text-[10px] font-black uppercase tracking-wider">Starred Tasks</h3>
+                    </div>
+                    <!-- + symbol replacing View All -> Redirects to Tab 2 -->
+                    <button onclick="switchTab('tasks-notes')" class="w-5 h-5 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-300 hover:bg-purple-500/40 flex items-center justify-center text-xs font-black" title="Add / View All in Tasks Tab">+</button>
+                  </div>
+
+                  <!-- Grouped Starred Tasks Container -->
+                  <div id="home-starred-tasks-list" class="space-y-2 flex-1 overflow-y-auto pr-1">
+                    <p class="text-white/40 text-[11px] italic text-center py-8">Loading starred tasks...</p>
+                  </div>
+                </div>
+              </div>
+
             </div>
 
           </div>
         </section>
 
-        <!-- ================= TAB 2: TASKS & NOTES (MERGED) ================= -->
-        <section id="tab-tasks-notes" class="tab-content w-full max-w-7xl mx-auto space-y-6">
-          <div class="grid grid-cols-1 xl:grid-cols-12 gap-5 items-stretch">
+        <!-- ================= TAB 2: TASKS (SPLIT SCREEN CALENDAR & TASKS SUITE) ================= -->
+        <section id="tab-tasks-notes" class="tab-content w-full max-w-[1440px] mx-auto space-y-3">
+          
+          <div id="tasks-split-container" class="flex flex-col lg:flex-row gap-3 h-[calc(100vh-150px)] min-h-[620px] select-none">
             
-            <div class="xl:col-span-5 flex flex-col gap-5">
-              <div class="glass-card p-5 flex flex-col gap-3 flex-1">
-                <div class="flex items-center justify-between border-b border-white/10 pb-2">
-                  <h2 class="text-white/70 text-[10px] font-bold uppercase tracking-widest">Task Planner</h2>
-                  <div class="flex items-center gap-2">
-                    <button onclick="toggleTaskForm()" class="glass rounded-full w-7 h-7 flex items-center justify-center text-white hover:bg-white/20">
-                      <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            <!-- Left: Calendar Workspace (Ultra-Glassmorphic Native Engine) -->
+            <div id="calendar-panel" class="w-full lg:w-[56%] h-full glass-panel flex flex-col transition-all overflow-hidden">
+              
+              <!-- Calendar & Schedule Header with View Switcher -->
+              <div class="bg-white/[0.04] px-4 py-2 border-b border-white/10 flex justify-between items-center text-xs font-bold">
+                <div class="flex items-center gap-1.5">
+                  <div class="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/10">
+                    <button id="tab2-subtab-cal-btn" onclick="switchTab2Subview('calendar')" class="px-3 py-1 rounded-lg text-xs font-bold bg-purple-500/30 text-purple-200 border border-purple-500/40 transition-all flex items-center gap-1.5">
+                      <span>📅</span><span>Calendar</span>
+                    </button>
+                    <button id="tab2-subtab-sched-btn" onclick="switchTab2Subview('schedule')" class="px-3 py-1 rounded-lg text-xs font-bold text-white/50 hover:text-white transition-all flex items-center gap-1.5">
+                      <span>🕒</span><span>Schedule</span>
                     </button>
                   </div>
                 </div>
-
-                <div id="task-form" class="glass p-3 rounded-xl hidden space-y-2 text-left">
-                  <input id="task-title-input" type="text" placeholder="Task description..." class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-white placeholder-white/30 text-xs outline-none">
-                  <input id="task-folder-input" type="text" placeholder="Folder / Subject (Optional)" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 text-white placeholder-white/30 text-xs outline-none">
-                  <button onclick="saveTask()" class="w-full bg-white text-slate-900 py-1.5 rounded-lg text-xs font-bold hover:bg-white/90">Save Task</button>
+                <div class="flex items-center gap-2">
+                  <button id="schedule-add-btn" onclick="openAddScheduleModal()" class="hidden text-[10px] bg-purple-500/30 text-purple-200 border border-purple-500/40 px-3 py-1 rounded-xl font-bold hover:bg-purple-500/50 transition-all flex items-center gap-1 active:scale-95">
+                    <span>➕</span><span>Add Class</span>
+                  </button>
+                  <button onclick="triggerGlobalSync(true)" class="text-[10px] bg-white/10 text-white border border-white/20 px-3 py-1 rounded-xl font-bold hover:bg-white/20 transition-all">Sync</button>
+                  <button onclick="window.open('https://calendar.google.com', '_blank')" class="text-[10px] bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-1 rounded-xl font-bold hover:bg-purple-500/30 transition-all">App ↗</button>
                 </div>
-
-                <div id="task-list" class="space-y-2 flex-1 overflow-y-auto max-h-[280px] text-left"></div>
-                <p id="tasks-empty" class="text-white/40 text-xs italic text-center py-6">No tasks logged. Click + to add your first objective!</p>
               </div>
 
-              <div class="glass-card p-5 flex flex-col gap-3">
-                <div class="flex justify-between items-center border-b border-white/10 pb-2">
-                  <h2 id="calendar-month-title" class="text-sm font-black text-white">Month Year</h2>
-                  <span class="text-[10px] text-white/40 font-bold uppercase">Calendar Grid</span>
+              <!-- Interactive Glassmorphic Calendar Grid View -->
+              <div id="native-dark-calendar-view" class="flex-1 flex flex-col p-3 overflow-hidden">
+                <!-- Month Navigator Bar -->
+                <div class="flex justify-between items-center pb-2.5 border-b border-white/10">
+                  <div class="flex items-center gap-2">
+                    <button onclick="changeCalendarMonth(-1)" class="w-7 h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all">◀</button>
+                    <span id="cal-month-title" class="text-sm font-black text-white px-2">August 2026</span>
+                    <button onclick="changeCalendarMonth(1)" class="w-7 h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all">▶</button>
+                    <button onclick="jumpCalendarToToday()" class="text-[10px] bg-purple-500/30 text-purple-200 border border-purple-500/40 px-2.5 py-1 rounded-xl font-bold ml-1 hover:bg-purple-500/50 transition-all">Today</button>
+                  </div>
+
+                  <!-- Legend Badges -->
+                  <div class="flex items-center gap-2.5 text-[9px] font-bold">
+                    <span class="flex items-center gap-1 text-sky-300"><span class="w-2 h-2 rounded-full bg-sky-400 inline-block shadow-sm"></span> Events</span>
+                    <span class="flex items-center gap-1 text-purple-300"><span class="w-2 h-2 rounded-full bg-purple-400 inline-block shadow-sm"></span> Tasks</span>
+                    <span class="flex items-center gap-1 text-amber-300"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block shadow-sm"></span> Deadlines</span>
+                  </div>
                 </div>
-                <div id="calendar-grid" class="min-h-[220px]"></div>
+
+                <!-- 7 Day Headers -->
+                <div class="grid grid-cols-7 gap-1.5 pt-2 pb-1 text-center text-[10px] font-bold text-white/50 uppercase tracking-wider">
+                  <div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div>
+                </div>
+
+                <!-- 35-42 Day Grid Cells (Scrollable with Event & Task Badges) -->
+                <div id="calendar-cells-grid" class="flex-1 grid grid-cols-7 gap-1.5 overflow-y-auto pr-0.5 pt-1">
+                  <!-- Dynamically Injected Day Cells -->
+                </div>
               </div>
+
+              <!-- Interactive Glassmorphic Schedule & Timetable View -->
+              <div id="native-schedule-view" class="hidden flex-1 flex flex-col p-3 overflow-hidden space-y-3">
+                <!-- Day Filter Chips Bar -->
+                <div class="flex items-center justify-between gap-1 pb-2 border-b border-white/10 overflow-x-auto no-scrollbar">
+                  <div id="schedule-day-filters" class="flex items-center gap-1">
+                    <button onclick="filterScheduleDay('all')" class="sched-day-btn active px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-500/30 text-purple-200 border border-purple-500/40 whitespace-nowrap transition-all" data-day="all">All Days</button>
+                    <button onclick="filterScheduleDay('Mon')" class="sched-day-btn px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 whitespace-nowrap transition-all" data-day="Mon">Mon</button>
+                    <button onclick="filterScheduleDay('Tue')" class="sched-day-btn px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 whitespace-nowrap transition-all" data-day="Tue">Tue</button>
+                    <button onclick="filterScheduleDay('Wed')" class="sched-day-btn px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 whitespace-nowrap transition-all" data-day="Wed">Wed</button>
+                    <button onclick="filterScheduleDay('Thu')" class="sched-day-btn px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 whitespace-nowrap transition-all" data-day="Thu">Thu</button>
+                    <button onclick="filterScheduleDay('Fri')" class="sched-day-btn px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 whitespace-nowrap transition-all" data-day="Fri">Fri</button>
+                    <button onclick="filterScheduleDay('Sat')" class="sched-day-btn px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 whitespace-nowrap transition-all" data-day="Sat">Sat</button>
+                    <button onclick="filterScheduleDay('Sun')" class="sched-day-btn px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white/5 hover:bg-white/10 text-white/70 border border-white/10 whitespace-nowrap transition-all" data-day="Sun">Sun</button>
+                  </div>
+                </div>
+
+                <!-- Schedule Entries List Container -->
+                <div id="schedule-cards-list" class="flex-1 overflow-y-auto pr-1 space-y-2 text-left">
+                  <!-- Dynamically Injected Class & Period Cards -->
+                </div>
+              </div>
+
             </div>
 
-            <!-- SINGLE-PAGE VERTICAL FLIPPING TOP-SPIRAL NOTEPAD -->
-            <div class="xl:col-span-7 flex flex-col">
-              <div class="glass-card p-5 min-h-[560px] flex flex-col justify-between relative h-full border border-white/15 shadow-2xl">
-                
-                <!-- Spiral Rings Header -->
-                <div class="flex justify-around px-6 -mt-8 mb-2 z-30 pointer-events-none">
-                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
-                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
-                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
-                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
-                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md"></div>
-                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md flex"></div>
-                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md hidden sm:flex"></div>
-                  <div class="w-3.5 h-6 bg-gradient-to-b from-slate-200 via-slate-400 to-slate-600 rounded-md shadow-md hidden sm:flex"></div>
+            <!-- Resizer Handle (Draggable Divider between Calendar and Tasks) -->
+            <div id="split-resizer-handle" class="hidden lg:flex w-2.5 cursor-col-resize hover:bg-purple-500/40 active:bg-purple-500/60 rounded-full items-center justify-center transition-colors group" title="Drag to adjust split window size">
+              <div class="w-1 h-8 rounded-full bg-white/20 group-hover:bg-purple-300"></div>
+            </div>
+
+            <!-- Right: Tasks Menu (Ultra-Glassmorphic Suite, Repeat Modal, Custom Date/Time, Drive Attachments, Subtasks) -->
+            <div id="tasks-panel" class="w-full lg:w-[44%] h-full glass-panel flex flex-col p-4 space-y-3 transition-all overflow-hidden">
+              
+              <!-- Header -->
+              <div class="flex justify-between items-center border-b border-white/10 pb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-base">📋</span>
+                  <h3 class="text-sm font-black text-purple-300 uppercase tracking-wider">Tasks</h3>
                 </div>
-
-                <div class="flex flex-wrap items-center justify-between border-b border-white/10 pb-3 z-20 gap-2">
-                  <div class="flex items-center gap-2">
-                    <span class="text-base">📝</span>
-                    <h2 class="text-sm font-black text-amber-300 tracking-wider uppercase">Sanctuary Flip Notepad</h2>
-                  </div>
-                  
-                  <div class="flex items-center gap-2">
-                    <button id="journal-mode-text-btn" onclick="setJournalMode('text')" class="bg-amber-300 text-slate-950 px-3 py-1 rounded-xl text-xs font-bold hover:bg-amber-200">✍️ Type Text</button>
-                    <button id="journal-mode-draw-btn" onclick="setJournalMode('draw')" class="bg-white/10 text-amber-200 border border-white/20 px-3 py-1 rounded-xl text-xs font-bold hover:bg-white/20">🎨 Draw</button>
-                    <button onclick="clearCanvas()" class="bg-red-500/20 text-red-300 border border-red-500/30 px-2.5 py-1 rounded-xl text-xs font-bold hover:bg-red-500/30">Clear</button>
-                    <button onclick="addNotepadPage()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-1 rounded-xl text-xs font-bold hover:bg-purple-500/30">+ New Page</button>
-                  </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="triggerGlobalSync(true)" class="text-[10px] bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-1 rounded-xl font-bold hover:bg-purple-500/30 transition-all">Sync</button>
+                  <button onclick="window.open('https://tasks.google.com', '_blank')" class="text-[10px] bg-white/10 text-white border border-white/20 px-2.5 py-1 rounded-xl font-bold hover:bg-white/20 transition-all">App ↗</button>
                 </div>
-
-                <div id="journal-empty" class="text-white/40 text-xs italic text-center py-24">
-                  No notepad pages created yet. Click "+ New Page" to start writing!
-                </div>
-
-                <!-- Single Page Vertical Flip Container -->
-                <div id="journal-spread" class="hidden flex-1 my-3 relative min-h-[420px] perspective-1000">
-                  <div id="vertical-page-card" class="paper-page p-6 flex flex-col text-left h-full w-full relative z-10 rounded-2xl shadow-xl transition-all duration-300">
-                    <div class="flex justify-between items-center mb-2 border-b border-slate-300 pb-1">
-                      <span id="left-page-label" class="text-xs font-bold text-slate-600">Page 1</span>
-                      <span id="page-date-stamp" class="text-[10px] text-slate-400 font-mono">Today</span>
-                    </div>
-                    <textarea id="left-page-text" placeholder="Click anywhere on this notepad page to type notes..." class="flex-1 w-full bg-transparent text-slate-900 placeholder-slate-400 text-sm leading-[28px] outline-none resize-none font-sans" oninput="saveJournalText('left')"></textarea>
-                  </div>
-
-                  <!-- Canvas Overlay for Drawing -->
-                  <canvas id="journal-canvas" class="absolute inset-0 z-20 pointer-events-none rounded-2xl"></canvas>
-                </div>
-
-                <!-- Vertical Flip Control Bar -->
-                <div id="journal-nav" class="hidden items-center justify-between border-t border-white/10 pt-3 z-20">
-                  <button onclick="prevJournalPage()" class="bg-white/10 text-white border border-white/20 px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-white/20 flex items-center gap-1.5">
-                    <span>▼ Flip Down (Previous)</span>
-                  </button>
-                  <span id="journal-indicator" class="text-xs font-bold text-amber-300">Page 1 of 1</span>
-                  <button onclick="nextJournalPage()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-4 py-1.5 rounded-xl text-xs font-bold hover:bg-purple-500/30 flex items-center gap-1.5">
-                    <span>▲ Flip Up (Next)</span>
-                  </button>
-                </div>
-
               </div>
+
+              <!-- Google Task Lists Filter Tabs -->
+              <div id="gtasks-list-tabs" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-left scrollbar-none">
+                <button onclick="filterGTasksByList('all')" class="gtask-tab-btn active bg-purple-500/30 text-purple-200 border border-purple-500/40 px-2.5 py-0.5 rounded-lg text-[10px] font-bold whitespace-nowrap">All Tasks</button>
+              </div>
+
+              <!-- Comprehensive Task Creator Card -->
+              <div class="glass p-3 rounded-2xl border border-purple-500/30 space-y-2.5 text-left">
+                <!-- Title -->
+                <div class="flex items-center gap-2">
+                  <span class="w-4 h-4 rounded-full border-2 border-purple-400/60 inline-block"></span>
+                  <input id="gtask-title-input" type="text" placeholder="Title" class="flex-1 bg-transparent text-white placeholder-white/40 text-xs font-semibold outline-none focus:border-b focus:border-purple-400 py-0.5" onkeydown="if(event.key==='Enter') saveComprehensiveTask()">
+                </div>
+
+                <!-- Multiline Details -->
+                <div class="flex items-start gap-2 pt-0.5">
+                  <span class="text-white/40 text-[11px] mt-0.5">☰</span>
+                  <textarea id="gtask-details-input" placeholder="Details" rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl px-2.5 py-1 text-white placeholder-white/30 text-[11px] outline-none focus:border-purple-400 resize-none"></textarea>
+                </div>
+
+                <!-- Row 1: Combined Custom Due Date & Time Picker Button + Deadline Button -->
+                <div class="flex flex-wrap items-center gap-2 pt-0.5">
+                  <button type="button" onclick="openCustomDateTimeModal('due')" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white/90 font-medium transition-all">
+                    <span class="text-purple-300">📅</span>
+                    <span id="gtask-due-btn-label">Due Date & Time</span>
+                  </button>
+
+                  <button type="button" onclick="openCustomDateTimeModal('deadline')" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white/90 font-medium transition-all">
+                    <span class="text-amber-300">🎯</span>
+                    <span id="gtask-deadline-btn-label">Deadline</span>
+                  </button>
+                </div>
+
+                <!-- Row 2: Repeat Options Button + Folder / List Dropdown + Drive Attach -->
+                <div class="flex flex-wrap items-center gap-2 pt-0.5">
+                  <button type="button" onclick="openRepeatModal()" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white/90 font-medium transition-all">
+                    <span class="text-purple-300">🔁</span>
+                    <span id="gtask-repeat-btn-label">Repeat: None</span>
+                  </button>
+
+                  <!-- Custom Glassmorphic Folder Dropdown -->
+                  <div class="relative">
+                    <button type="button" id="gtask-folder-btn" onclick="toggleTaskFolderDropdown(event)" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white font-bold transition-all">
+                      <span class="text-purple-300">📁</span>
+                      <span id="gtask-folder-btn-label">My Tasks</span>
+                      <span class="text-white/40 text-[8px]">▾</span>
+                    </button>
+                    <div id="gtask-folder-dropdown-menu" class="hidden absolute left-0 mt-1 z-50 glass-card p-1.5 w-40 space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95 max-h-48 overflow-y-auto animate-fade-in" onclick="event.stopPropagation()">
+                      <!-- Injected dynamically -->
+                    </div>
+                  </div>
+
+                  <button type="button" onclick="openGDriveAttachModal('new-task')" class="flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-cyan-300 font-bold transition-all">
+                    <span>📎</span> <span>Drive File</span>
+                  </button>
+                </div>
+
+                <!-- Active Pending Attachment Indicator -->
+                <div id="new-task-attachment-chip" class="hidden flex items-center justify-between bg-cyan-500/20 border border-cyan-500/30 px-2.5 py-1 rounded-xl text-[10px] text-cyan-200">
+                  <span id="new-task-attachment-name" class="truncate">📎 attachment.pdf</span>
+                  <button type="button" onclick="removePendingAttachment()" class="text-cyan-300 hover:text-white font-bold ml-2">✕</button>
+                </div>
+
+                <!-- Subtasks Creator Preview (Scrollable container if spammed) -->
+                <div id="subtask-inputs-container" class="space-y-1 pt-1 hidden max-h-36 overflow-y-auto pr-1">
+                  <span class="text-[9px] uppercase font-bold text-white/40">Subtasks:</span>
+                  <div id="subtasks-field-list" class="space-y-1"></div>
+                </div>
+
+                <div class="flex justify-between items-center pt-1 border-t border-white/10">
+                  <button type="button" onclick="toggleAddSubtaskField()" class="text-[10px] text-purple-300 hover:text-purple-200 font-bold flex items-center gap-1">
+                    <span>↳</span> <span>+ Add Subtask</span>
+                  </button>
+
+                  <button onclick="saveComprehensiveTask()" class="bg-purple-500 hover:bg-purple-600 text-white font-black px-4 py-1.5 rounded-xl text-xs shadow-md transition-all">
+                    + Add Task
+                  </button>
+                </div>
+              </div>
+
+              <!-- Live Tasks List Items (Scrollable, Subtask Expand/Collapse, Reorder Up/Down, 3-Dots, Completed at Bottom) -->
+              <div id="gtasks-live-list" class="flex-1 overflow-y-auto space-y-2 pr-1 text-left">
+                <p class="text-white/40 text-xs italic text-center py-10">Loading Tasks...</p>
+              </div>
+
             </div>
 
           </div>
+
         </section>
 
-        <!-- ================= TAB 3: SETTINGS ================= -->
+        <!-- ================= TAB 3: STICKY NOTES & GEMINI AI SPLIT ================= -->
+        <section id="tab-notes" class="tab-content w-full h-[calc(100vh-145px)] max-w-[1550px] mx-auto text-left">
+          
+          <div class="h-full w-full flex flex-col md:flex-row gap-4">
+            
+            <!-- Left Half: Canvas-Powered Sticky Notes Workspace -->
+            <div id="notes-workspace-panel" class="w-full md:w-1/2 h-full glass-card p-4 flex flex-col relative overflow-hidden border border-purple-500/20">
+              
+              <!-- Header: "📌 Sticky Notes: (colors)" on left, "+" button on right -->
+              <div class="flex items-center justify-between border-b border-white/10 pb-3 mb-2 gap-3 flex-shrink-0 z-20">
+                <div class="flex items-center gap-3">
+                  <span class="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <span>📌</span>
+                    <span>Sticky Notes:</span>
+                  </span>
+
+                  <!-- Color Selector Options -->
+                  <div class="flex items-center gap-1.5 bg-black/30 p-1 rounded-xl border border-white/10">
+                    <button onclick="setSelectedPostItColor('yellow')" id="color-btn-yellow" class="w-5 h-5 rounded-full bg-yellow-300 ring-2 ring-white transition-all" title="Canary Yellow"></button>
+                    <button onclick="setSelectedPostItColor('pink')" id="color-btn-pink" class="w-5 h-5 rounded-full bg-pink-300 hover:opacity-80 transition-all" title="Pastel Pink"></button>
+                    <button onclick="setSelectedPostItColor('blue')" id="color-btn-blue" class="w-5 h-5 rounded-full bg-sky-300 hover:opacity-80 transition-all" title="Sky Blue"></button>
+                    <button onclick="setSelectedPostItColor('green')" id="color-btn-green" class="w-5 h-5 rounded-full bg-emerald-300 hover:opacity-80 transition-all" title="Mint Green"></button>
+                    <button onclick="setSelectedPostItColor('purple')" id="color-btn-purple" class="w-5 h-5 rounded-full bg-purple-300 hover:opacity-80 transition-all" title="Lavender"></button>
+                  </div>
+                </div>
+
+                <!-- Action Buttons: Clear All & Add Note -->
+                <div class="flex items-center gap-2">
+                  <button onclick="openClearAllNotesModal()" class="px-2.5 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-bold rounded-xl flex items-center gap-1 transition-all active:scale-95" title="Clear All Sticky Notes">
+                    <span>🗑️</span>
+                    <span>Clear</span>
+                  </button>
+                  <button onclick="addPhysicsPostIt()" class="w-8 h-8 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-lg flex items-center justify-center shadow-lg shadow-amber-400/20 transition-all active:scale-95" title="Peel New Sticky Note">+</button>
+                </div>
+              </div>
+
+              <!-- Interactive Sticky Notes Board Arena -->
+              <div id="notes-canvas-arena" class="flex-1 w-full h-full relative overflow-y-auto rounded-2xl bg-black/20 border border-white/5 p-3">
+                <!-- Stacked Pad and Board Notes Rendered Dynamically Here -->
+              </div>
+            </div>
+
+            <!-- Right Half: Native Google Gemini 2.0 Flash AI Agent Workspace -->
+            <div id="gemini-assistant-panel" class="w-full md:w-1/2 h-full glass-card p-0 flex flex-col justify-between relative overflow-hidden border border-sky-500/20 rounded-3xl bg-[#131314]">
+              
+              <!-- Gemini Agent Header -->
+              <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-black/40 backdrop-blur-md z-10 shrink-0">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-500 via-indigo-500 to-pink-500 flex items-center justify-center text-white text-sm font-bold shadow-md shadow-indigo-500/30">
+                    ✦
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-sm font-bold tracking-tight text-white">Gemini</span>
+                      <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30">AI</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-1.5">
+                  <div id="gemini-user-badge" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] text-slate-300">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400"></span>
+                    <span id="gemini-user-email-text" class="max-w-[140px] truncate">Connected</span>
+                  </div>
+                  <button onclick="openGeminiApiKeyModal()" class="px-2 py-1 rounded-xl bg-white/5 hover:bg-sky-500/20 border border-white/10 hover:border-sky-500/30 text-slate-400 hover:text-sky-300 text-xs font-semibold transition-all active:scale-95 flex items-center gap-1" title="Gemini API Key Settings">
+                    <span>⚙️</span>
+                  </button>
+                  <button onclick="openClearGeminiModal()" class="px-2 py-1 rounded-xl bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-slate-400 hover:text-red-300 text-xs font-semibold transition-all active:scale-95" title="Clear Chat History">
+                    <span>🗑️</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Gemini Agent Messages Stream -->
+              <div id="gemini-agent-chat-stream" class="flex-1 overflow-y-auto p-4 flex flex-col gap-3.5 scroll-smooth text-sm">
+                <!-- Dynamically Rendered History and Active Turns -->
+              </div>
+
+              <!-- Quick Action Command Chips Carousel (Prefix Previews) -->
+              <div class="flex items-center gap-1.5 px-3 py-1.5 overflow-x-auto no-scrollbar border-t border-white/5 bg-black/20 shrink-0">
+                <button onclick="setAgentPromptPrefix('Add a task: ')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-purple-500/20 border border-white/10 hover:border-purple-500/30 text-slate-300 hover:text-purple-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
+                  <span>➕</span><span>Add Task</span>
+                </button>
+                <button onclick="setAgentPromptPrefix('Create a sticky note: ')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/30 text-slate-300 hover:text-amber-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
+                  <span>📌</span><span>Sticky Note</span>
+                </button>
+                <button onclick="setAgentPromptPrefix('Start a focus timer for: 25m')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/30 text-slate-300 hover:text-emerald-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
+                  <span>⏱</span><span>Focus Timer</span>
+                </button>
+                <button onclick="setAgentPromptPrefix('Play soundscape: Rain')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/30 text-slate-300 hover:text-cyan-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
+                  <span>🎧</span><span>Play Rain</span>
+                </button>
+                <button onclick="setAgentPromptPrefix('Change theme to: Obsidian')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-indigo-500/20 border border-white/10 hover:border-indigo-500/30 text-slate-300 hover:text-indigo-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
+                  <span>🎨</span><span>Obsidian Theme</span>
+                </button>
+                <button onclick="setAgentPromptPrefix('Explain all HDSFD features and how to use them')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-sky-500/20 border border-white/10 hover:border-sky-500/30 text-slate-300 hover:text-sky-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
+                  <span>❓</span><span>App Guide</span>
+                </button>
+              </div>
+
+              <!-- Input Area -->
+              <div class="p-3 bg-black/40 border-t border-white/10 shrink-0">
+                <div class="flex items-center gap-2 bg-[#1e1f20] border border-white/10 rounded-2xl px-3 py-1.5 focus-within:border-sky-400 focus-within:ring-1 focus-within:ring-sky-400/40 transition-all">
+                  <input 
+                    id="gemini-agent-input" 
+                    type="text" 
+                    placeholder="Ask Gemini or command: 'Add task...', 'Start timer...', 'Create note...' " 
+                    class="flex-1 bg-transparent border-0 outline-none text-white text-xs placeholder:text-slate-500 py-1.5"
+                    onkeydown="if(event.key === 'Enter') sendGeminiAgentMessage()"
+                  >
+                  <button 
+                    id="gemini-agent-send-btn"
+                    onclick="sendGeminiAgentMessage()" 
+                    class="w-8 h-8 rounded-xl bg-sky-500 hover:bg-sky-400 active:scale-95 text-slate-950 font-bold flex items-center justify-center transition-all shadow-md shadow-sky-500/20"
+                    title="Send to Gemini Agent"
+                  >
+                    ➔
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+        <!-- ================= TAB 4: MORE (SETTINGS, SHOP & VAULT) ================= -->
         <section id="tab-settings" class="tab-content w-full max-w-2xl mx-auto space-y-5 text-left">
           <div class="glass-card p-6 space-y-5">
-            <h2 class="text-base font-black text-white border-b border-white/10 pb-2">Settings & Shop</h2>
+            <h2 class="text-base font-black text-white border-b border-white/10 pb-2">More & Settings</h2>
 
+            <!-- User Display Name (Above Stats) -->
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-2">
               <label class="text-xs font-bold text-white/70 uppercase tracking-wider block">Your Display Name</label>
               <div class="flex gap-2">
-                <input id="settings-name-input" type="text" placeholder="Enter display name" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-purple-400">
-                <button onclick="saveNameFromSettings()" class="bg-white text-slate-900 font-bold px-4 py-2 rounded-xl text-xs hover:bg-white/90">Save</button>
+                <input id="settings-name-input" type="text" placeholder="Enter display name" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-purple-400" onkeydown="if(event.key==='Enter') saveNameFromSettings()">
+                <button id="settings-name-save-btn" onclick="saveNameFromSettings()" class="bg-white text-slate-900 font-bold px-4 py-2 rounded-xl text-xs hover:bg-white/90 transition-all active:scale-95">Save</button>
               </div>
             </div>
 
-            <!-- Seed Rewards & Power-Ups Shop -->
+            <!-- Stats Overview Card (With Digital Sanctuary Tree Level & Lifetime XP) -->
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
-              <h3 class="text-xs font-bold text-white/80 uppercase tracking-wider">Seed Rewards & Power-Ups Shop</h3>
-              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between">
-                  <div>
-                    <span class="text-xs font-bold text-cyan-300">🧊 Streak Freeze</span>
-                    <p class="text-[10px] text-white/50">Protect study streak</p>
-                  </div>
-                  <button onclick="buyStoreItem('freeze', 50)" class="mt-3 bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30">Buy (50 Seeds)</button>
+              <div class="flex justify-between items-center border-b border-white/10 pb-1.5">
+                <span class="text-xs font-bold text-white/80 uppercase tracking-wider">📊 Your Study & Growth Stats</span>
+                <span id="stat-tree-multiplier-badge" class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">1.0x Growth</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
+                  <span class="text-[9px] text-white/50 uppercase font-bold block">Focus Time</span>
+                  <span id="stat-focus-time" class="text-sm font-black text-purple-300">0 mins</span>
                 </div>
-
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between">
-                  <div>
-                    <span class="text-xs font-bold text-amber-300">⚡ Focus Multiplier</span>
-                    <p class="text-[10px] text-white/50">Earn 2x seeds for 1 hour</p>
-                  </div>
-                  <button onclick="buyStoreItem('boost', 100)" class="mt-3 bg-amber-500/20 text-amber-200 border border-amber-500/30 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-500/30">Buy (100 Seeds)</button>
+                <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
+                  <span class="text-[9px] text-white/50 uppercase font-bold block">Tasks Done</span>
+                  <span id="stat-tasks-done" class="text-sm font-black text-emerald-300">0 done</span>
                 </div>
+                <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
+                  <span class="text-[9px] text-white/50 uppercase font-bold block">Streak</span>
+                  <span id="stat-streak" class="text-sm font-black text-amber-300">1 Day</span>
+                </div>
+                <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
+                  <span class="text-[9px] text-white/50 uppercase font-bold block">Current Coins</span>
+                  <span id="stat-coins" class="text-sm font-black text-amber-400">🪙 0</span>
+                </div>
+              </div>
 
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between">
-                  <div>
-                    <span class="text-xs font-bold text-purple-300">🎨 Theme Key</span>
-                    <p class="text-[10px] text-white/50">Unlock custom themes</p>
+              <!-- Sanctuary Tree Growth Status Banner -->
+              <div class="bg-black/30 p-3 rounded-xl border border-white/10 space-y-2">
+                <div class="flex items-center justify-between text-xs">
+                  <div class="flex items-center gap-2">
+                    <span id="stat-tree-icon" class="text-lg">🌱</span>
+                    <div>
+                      <span id="stat-tree-stage" class="font-bold text-white block text-xs">Stage 0: Mystical Sprout</span>
+                      <span id="stat-tree-xp-label" class="text-[10px] text-white/50">0 / 50 Lifetime Coins XP</span>
+                    </div>
                   </div>
-                  <button onclick="buyStoreItem('theme', 150)" class="mt-3 bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-1.5 rounded-lg text-[10px] font-bold hover:bg-purple-500/30">Buy (150 Seeds)</button>
+                  <span id="stat-tree-pct" class="text-xs font-black text-emerald-400">0%</span>
+                </div>
+                <!-- Growth Progress Bar -->
+                <div class="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                  <div id="stat-tree-progress-bar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-400 rounded-full transition-all duration-500" style="width: 0%"></div>
                 </div>
               </div>
             </div>
 
-            <div class="glass p-4 rounded-2xl border border-white/10 flex items-center justify-between">
-              <div>
-                <h4 class="text-xs font-bold text-white">Low Power Mode</h4>
-                <p class="text-[10px] text-white/50">Disables particles, moving gradients & heavy filters for high performance.</p>
+            <!-- Coins Rewards & Growth Upgrades Shop (8 Items) -->
+            <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
+              <div class="flex justify-between items-center">
+                <h3 class="text-xs font-bold text-white/80 uppercase tracking-wider">🪙 Growth Upgrades & Tree Shop</h3>
+                <span class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">Earn coins from study & tasks</span>
               </div>
-              <button id="low-power-btn" onclick="toggleLowPowerMode()" class="bg-white/10 text-white border border-white/20 px-4 py-2 rounded-xl text-xs font-bold transition-all">Disabled</button>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-emerald-400/50 transition-all">
+                  <div>
+                    <span class="text-xs font-bold text-emerald-300">💧 Fertile Spring Dew</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">+50% Permanent growth multiplier</p>
+                  </div>
+                  <button onclick="buyStoreItem('growth_dew', 60)" class="mt-2.5 bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 active:scale-95 transition-all">Buy (60 🪙)</button>
+                </div>
+
+                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-amber-400/50 transition-all">
+                  <div>
+                    <span class="text-xs font-bold text-amber-300">⚡ Sunlight Essence</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">2x Coins on Pomodoro & Zen</p>
+                  </div>
+                  <button onclick="buyStoreItem('sunlight', 100)" class="mt-2.5 bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-500/30 active:scale-95 transition-all">Buy (100 🪙)</button>
+                </div>
+
+                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-teal-400/50 transition-all">
+                  <div>
+                    <span class="text-xs font-bold text-teal-300">🌿 Glowing Vines</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">Enchant tree with climbing vines</p>
+                  </div>
+                  <button onclick="buyStoreItem('vines', 80)" class="mt-2.5 bg-teal-500/20 text-teal-200 border border-teal-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-teal-500/30 active:scale-95 transition-all">Buy (80 🪙)</button>
+                </div>
+
+                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-rose-400/50 transition-all">
+                  <div>
+                    <span class="text-xs font-bold text-rose-300">🌸 Blossom Petals</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">Drifting ambient sakura petals</p>
+                  </div>
+                  <button onclick="buyStoreItem('petals', 120)" class="mt-2.5 bg-rose-500/20 text-rose-200 border border-rose-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-rose-500/30 active:scale-95 transition-all">Buy (120 🪙)</button>
+                </div>
+
+                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-yellow-300/50 transition-all">
+                  <div>
+                    <span class="text-xs font-bold text-yellow-300">🌟 Starlight Aura</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">Radiant cosmic golden tree halo</p>
+                  </div>
+                  <button onclick="buyStoreItem('starlight', 200)" class="mt-2.5 bg-yellow-400/20 text-yellow-100 border border-yellow-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-yellow-400/30 active:scale-95 transition-all">Buy (200 🪙)</button>
+                </div>
+
+                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-cyan-400/50 transition-all">
+                  <div>
+                    <span class="text-xs font-bold text-cyan-300">🧊 Streak Shield</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">Protects streak & tree vitality</p>
+                  </div>
+                  <button onclick="buyStoreItem('freeze', 50)" class="mt-2.5 bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30 active:scale-95 transition-all">Buy (50 🪙)</button>
+                </div>
+
+                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-purple-400/50 transition-all">
+                  <div>
+                    <span class="text-xs font-bold text-purple-300">🎨 Cosmic Theme Key</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">Unlock all premium fluid themes</p>
+                  </div>
+                  <button onclick="buyStoreItem('theme', 150)" class="mt-2.5 bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-purple-500/30 active:scale-95 transition-all">Buy (150 🪙)</button>
+                </div>
+
+                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-amber-300/50 transition-all">
+                  <div>
+                    <span class="text-xs font-bold text-amber-200">👑 Zen Master Crown</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">Royal gold crown badge on header</p>
+                  </div>
+                  <button onclick="buyStoreItem('crown', 300)" class="mt-2.5 bg-amber-400/20 text-amber-100 border border-amber-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-400/30 active:scale-95 transition-all">Buy (300 🪙)</button>
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label class="text-xs font-bold text-white/70 uppercase tracking-wider block mb-2">Moving Gradient Themes</label>
-              <div class="grid grid-cols-5 gap-2">
-                <button onclick="setTheme('midnight')" class="glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20">Midnight</button>
-                <button onclick="setTheme('ocean')" class="glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20">Ocean</button>
-                <button onclick="setTheme('forest')" class="glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20">Forest</button>
-                <button onclick="setTheme('sunset')" class="glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20">Sunset</button>
-                <button onclick="setTheme('cyberpunk')" class="glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20">Cyberpunk</button>
+            <!-- Fluid Gradient Themes -->
+            <div class="glass p-4 rounded-2xl border border-white/10 space-y-2.5">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-bold text-white/80 uppercase tracking-wider block">Fluid Gradient Themes</label>
+                <span id="current-theme-badge" class="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-bold">Midnight</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <button onclick="setTheme('midnight')" class="theme-select-btn glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center gap-1.5 active:scale-95" data-theme="midnight">
+                  <span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block shadow-sm"></span>
+                  <span>Midnight</span>
+                </button>
+                <button onclick="setTheme('obsidian')" class="theme-select-btn glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center gap-1.5 active:scale-95" data-theme="obsidian">
+                  <span class="w-2.5 h-2.5 rounded-full bg-slate-800 inline-block shadow-sm border border-white/30"></span>
+                  <span>Obsidian</span>
+                </button>
+                <button onclick="setTheme('cyber')" class="theme-select-btn glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center gap-1.5 active:scale-95" data-theme="cyber">
+                  <span class="w-2.5 h-2.5 rounded-full bg-fuchsia-500 inline-block shadow-sm"></span>
+                  <span>Cyber</span>
+                </button>
+                <button onclick="setTheme('ocean')" class="theme-select-btn glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center gap-1.5 active:scale-95" data-theme="ocean">
+                  <span class="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block shadow-sm"></span>
+                  <span>Ocean</span>
+                </button>
+                <button onclick="setTheme('sunset')" class="theme-select-btn glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center gap-1.5 active:scale-95" data-theme="sunset">
+                  <span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block shadow-sm"></span>
+                  <span>Sunset</span>
+                </button>
+                <button onclick="setTheme('forest')" class="theme-select-btn glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center gap-1.5 active:scale-95" data-theme="forest">
+                  <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block shadow-sm"></span>
+                  <span>Forest</span>
+                </button>
+                <button onclick="setTheme('aurora')" class="theme-select-btn glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center gap-1.5 active:scale-95" data-theme="aurora">
+                  <span class="w-2.5 h-2.5 rounded-full bg-teal-300 inline-block shadow-sm"></span>
+                  <span>Aurora</span>
+                </button>
+                <button onclick="setTheme('rose')" class="theme-select-btn glass p-2.5 rounded-xl text-center text-xs font-bold hover:bg-white/20 transition-all border border-white/10 flex items-center justify-center gap-1.5 active:scale-95" data-theme="rose">
+                  <span class="w-2.5 h-2.5 rounded-full bg-rose-400 inline-block shadow-sm"></span>
+                  <span>Rose</span>
+                </button>
               </div>
             </div>
 
+            <!-- Google Drive Backup Section -->
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
               <div class="flex items-center justify-between">
                 <div>
-                  <span class="text-xs font-bold text-white">Google Drive Backup Vault</span>
-                  <p class="text-[10px] text-white/50">📁 Isolated Folder: <b>HDSFD Sanctuary Backups</b></p>
+                  <span class="text-xs font-bold text-white">Google Drive Backup</span>
+                  <p class="text-[10px] text-white/50">📁 Target Folder: <b>HDSFD Backup</b></p>
                 </div>
                 <span id="settings-gdrive-badge" class="text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold">Guest Mode</span>
               </div>
 
               <div class="flex gap-2">
                 <button onclick="connectGoogleAccount()" class="bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-cyan-500/30">Pair Google Account</button>
-                <button onclick="syncNotesToDrive()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-purple-500/30">Sync Journal to Drive</button>
-                <button onclick="triggerGoogleBackup()" class="bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-emerald-500/30">Database Snapshot</button>
+                <button onclick="triggerGoogleBackup()" class="bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-emerald-500/30">Backup</button>
               </div>
 
-              <!-- Isolated Drive Backups List -->
+              <!-- Drive Backups File List -->
               <div class="bg-black/30 p-3 rounded-xl border border-white/10 space-y-1.5 text-left text-xs">
                 <div class="flex justify-between items-center text-[10px] text-white/50 font-bold uppercase border-b border-white/10 pb-1">
-                  <span>Isolated Drive Backup File</span>
+                  <span>Drive Backup File</span>
                   <span>Target Folder</span>
                 </div>
                 <div id="drive-files-list" class="space-y-1">
                   <div class="flex justify-between items-center text-[11px] text-purple-300">
-                    <span>📄 journal_notes_backup.json</span>
-                    <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Sanctuary Backups</span>
+                    <span>📄 Notes.json</span>
+                    <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Backup</span>
                   </div>
-                  <div class="flex justify-between items-center text-[11px] text-amber-300">
-                    <span>💾 hdsfd_database_backup.db</span>
-                    <span class="text-[9px] bg-amber-500/20 px-1.5 py-0.5 rounded border border-amber-500/30">HDSFD Sanctuary Backups</span>
+                  <div class="flex justify-between items-center text-[11px] text-purple-300">
+                    <span>🗄️ data.db</span>
+                    <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Backup</span>
                   </div>
                 </div>
               </div>
@@ -557,37 +1506,254 @@
 
       </main>
 
+      <!-- Bottom Floating Nav Bar (Home, Tasks, Notes, More) -->
       <nav class="fixed bottom-5 left-4 right-4 z-40 pointer-events-none">
-        <div class="glass rounded-full p-1.5 flex justify-between items-center max-w-[280px] mx-auto pointer-events-auto shadow-2xl">
-          <button onclick="switchTab('focus')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-purple-300 font-bold" data-tab="focus">
-            <i data-lucide="timer" class="w-4 h-4"></i>
-            <span class="text-[9px] uppercase tracking-wider mt-0.5">Focus Home</span>
+        <div class="glass rounded-full p-1.5 flex justify-between items-center max-w-sm mx-auto pointer-events-auto shadow-2xl border border-white/20">
+          <button onclick="switchTab('focus')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-purple-300 font-bold transition-all" data-tab="focus">
+            <i data-lucide="home" class="w-4 h-4"></i>
+            <span class="text-[9px] uppercase tracking-wider mt-0.5">Home</span>
           </button>
-          <button onclick="switchTab('tasks-notes')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white" data-tab="tasks-notes">
+          <button onclick="switchTab('tasks-notes')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white transition-all" data-tab="tasks-notes">
             <i data-lucide="check-square" class="w-4 h-4"></i>
-            <span class="text-[9px] uppercase tracking-wider mt-0.5">Tasks & Notes</span>
+            <span class="text-[9px] uppercase tracking-wider mt-0.5">Tasks</span>
           </button>
-          <button onclick="switchTab('settings')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white" data-tab="settings">
-            <i data-lucide="settings" class="w-4 h-4"></i>
-            <span class="text-[9px] uppercase tracking-wider mt-0.5">Settings</span>
+          <button onclick="switchTab('notes')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white transition-all" data-tab="notes">
+            <i data-lucide="file-text" class="w-4 h-4"></i>
+            <span class="text-[9px] uppercase tracking-wider mt-0.5">Notes</span>
+          </button>
+          <button onclick="switchTab('settings')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white transition-all" data-tab="settings">
+            <i data-lucide="more-horizontal" class="w-4 h-4"></i>
+            <span class="text-[9px] uppercase tracking-wider mt-0.5">More</span>
           </button>
         </div>
       </nav>
 
     </div>
 
-    <div id="zen-overlay" class="hidden fixed inset-0 bg-black z-50 flex flex-col items-center justify-center p-6 text-center">
+    <!-- Global Post-It Notes Pinned Overlay (Sits on top of all tabs & iframes) -->
+    <div id="global-postit-overlay" class="fixed inset-0 z-[99999] pointer-events-none overflow-hidden">
+      <!-- Pinned Notes Across Tabs Rendered Here -->
+    </div>
+
+    <!-- Zen Mode Overlay (With Snapping iOS Assistive Menu Icon, Fading Text & Permanent Bar) -->
+    <div id="zen-overlay" class="hidden fixed inset-0 bg-black z-50 flex flex-col items-center justify-center p-6 text-center select-none" onpointerdown="onZenScreenTouch(event)">
+      
+      <!-- Snapping iOS Assistive Touch Ball (Only in Zen Mode) -->
+      <div id="zen-assistive-ball" class="assistive-touch-btn" style="top: 24px; right: 24px;" onclick="toggleZenAssistiveMenu(event)">
+        <span class="text-lg">✨</span>
+      </div>
+
+      <!-- Quick Controls Popover (Positioned relative to Assistive Ball) -->
+      <div id="zen-assistive-popover" class="hidden fixed z-70 glass-modal p-4 w-72 text-left space-y-3 border border-purple-500/30 shadow-2xl animate-fade-in" onclick="event.stopPropagation()">
+        <div class="flex justify-between items-center border-b border-white/10 pb-1.5">
+          <span class="text-xs font-black text-purple-300 uppercase tracking-wider">Quick Controls</span>
+          <button onclick="toggleZenAssistiveMenu(event)" class="text-white/40 hover:text-white text-xs font-bold px-1">✕</button>
+        </div>
+
+        <!-- Quick Audio Volume Controls -->
+        <div class="space-y-2 text-[10px]">
+          <div>
+            <div class="flex justify-between font-bold mb-0.5">
+              <span class="text-cyan-300">🌧️ Rain</span>
+              <span id="zen-val-rain" class="text-white/60">30%</span>
+            </div>
+            <input type="range" min="0" max="1" step="0.05" value="0.3" oninput="document.getElementById('vol-rain').value = this.value; updateMixerVolume(); document.getElementById('zen-val-rain').textContent = Math.round(this.value*100)+'%';" class="w-full accent-cyan-400 cursor-pointer">
+          </div>
+          <div>
+            <div class="flex justify-between font-bold mb-0.5">
+              <span class="text-purple-300">📻 Brown Noise</span>
+              <span id="zen-val-noise" class="text-white/60">10%</span>
+            </div>
+            <input type="range" min="0" max="1" step="0.05" value="0.1" oninput="document.getElementById('vol-noise').value = this.value; updateMixerVolume(); document.getElementById('zen-val-noise').textContent = Math.round(this.value*100)+'%';" class="w-full accent-purple-400 cursor-pointer">
+          </div>
+        </div>
+
+        <!-- YouTube Quick Controls (ALL Side-by-Side: [-10s] [⏮] [⏯] [⏭] [+10s]) -->
+        <div class="pt-2 border-t border-white/10 space-y-1 text-center">
+          <span class="text-[9px] font-bold text-amber-300 uppercase tracking-wider block">🎵 YouTube Music</span>
+          <div class="flex justify-center items-center gap-1.5 pt-0.5">
+            <button onclick="seekRelative(-10)" class="text-[9px] bg-white/10 hover:bg-white/20 px-2 py-1.5 rounded-lg text-white/80 font-mono transition-all">-10s</button>
+            <button onclick="playPreviousTrack()" class="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-lg text-white text-xs flex items-center justify-center transition-all">⏮</button>
+            <button onclick="toggleYouTubePlayback()" class="w-8 h-8 bg-amber-400 text-slate-950 font-bold rounded-lg text-xs flex items-center justify-center shadow transition-all">⏯</button>
+            <button onclick="playNextTrack()" class="w-8 h-8 bg-white/10 hover:bg-white/20 text-white text-xs flex items-center justify-center transition-all">⏭</button>
+            <button onclick="seekRelative(10)" class="text-[9px] bg-white/10 hover:bg-white/20 px-2 py-1.5 rounded-lg text-white/80 font-mono transition-all">+10s</button>
+          </div>
+        </div>
+
+        <!-- Quick Starred Tasks View -->
+        <div class="pt-2 border-t border-white/10">
+          <span class="text-[10px] font-bold text-amber-300 uppercase tracking-wider block mb-1">⭐ Starred Tasks</span>
+          <div id="zen-quick-tasks-list" class="space-y-1 max-h-28 overflow-y-auto pr-1">
+            <span class="text-[10px] text-white/40 italic">Loading tasks...</span>
+          </div>
+        </div>
+
+        <!-- Exit Zen Mode Button -->
+        <div class="pt-2 border-t border-white/10">
+          <button onclick="exitZenMode()" class="w-full bg-white/10 hover:bg-red-500/20 text-white hover:text-red-200 border border-white/20 rounded-xl py-1.5 text-xs font-bold transition-all">
+            Exit Zen Mode
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Center Clock & Progress -->
       <div class="text-xs uppercase tracking-[0.3em] text-white/40 font-bold mb-4">ZEN FOCUS SANCTUARY</div>
-      <div id="zen-clock-seconds" class="text-7xl md:text-8xl font-black font-mono tracking-tighter text-white drop-shadow-2xl mb-4">00:00:00</div>
-      <div id="zen-pomo-display" class="text-4xl font-bold text-purple-400 my-4">25:00</div>
-      <p class="text-white/40 text-xs font-bold uppercase tracking-widest mt-6 mb-4">Hold 'Q' key for 3 seconds to exit</p>
-      <div class="w-48 h-2 bg-white/10 rounded-full overflow-hidden border border-white/20">
-        <div id="zen-fill" class="h-full bg-purple-400 transition-all" style="width: 0%"></div>
+      <div id="zen-clock-seconds" class="text-7xl md:text-8xl apple-clock-font tracking-tight text-white drop-shadow-2xl mb-3">00:00:00</div>
+      <div id="zen-pomo-display" class="text-4xl font-bold text-purple-400 my-3 apple-clock-font">25:00</div>
+      
+      <!-- Auto-Fading Hold Text (Reappears for 5s on touch/press) -->
+      <p id="zen-hold-msg" class="text-white/40 text-xs font-bold uppercase tracking-widest mt-6 mb-3 transition-opacity duration-700">
+        Hold Spacebar or Hold / Long-press on screen to exit
+      </p>
+
+      <!-- Permanent Progress Bar (Always Visible) -->
+      <div id="zen-bar-wrap" class="w-56 h-2.5 bg-white/10 rounded-full overflow-hidden border border-white/20 mx-auto">
+        <div id="zen-fill" class="h-full bg-purple-400 transition-all duration-75" style="width: 0%"></div>
+      </div>
+
+      <button onclick="exitZenMode()" class="mt-4 px-4 py-1.5 rounded-full bg-white/10 text-white/50 text-[10px] font-bold border border-white/10 hover:bg-white/20 transition-all">
+        Click to Exit
+      </button>
+    </div>
+
+    <!-- Custom Glassmorphic Sticky Note Delete Modal (Zero Native Browser Alerts) -->
+    <div id="custom-delete-note-modal" class="fixed inset-0 z-[9999999] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 hidden">
+      <div class="glass-card max-w-sm w-full p-6 text-center space-y-4 border border-white/20 shadow-2xl rounded-2xl animate-scale-in">
+        <div class="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner">🗑️</div>
+        <div>
+          <h3 class="text-base font-black text-white">Delete Sticky Note?</h3>
+          <p class="text-xs text-white/60 mt-1.5 leading-relaxed">This note will be permanently removed from your workspace and cloud backup.</p>
+        </div>
+        <div class="flex items-center justify-center gap-3 pt-2">
+          <button onclick="closeDeleteNoteModal()" class="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all active:scale-95">Cancel</button>
+          <button onclick="executeConfirmedDeleteNote()" class="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black shadow-lg shadow-red-600/30 transition-all active:scale-95">Delete</button>
+        </div>
       </div>
     </div>
 
-  </div>
+    <!-- Custom Clear All Sticky Notes Modal with 3-Second Live Countdown -->
+    <div id="clear-all-notes-modal" class="fixed inset-0 z-[9999999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
+      <div class="glass-card max-w-sm w-full p-6 text-center space-y-4 border border-red-500/30 shadow-2xl rounded-2xl animate-scale-in">
+        <div class="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner">⚠️</div>
+        <div>
+          <h3 class="text-base font-black text-white">Clear All Sticky Notes?</h3>
+          <p class="text-xs text-white/60 mt-1.5 leading-relaxed">This will permanently delete <b>all sticky notes</b> from all tabs and your Google Drive backup.</p>
+        </div>
+        <div class="flex items-center justify-center gap-3 pt-2">
+          <button onclick="closeClearAllNotesModal()" class="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all active:scale-95">Cancel</button>
+          <button id="confirm-clear-all-btn" onclick="executeConfirmedClearAllNotes()" disabled class="flex-1 py-2.5 rounded-xl bg-red-600/50 text-white/60 text-xs font-black transition-all cursor-not-allowed">
+            Delete All (3s)
+          </button>
+        </div>
+      </div>
+    </div>
 
-  <script src="app.js"></script>
- </body>
+    <!-- Custom Clear Gemini AI History Modal (Zero Native Browser Alerts) -->
+    <div id="clear-gemini-history-modal" class="fixed inset-0 z-[9999999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
+      <div class="glass-card max-w-sm w-full p-6 text-center space-y-4 border border-white/20 shadow-2xl rounded-2xl animate-scale-in">
+        <div class="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner">✦</div>
+        <div>
+          <h3 class="text-base font-black text-white">Clear Gemini AI History?</h3>
+          <p class="text-xs text-white/60 mt-1.5 leading-relaxed">This will permanently clear your conversation memory and action logs with Gemini.</p>
+        </div>
+        <div class="flex items-center justify-center gap-3 pt-2">
+          <button onclick="closeClearGeminiModal()" class="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all active:scale-95">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Gemini API Key Modal -->
+    <div id="gemini-api-key-modal" class="fixed inset-0 z-[9999999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
+      <div class="glass-card max-w-sm w-full p-6 text-center space-y-4 border border-white/20 shadow-2xl rounded-2xl animate-scale-in">
+        <div class="w-12 h-12 rounded-2xl bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner">⚙️</div>
+        <div>
+          <h3 class="text-base font-black text-white">Google Gemini API Key</h3>
+          <p class="text-xs text-white/60 mt-1.5 leading-relaxed">Enter your free Gemini API key from Google AI Studio (aistudio.google.com) for unlimited live 2.0 Flash generation.</p>
+        </div>
+        <div class="text-left space-y-1.5 pt-1">
+          <input id="gemini-api-key-input" type="password" placeholder="AIzaSy..." class="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 text-white text-xs placeholder:text-white/30 focus:outline-none focus:border-sky-500 font-mono">
+          <p class="text-[10px] text-white/40 italic">Key is stored locally in your browser session.</p>
+        </div>
+        <div class="flex items-center justify-center gap-3 pt-2">
+          <button onclick="closeGeminiApiKeyModal()" class="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all active:scale-95">Cancel</button>
+          <button onclick="saveGeminiApiKey()" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white text-xs font-black shadow-lg shadow-sky-600/30 transition-all active:scale-95">Save Key</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Custom Glassmorphic Add/Edit Class & Schedule Modal -->
+    <div id="add-schedule-modal" class="fixed inset-0 z-[9999999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
+      <div class="glass-card max-w-md w-full p-6 text-left space-y-4 border border-purple-500/30 shadow-2xl rounded-2xl animate-scale-in">
+        <div class="flex items-center justify-between border-b border-white/10 pb-2.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🕒</span>
+            <h3 id="schedule-modal-title" class="text-base font-black text-white">Add Class / Schedule Period</h3>
+          </div>
+          <button onclick="closeAddScheduleModal()" class="w-7 h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all">✕</button>
+        </div>
+
+        <input type="hidden" id="sched-edit-id" value="">
+
+        <!-- Title -->
+        <div class="space-y-1">
+          <label class="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Class / Subject Name</label>
+          <input id="sched-title-input" type="text" placeholder="e.g. AP Calculus BC, Chemistry, SAT Prep" class="w-full bg-white/10 border border-white/20 rounded-xl px-3.5 py-2 text-white text-xs font-semibold outline-none focus:border-purple-400 placeholder:text-white/30">
+        </div>
+
+        <!-- Days of Week Multi-Select -->
+        <div class="space-y-1.5">
+          <label class="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Days of Week</label>
+          <div id="sched-days-selector" class="flex flex-wrap gap-1.5">
+            <button type="button" onclick="toggleScheduleDaySelect(this, 'Mon')" class="sched-day-toggle px-2.5 py-1 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white/70 border border-white/10 transition-all" data-day="Mon">Mon</button>
+            <button type="button" onclick="toggleScheduleDaySelect(this, 'Tue')" class="sched-day-toggle px-2.5 py-1 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white/70 border border-white/10 transition-all" data-day="Tue">Tue</button>
+            <button type="button" onclick="toggleScheduleDaySelect(this, 'Wed')" class="sched-day-toggle px-2.5 py-1 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white/70 border border-white/10 transition-all" data-day="Wed">Wed</button>
+            <button type="button" onclick="toggleScheduleDaySelect(this, 'Thu')" class="sched-day-toggle px-2.5 py-1 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white/70 border border-white/10 transition-all" data-day="Thu">Thu</button>
+            <button type="button" onclick="toggleScheduleDaySelect(this, 'Fri')" class="sched-day-toggle px-2.5 py-1 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white/70 border border-white/10 transition-all" data-day="Fri">Fri</button>
+            <button type="button" onclick="toggleScheduleDaySelect(this, 'Sat')" class="sched-day-toggle px-2.5 py-1 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white/70 border border-white/10 transition-all" data-day="Sat">Sat</button>
+            <button type="button" onclick="toggleScheduleDaySelect(this, 'Sun')" class="sched-day-toggle px-2.5 py-1 rounded-lg text-xs font-bold bg-white/10 hover:bg-white/20 text-white/70 border border-white/10 transition-all" data-day="Sun">Sun</button>
+          </div>
+        </div>
+
+        <!-- Start & End Time -->
+        <div class="grid grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Start Time</label>
+            <input id="sched-start-time" type="time" value="09:00" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-white text-xs font-semibold outline-none focus:border-purple-400">
+          </div>
+          <div class="space-y-1">
+            <label class="text-[10px] font-bold text-purple-300 uppercase tracking-wider">End Time</label>
+            <input id="sched-end-time" type="time" value="10:15" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-1.5 text-white text-xs font-semibold outline-none focus:border-purple-400">
+          </div>
+        </div>
+
+        <!-- Room / Location / Instructor -->
+        <div class="space-y-1">
+          <label class="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Location / Room / Teacher (Optional)</label>
+          <input id="sched-loc-input" type="text" placeholder="e.g. Room 302 • Dr. Watson" class="w-full bg-white/10 border border-white/20 rounded-xl px-3.5 py-2 text-white text-xs outline-none focus:border-purple-400 placeholder:text-white/30">
+        </div>
+
+        <!-- Color Tag Selector -->
+        <div class="space-y-1.5">
+          <label class="text-[10px] font-bold text-purple-300 uppercase tracking-wider">Color Tag</label>
+          <div class="flex items-center gap-2.5">
+            <button type="button" onclick="selectScheduleColor('purple')" class="sched-color-btn w-6 h-6 rounded-full bg-purple-500 ring-2 ring-white border-2 border-slate-900 transition-all" data-color="purple"></button>
+            <button type="button" onclick="selectScheduleColor('blue')" class="sched-color-btn w-6 h-6 rounded-full bg-blue-500 hover:scale-110 transition-all" data-color="blue"></button>
+            <button type="button" onclick="selectScheduleColor('emerald')" class="sched-color-btn w-6 h-6 rounded-full bg-emerald-500 hover:scale-110 transition-all" data-color="emerald"></button>
+            <button type="button" onclick="selectScheduleColor('amber')" class="sched-color-btn w-6 h-6 rounded-full bg-amber-500 hover:scale-110 transition-all" data-color="amber"></button>
+            <button type="button" onclick="selectScheduleColor('rose')" class="sched-color-btn w-6 h-6 rounded-full bg-rose-500 hover:scale-110 transition-all" data-color="rose"></button>
+            <button type="button" onclick="selectScheduleColor('cyan')" class="sched-color-btn w-6 h-6 rounded-full bg-cyan-400 hover:scale-110 transition-all" data-color="cyan"></button>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center justify-end gap-2.5 pt-2">
+          <button type="button" onclick="closeAddScheduleModal()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all active:scale-95">Cancel</button>
+          <button type="button" onclick="saveScheduleEntry()" class="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black shadow-lg shadow-purple-600/30 transition-all active:scale-95">Save Schedule</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- App Logic Scripts (Cache-Busting Query) -->
+    <script src="app.js?v=3.0"></script>
+  </body>
 </html>
