@@ -1,0 +1,47 @@
+{
+  "name": "HDSFD - Student Focus Sanctuary & Workspace",
+  "short_name": "HDSFD",
+  "description": "High-performance student productivity workspace with Focus Sanctuary, Pomodoro, interactive Tasks calendar, 3D Sticky Notes, and Google Gemini.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c0a1d",
+  "theme_color": "#7c3aed",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Focus Sanctuary",
+      "short_name": "Focus",
+      "description": "Open Focus Sanctuary and Pomodoro timer",
+      "url": "/#focus",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Tasks & Calendar",
+      "short_name": "Tasks",
+      "description": "View calendar and manage tasks",
+      "url": "/#tasks",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Sticky Notes",
+      "short_name": "Notes",
+      "description": "Open interactive 3D sticky notes board",
+      "url": "/#notes",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
