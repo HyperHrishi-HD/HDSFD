@@ -1011,6 +1011,40 @@ def gemini_generate():
                     f"```json\n{action_json}\n```"
                 )
 
+        # Intent: Play YouTube Song / Playlist
+        elif any(w in lower for w in ['play song', 'play track', 'play youtube', 'play music', 'play lofi', 'play mozart', 'play piano', 'play jazz', 'play rain music']) or (lower.startswith('play ') and not 'game' in lower and not 'soundscape' in lower):
+            song_query = prompt
+            for strip_prefix in ['play song:', 'play song', 'play music:', 'play music', 'play youtube:', 'play youtube', 'play track:', 'play track', 'play:', 'play', 'listen to']:
+                if song_query.lower().startswith(strip_prefix):
+                    song_query = song_query[len(strip_prefix):].strip()
+                    break
+            actions.append({
+                "type": "play_youtube",
+                "song": song_query or "lofi study beats",
+                "query": song_query or "lofi"
+            })
+            action_json = json.dumps({"actions": [actions[0]]})
+            generated_text = f"🎵 **Playing Track:** Now streaming **\"{song_query or 'Lofi Study Beats'}\"** via the YouTube player in Tab 1!\n\n```json\n{action_json}\n```"
+
+        # Intent: Create/Schedule Exam
+        elif any(w in lower for w in ['exam', 'midterm', 'final', 'quiz', 'test', 'assessment']) and any(w in lower for w in ['add', 'create', 'schedule', 'set']):
+            exam_title = prompt
+            for strip_prefix in ['add exam:', 'add exam', 'schedule exam:', 'schedule exam', 'create exam:', 'create exam', 'add midterm:', 'schedule midterm:']:
+                if exam_title.lower().startswith(strip_prefix):
+                    exam_title = exam_title[len(strip_prefix):].strip()
+                    break
+            import datetime
+            exam_date = (datetime.date.today() + datetime.timedelta(days=7)).strftime('%Y-%m-%d')
+            actions.append({
+                "type": "create_exam",
+                "title": exam_title or "Exam",
+                "date": exam_date,
+                "time": "09:00",
+                "reward": 250
+            })
+            action_json = json.dumps({"actions": [actions[0]]})
+            generated_text = f"🎯 **Exam Scheduled:** Added **\"{exam_title or 'Exam'}\"** on **{exam_date}** with a **+250 🪙** completion reward! Matching study folder created.\n\n```json\n{action_json}\n```"
+
         # Intent: Soundscape Audio
         elif any(w in lower for w in ['rain', 'sound', 'audio', 'soundscape', 'noise', 'brown noise']):
             actions.append({

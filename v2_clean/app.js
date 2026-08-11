@@ -1317,6 +1317,8 @@ function renderDarkCalendarGrid() {
 
   const events = window.googleCalendarEvents || [];
   const tasks = allData.filter(d => d.type === 'task');
+  const exams = allData.filter(d => d.type === 'exam_entry');
+  const schedules = allData.filter(d => d.type === 'schedule_entry');
 
   let cellsHtml = '';
 
@@ -1344,6 +1346,14 @@ function renderDarkCalendarGrid() {
 
     const isToday = isCurrentMonth && cellDateStr === todayStr;
 
+    // Day of week (Sun, Mon, Tue, Wed, Thu, Fri, Sat)
+    const dayDateObj = new Date(cellDateStr + 'T12:00:00');
+    const dayOfWeekShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayDateObj.getDay()];
+
+    const dayExams = exams.filter(ex => ex.date && ex.date === cellDateStr);
+
+    const daySchedules = schedules.filter(s => Array.isArray(s.days) && s.days.includes(dayOfWeekShort));
+
     const dayEvents = events.filter(e => {
       const eStart = (e.start && (e.start.dateTime || e.start.date)) || '';
       return eStart.startsWith(cellDateStr);
@@ -1357,7 +1367,7 @@ function renderDarkCalendarGrid() {
       return t.deadline && t.deadline.startsWith(cellDateStr);
     });
 
-    const totalCount = dayEvents.length + dayTasks.length + dayDeadlines.length;
+    const totalCount = dayExams.length + daySchedules.length + dayEvents.length + dayTasks.length + dayDeadlines.length;
 
     cellsHtml += `
       <div onclick="openCalendarDayModal('${cellDateStr}')" class="calendar-day-cell glass border border-white/10 rounded-2xl p-2 flex flex-col justify-between cursor-pointer ${isCurrentMonth ? 'text-white' : 'text-white/20'} ${isToday ? 'ring-2 ring-purple-400 bg-purple-500/20' : ''}">
@@ -1367,21 +1377,33 @@ function renderDarkCalendarGrid() {
         </div>
 
         <div class="space-y-0.5 overflow-hidden flex-1">
+          ${dayExams.map(ex => `
+            <div class="cal-event-chip bg-rose-500/40 text-rose-100 border border-rose-400/50 font-bold" title="🎯 Exam: ${escapeHtml(ex.title)}">
+              🎯 ${escapeHtml(ex.title)}
+            </div>
+          `).join('')}
+
+          ${daySchedules.map(s => `
+            <div class="cal-event-chip bg-purple-600/30 text-purple-200 border border-purple-500/40 font-semibold" title="🕒 Class: ${escapeHtml(s.title)} (${s.start_time || ''})">
+              🕒 ${escapeHtml(s.title)}
+            </div>
+          `).join('')}
+
           ${dayEvents.map(e => `
-            <div class="cal-event-chip bg-sky-500/30 text-sky-200 border border-sky-500/40" title="Event: ${e.summary || 'Event'}">
-              🔵 ${e.summary || 'Event'}
+            <div class="cal-event-chip bg-sky-500/30 text-sky-200 border border-sky-500/40" title="Event: ${escapeHtml(e.summary || 'Event')}">
+              🔵 ${escapeHtml(e.summary || 'Event')}
             </div>
           `).join('')}
 
           ${dayTasks.map(t => `
-            <div class="cal-event-chip bg-purple-500/30 text-purple-200 border border-purple-500/40 ${t.completed ? 'line-through opacity-40' : ''}" title="Task: ${t.title}">
-              📋 ${t.title}
+            <div class="cal-event-chip bg-purple-500/30 text-purple-200 border border-purple-500/40 ${t.completed ? 'line-through opacity-40' : ''}" title="Task: ${escapeHtml(t.title)}">
+              📋 ${escapeHtml(t.title)}
             </div>
           `).join('')}
 
           ${dayDeadlines.map(t => `
-            <div class="cal-event-chip bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold" title="Deadline: ${t.title}">
-              🎯 ${t.title}
+            <div class="cal-event-chip bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold" title="Deadline: ${escapeHtml(t.title)}">
+              🎯 ${escapeHtml(t.title)}
             </div>
           `).join('')}
         </div>
@@ -1407,6 +1429,12 @@ function openCalendarDayModal(dateStr) {
   }
 
   if (list) {
+    const dayDateObj = new Date(dateStr + 'T12:00:00');
+    const dayOfWeekShort = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][dayDateObj.getDay()];
+
+    const dayExams = allData.filter(d => d.type === 'exam_entry' && d.date === dateStr);
+    const daySchedules = allData.filter(d => d.type === 'schedule_entry' && Array.isArray(d.days) && d.days.includes(dayOfWeekShort));
+
     const events = (window.googleCalendarEvents || []).filter(e => {
       const eStart = (e.start && (e.start.dateTime || e.start.date)) || '';
       return eStart.startsWith(dateStr);
@@ -1415,43 +1443,75 @@ function openCalendarDayModal(dateStr) {
     const tasks = allData.filter(d => d.type === 'task' && d.due && d.due.startsWith(dateStr));
     const deadlines = allData.filter(d => d.type === 'task' && d.deadline && d.deadline.startsWith(dateStr));
 
-    if (events.length === 0 && tasks.length === 0 && deadlines.length === 0) {
-      list.innerHTML = '<p class="text-white/40 text-xs italic text-center py-6">No events or tasks scheduled for this day.</p>';
+    if (dayExams.length === 0 && daySchedules.length === 0 && events.length === 0 && tasks.length === 0 && deadlines.length === 0) {
+      list.innerHTML = '<p class="text-white/40 text-xs italic text-center py-6">No exams, classes, events or tasks scheduled for this day.</p>';
     } else {
       let html = '';
+
+      // 1. Exams
+      dayExams.forEach(ex => {
+        html += `
+          <div class="glass p-2.5 rounded-xl border border-rose-500/40 bg-rose-500/10 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-rose-400 font-black">🎯 Exam:</span>
+              <span class="text-white font-bold">${escapeHtml(ex.title)}</span>
+              <span class="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">+${ex.reward || 250} 🪙</span>
+            </div>
+            <span class="text-[10px] text-rose-200/80 font-mono">${formatTime12h(ex.time || '09:00')}</span>
+          </div>
+        `;
+      });
+
+      // 2. Class Schedules
+      daySchedules.forEach(s => {
+        html += `
+          <div class="glass p-2.5 rounded-xl border border-purple-500/30 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="text-purple-300 font-bold">🕒 Class:</span>
+              <span class="text-white font-medium">${escapeHtml(s.title)}</span>
+              ${s.location ? `<span class="text-[10px] text-white/40">(${escapeHtml(s.location)})</span>` : ''}
+            </div>
+            <span class="text-[10px] text-purple-200/70 font-mono">${formatTime12h(s.start_time || '09:00')} - ${formatTime12h(s.end_time || '10:15')}</span>
+          </div>
+        `;
+      });
+
+      // 3. Google Events
       events.forEach(e => {
         html += `
           <div class="glass p-2.5 rounded-xl border border-sky-500/30 flex items-center justify-between text-xs">
             <div class="flex items-center gap-2">
               <span class="text-sky-300 font-bold">🔵 Event</span>
-              <span class="text-white font-medium">${e.summary || 'Google Calendar Event'}</span>
+              <span class="text-white font-medium">${escapeHtml(e.summary || 'Google Calendar Event')}</span>
             </div>
             <span class="text-[10px] text-sky-200/60">${e.start && e.start.dateTime ? new Date(e.start.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'All Day'}</span>
           </div>
         `;
       });
 
+      // 4. Tasks
       tasks.forEach(t => {
         html += `
           <div class="glass p-2.5 rounded-xl border border-purple-500/30 flex items-center justify-between text-xs ${t.completed ? 'opacity-40' : ''}">
             <label class="flex items-center gap-2 cursor-pointer overflow-hidden flex-1">
               <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTaskState('${t.id}'); openCalendarDayModal('${dateStr}');" class="w-3.5 h-3.5 accent-purple-400 cursor-pointer flex-shrink-0">
               <span class="text-purple-300 font-bold">📋 Task:</span>
-              <span class="${t.completed ? 'line-through text-white/40' : 'text-white'} truncate">${t.title}</span>
+              <span class="${t.completed ? 'line-through text-white/40' : 'text-white'} truncate">${escapeHtml(t.title)}</span>
             </label>
-            <span class="text-[9px] bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded font-bold">${t.folder || 'My Tasks'}</span>
+            <span class="text-[9px] bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded font-bold">${escapeHtml(t.folder || 'My Tasks')}</span>
           </div>
         `;
       });
 
+      // 5. Deadlines
       deadlines.forEach(t => {
         html += `
           <div class="glass p-2.5 rounded-xl border border-amber-500/30 flex items-center justify-between text-xs">
             <div class="flex items-center gap-2">
               <span class="text-amber-300 font-bold">🎯 Deadline:</span>
-              <span class="text-white">${t.title}</span>
+              <span class="text-white">${escapeHtml(t.title)}</span>
             </div>
-            <span class="text-[9px] bg-amber-500/20 text-amber-200 px-1.5 py-0.5 rounded font-bold">${t.folder || 'My Tasks'}</span>
+            <span class="text-[9px] bg-amber-500/20 text-amber-200 px-1.5 py-0.5 rounded font-bold">${escapeHtml(t.folder || 'My Tasks')}</span>
           </div>
         `;
       });
@@ -3087,7 +3147,7 @@ async function sendGeminiAgentMessage(optPrompt) {
     content: text,
     created_at: new Date().toISOString()
   });
-  awardActivityCoins(3, 'Gemini Study Question');
+  awardActivityCoins(3, null);
   renderGeminiChatMessages();
 
   // Show Thinking bubble
@@ -3216,6 +3276,32 @@ function executeAgentAction(action) {
     renderPhysicsPostIts();
     triggerGoogleBackup();
   }
+  else if (action.type === 'play_youtube' || action.type === 'play_song') {
+    const songUrl = action.url || '';
+    const query = action.query || action.song || action.title || '';
+    playCuratedOrSearchedYouTube(songUrl || query);
+  }
+  else if (action.type === 'create_exam') {
+    const examDate = action.date || new Date().toISOString().split('T')[0];
+    const newExam = {
+      id: `exam_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+      type: 'exam_entry',
+      title: action.title || 'Exam',
+      date: examDate,
+      time: action.time || '09:00',
+      location: action.location || '',
+      reward: parseInt(action.reward || '250', 10),
+      completed: false,
+      created_at: new Date().toISOString(),
+      username: currentOwner
+    };
+    allData.push(newExam);
+    localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
+    createData(newExam);
+    renderExamCardsList();
+    renderDarkCalendarGrid();
+    triggerGoogleBackup();
+  }
   else if (action.type === 'start_timer') {
     const mins = parseInt(action.minutes, 10) || 25;
     setPomoPreset(mins);
@@ -3263,6 +3349,50 @@ function executeAgentAction(action) {
     renderScheduleGrid();
     triggerGoogleBackup();
   }
+}
+
+// ===== CURATED & DYNAMIC YOUTUBE MUSIC SEARCH PLAYER =====
+function playCuratedOrSearchedYouTube(queryOrUrl) {
+  if (!queryOrUrl) return;
+  let url = queryOrUrl.trim();
+
+  const lower = url.toLowerCase();
+  const curatedStreams = {
+    'lofi': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    'rain': 'https://www.youtube.com/watch?v=mPZkdNFkNps',
+    'piano': 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
+    'mozart': 'https://www.youtube.com/watch?v=Rb0UmrCXxVA',
+    'classical': 'https://www.youtube.com/watch?v=jgpJVI3tDbY',
+    'synthwave': 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
+    'chill': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    'jazz': 'https://www.youtube.com/watch?v=Dx5qFachd3A',
+    'nature': 'https://www.youtube.com/watch?v=eKFTSSKCzWA'
+  };
+
+  for (const [key, streamUrl] of Object.entries(curatedStreams)) {
+    if (lower.includes(key)) {
+      url = streamUrl;
+      break;
+    }
+  }
+
+  if (!url.startsWith('http') && !url.includes('youtu')) {
+    url = `https://www.youtube.com/watch?v=jfKfPfyJRdk`;
+  }
+
+  const ytInput = document.getElementById('yt-song-input');
+  if (ytInput) ytInput.value = url;
+
+  // Open YouTube player drawer in Home tab so it is immediately visible
+  const drawer = document.getElementById('yt-drawer-content');
+  const icon = document.getElementById('yt-drawer-icon');
+  if (drawer && drawer.classList.contains('hidden')) {
+    drawer.classList.remove('hidden');
+    if (icon) icon.textContent = '▲';
+  }
+
+  isYTPlaying = false;
+  toggleYouTubePlayback();
 }
 
 // ===== CUSTOM IN-APP MODAL FOR CLEARING GEMINI HISTORY =====
@@ -4142,7 +4272,26 @@ window.addEventListener('message', (event) => {
   if (event.data && (event.data.type === 'gdrive_linked' || event.data.username)) {
     googleAccount = event.data.username || 'GoogleUser';
     localStorage.setItem('hdsfd_google_account', googleAccount);
+
+    // Auto-extract and set clean Display Name from Google Account
+    if (googleAccount.includes('@')) {
+      const emailPrefix = googleAccount.split('@')[0];
+      const formattedName = emailPrefix.replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      userName = formattedName;
+      localStorage.setItem('hdsfd_display_name', formattedName);
+      const nameInput = document.getElementById('settings-name-input');
+      if (nameInput) nameInput.value = formattedName;
+    }
+
+    // Award +200 Free Coins for Cosmic Key on first Google Sign-In!
+    if (localStorage.getItem('hdsfd_cosmic_key_claimed') !== 'true') {
+      localStorage.setItem('hdsfd_cosmic_key_claimed', 'true');
+      awardActivityCoins(200, '🌟 Cosmic Theme Key & Google Link Bonus');
+    }
+
     initializeUserSession();
+    updateStatsOverview();
+    updateShopCardsUI();
   }
 });
 
@@ -4404,10 +4553,16 @@ function checkTreeDecayLoop() {
   const lastActive = parseInt(localStorage.getItem('hdsfd_last_active_ts') || String(Date.now()), 10);
   const diffHours = (Date.now() - lastActive) / (1000 * 60 * 60);
 
-  if (diffHours >= 24) {
-    const daysMissed = Math.floor(diffHours / 24);
+  // Grace period scales with tree growth: higher stage trees are deeply rooted and resist decay for 48h to 72h
+  const lifetimeXP = getLifetimeCoins();
+  const stage = (getTreeStageInfo(lifetimeXP) && getTreeStageInfo(lifetimeXP).stageNumber) || 0;
+  const decayGraceHours = stage >= 10 ? 72 : (stage >= 3 ? 48 : 24);
+
+  if (diffHours >= decayGraceHours) {
+    const intervalsMissed = Math.floor((diffHours - decayGraceHours) / 24) + 1;
     let vitality = parseInt(localStorage.getItem('hdsfd_tree_vitality') || '100', 10);
-    vitality = Math.max(20, vitality - (daysMissed * 10));
+    const decayRate = stage >= 10 ? 4 : (stage >= 3 ? 6 : 10);
+    vitality = Math.max(30, vitality - (intervalsMissed * decayRate));
     localStorage.setItem('hdsfd_tree_vitality', String(vitality));
   }
 }
