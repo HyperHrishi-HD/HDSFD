@@ -117,9 +117,14 @@ def init_db():
         CREATE TABLE IF NOT EXISTS user_tokens (
             username TEXT PRIMARY KEY,
             token_json TEXT NOT NULL,
+            display_name TEXT,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    try:
+        cursor.execute('ALTER TABLE user_tokens ADD COLUMN display_name TEXT')
+    except Exception:
+        pass
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS gemini_chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -133,17 +138,31 @@ def init_db():
     conn.commit()
     conn.close()
 
-def save_user_tokens(username, creds):
+def save_user_tokens(username, creds, display_name=None):
     if not username or not creds:
         return
     conn = get_db()
-    conn.execute('''
-        INSERT INTO user_tokens (username, token_json)
-        VALUES (?, ?)
-        ON CONFLICT(username) DO UPDATE SET
-            token_json = excluded.token_json,
-            updated_at = CURRENT_TIMESTAMP
-    ''', (username, creds.to_json()))
+    try:
+        conn.execute('ALTER TABLE user_tokens ADD COLUMN display_name TEXT')
+    except Exception:
+        pass
+    if display_name:
+        conn.execute('''
+            INSERT INTO user_tokens (username, token_json, display_name)
+            VALUES (?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET
+                token_json = excluded.token_json,
+                display_name = excluded.display_name,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (username, creds.to_json(), display_name))
+    else:
+        conn.execute('''
+            INSERT INTO user_tokens (username, token_json)
+            VALUES (?, ?)
+            ON CONFLICT(username) DO UPDATE SET
+                token_json = excluded.token_json,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (username, creds.to_json()))
     conn.commit()
     conn.close()
 
@@ -172,14 +191,29 @@ def get_google_credentials(username=None):
 
 @app.route('/api/google/status', methods=['GET'])
 def get_google_status():
+    requested_username = request.args.get('username') or request.args.get('email')
+    if not requested_username or requested_username.lower() in ['guest', 'user', 'null', 'undefined', '']:
+        return jsonify({
+            "connected": False,
+            "email": None,
+            "name": None
+        })
+    
     conn = get_db()
-    row = conn.execute("SELECT username, updated_at FROM user_tokens ORDER BY updated_at DESC LIMIT 1").fetchone()
+    try:
+        row = conn.execute("SELECT username, display_name, updated_at FROM user_tokens WHERE username = ?", (requested_username,)).fetchone()
+    except Exception:
+        row = conn.execute("SELECT username, updated_at FROM user_tokens WHERE username = ?", (requested_username,)).fetchone()
     conn.close()
     if row:
         creds = get_google_credentials(row['username'])
         if creds and creds.valid:
             email = row['username']
-            name_part = email.split('@')[0].replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
+            name_part = None
+            if 'display_name' in row.keys() and row['display_name']:
+                name_part = row['display_name']
+            if not name_part:
+                name_part = email.split('@')[0].replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
             return jsonify({
                 "connected": True,
                 "email": email,
@@ -192,12 +226,28 @@ def get_google_status():
         "name": None
     })
 
+@app.route('/google<code_id>.html')
+def google_verification_page(code_id):
+    filename = f"google{code_id}.html"
+    file_path = os.path.join(os.path.dirname(__file__), filename)
+    if os.path.exists(file_path):
+        return send_from_directory('.', filename)
+    return f"google-site-verification: google{code_id}.html", 200, {'Content-Type': 'text/html; charset=utf-8'}
+
 @app.route('/')
 def index():
     resp = send_from_directory('.', 'index.html')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
     resp.headers['Expires'] = '0'
+    return resp
+
+@app.route('/privacy')
+@app.route('/terms')
+@app.route('/legal')
+def privacy_terms_page():
+    resp = send_from_directory('.', 'privacy.html')
+    resp.headers['Cache-Control'] = 'public, max-age=3600'
     return resp
 
 @app.route('/app.js')
@@ -234,10 +284,8 @@ def google_signin_redirect():
 
 @app.route('/gemini-portal')
 def gemini_portal():
-    conn = get_db()
-    row = conn.execute("SELECT username FROM user_tokens ORDER BY updated_at DESC LIMIT 1").fetchone()
-    conn.close()
-    connected_email = row['username'] if row else 'hdsystem.ahd@gmail.com'
+    requested_username = request.args.get('username')
+    connected_email = requested_username if requested_username and requested_username != 'Guest' else 'Guest'
 
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -621,7 +669,7 @@ def gemini_api_key_handler():
     if request.method == 'POST':
         data = request.json or {}
         key = data.get('api_key', '').strip()
-        username = data.get('username') or 'hdsystem.ahd@gmail.com'
+        username = data.get('username') or 'Guest'
         conn.execute('''
             CREATE TABLE IF NOT EXISTS gemini_keys (
                 username TEXT PRIMARY KEY,
@@ -638,7 +686,7 @@ def gemini_api_key_handler():
         conn.close()
         return jsonify({"status": "success", "message": "Gemini API key saved"})
     else:
-        username = request.args.get('username') or 'hdsystem.ahd@gmail.com'
+        username = request.args.get('username') or 'Guest'
         try:
             row = conn.execute("SELECT api_key FROM gemini_keys WHERE username = ?", (username,)).fetchone()
             conn.close()
@@ -652,13 +700,13 @@ def gemini_api_key_handler():
 def gemini_history_handler():
     conn = get_db()
     if request.method == 'DELETE':
-        username = request.args.get('username') or 'hdsystem.ahd@gmail.com'
+        username = request.args.get('username') or 'Guest'
         conn.execute("DELETE FROM gemini_chat_history WHERE username = ?", (username,))
         conn.commit()
         conn.close()
         return jsonify({"status": "success", "message": "History cleared"})
     else:
-        username = request.args.get('username') or 'hdsystem.ahd@gmail.com'
+        username = request.args.get('username') or 'Guest'
         rows = conn.execute(
             "SELECT id, role, content, action_data, created_at FROM gemini_chat_history WHERE username = ? ORDER BY id ASC LIMIT 100",
             (username,)
@@ -685,18 +733,21 @@ def gemini_history_handler():
 def gemini_generate():
     data = request.json or {}
     prompt = data.get('prompt', '').strip()
-    username = data.get('username') or 'hdsystem.ahd@gmail.com'
+    username = data.get('username') or 'Guest'
     api_key = data.get('api_key') or os.environ.get('GEMINI_API_KEY')
     
     if not prompt:
         return jsonify({"status": "error", "message": "Prompt is required"}), 400
 
+    is_guest = (not username) or (username.lower() in ['guest', 'user', 'null', 'undefined', ''])
+    
     conn = get_db()
     access_token = None
     try:
-        creds = get_google_credentials(username)
-        if creds and creds.valid:
-            access_token = creds.token
+        if not is_guest:
+            creds = get_google_credentials(username)
+            if creds and creds.valid:
+                access_token = creds.token
 
         if not api_key:
             row = conn.execute("SELECT api_key FROM gemini_keys ORDER BY updated_at DESC LIMIT 1").fetchone()
@@ -793,7 +844,7 @@ def gemini_generate():
     source = "built_in"
 
     # 1. Call via Google OAuth Access Token (Gemini 2.0 Flash / 1.5 Flash)
-    if access_token:
+    if not is_guest and access_token:
         try:
             import requests
             headers = {
@@ -820,7 +871,7 @@ def gemini_generate():
             logger.warning(f"OAuth Generative AI call error: {e}")
 
     # 2. Call via Load-Balanced Gemini API Key Pool (Round-Robin & Automatic Quota Failover)
-    if not generated_text:
+    if not is_guest and not generated_text:
         key_candidates = get_ordered_key_candidates(api_key)
         import requests
         payload = {
@@ -1351,12 +1402,12 @@ def gdrive_auth():
 def gdrive_callback():
     code = request.args.get('code')
     raw_state = request.args.get('state') or ''
-    state_username = 'hdsystem.ahd@gmail.com'
+    state_username = 'User'
     if '_' in raw_state:
         try:
             state_username = urllib.parse.unquote(raw_state.split('_', 1)[1])
         except Exception:
-            state_username = 'hdsystem.ahd@gmail.com'
+            state_username = 'User'
     elif request.args.get('username'):
         state_username = request.args.get('username')
         
@@ -1373,7 +1424,8 @@ def gdrive_callback():
         except Exception:
             pass
 
-    user_email = state_username if state_username and state_username != 'User' else 'hdsystem.ahd@gmail.com'
+    user_email = state_username if state_username and state_username != 'User' else ''
+    user_name = ''
 
     if code and client_id and client_secret:
         try:
@@ -1403,27 +1455,30 @@ def gdrive_callback():
             user_info_service = build('oauth2', 'v2', credentials=creds)
             user_info = user_info_service.userinfo().get().execute()
             user_email = user_info.get('email', user_email)
+            user_name = user_info.get('name', '') or user_info.get('given_name', '')
             
-            save_user_tokens(user_email, creds)
-            save_user_tokens(state_username, creds)
+            if user_email:
+                save_user_tokens(user_email, creds, user_name)
         except Exception as e:
             logger.warning(f"Failed to fetch user email in callback: {e}")
+
+    display_label = user_name or user_email or "Google User"
 
     html = f"""
     <html>
       <body style="background: #0f172a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin:0;">
-        <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 30px; border-radius: 20px; text-align: center; max-w: 360px;">
+        <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 30px; border-radius: 20px; text-align: center; max-width: 380px;">
           <div style="font-size: 40px; margin-bottom: 10px;">✨</div>
           <h2 style="color: #c084fc; margin: 0 0 10px 0;">Google Account Connected!</h2>
-          <p style="color: #cbd5e1; font-size: 14px; margin: 0 0 15px 0;">Logged in as <b>{user_email}</b></p>
+          <p style="color: #cbd5e1; font-size: 14px; margin: 0 0 15px 0;">Logged in as <b>{display_label}</b> ({user_email})</p>
           <p style="color: #94a3b8; font-size: 11px;">Closing window and returning to Sanctuary...</p>
         </div>
         <script>
           if (window.opener) {{
-            window.opener.postMessage({{ type: 'gdrive_linked', username: {json.dumps(user_email)} }}, '*');
+            window.opener.postMessage({{ type: 'gdrive_linked', username: {json.dumps(user_email)}, name: {json.dumps(user_name)} }}, '*');
             setTimeout(function() {{ window.close(); }}, 1200);
           }} else {{
-            window.location.href = '/?google_account=' + encodeURIComponent({json.dumps(user_email)});
+            window.location.href = '/?google_account=' + encodeURIComponent({json.dumps(user_email)}) + '&name=' + encodeURIComponent({json.dumps(user_name)});
           }}
         </script>
       </body>
@@ -1443,7 +1498,7 @@ def gdrive_backup():
     with open(notes_backup_file, 'w') as f:
         json.dump(notes, f, indent=2)
         
-    creds = get_google_credentials(username) or get_google_credentials('hdsystem.ahd@gmail.com')
+    creds = get_google_credentials(username)
     drive_synced = False
     
     if creds:
@@ -1522,7 +1577,7 @@ def get_or_create_tasklist(service, folder_name):
 def google_tasks_api():
     data = request.json or {} if request.method == 'POST' else {}
     username = request.args.get('username') or data.get('username') or 'Guest'
-    creds = get_google_credentials(username) or get_google_credentials('hdsystem.ahd@gmail.com')
+    creds = get_google_credentials(username)
     
     if request.method == 'POST':
         title = data.get('title', 'New Task')
@@ -1590,7 +1645,7 @@ def update_google_task(task_id):
     data = request.json or {} if request.method in ['PUT', 'PATCH'] else {}
     username = request.args.get('username') or data.get('username') or 'Guest'
     tasklist_id = request.args.get('tasklist_id') or data.get('tasklist_id')
-    creds = get_google_credentials(username) or get_google_credentials('hdsystem.ahd@gmail.com')
+    creds = get_google_credentials(username)
     
     if creds:
         try:
@@ -1635,7 +1690,7 @@ def update_google_task(task_id):
 @app.route('/api/google/tasklists', methods=['GET'])
 def get_google_tasklists():
     username = request.args.get('username') or 'Guest'
-    creds = get_google_credentials(username) or get_google_credentials('hdsystem.ahd@gmail.com')
+    creds = get_google_credentials(username)
     if creds:
         try:
             from googleapiclient.discovery import build
@@ -1650,7 +1705,7 @@ def get_google_tasklists():
 def google_calendar_api():
     data = request.json or {} if request.method == 'POST' else {}
     username = request.args.get('username') or data.get('username') or 'Guest'
-    creds = get_google_credentials(username) or get_google_credentials('hdsystem.ahd@gmail.com')
+    creds = get_google_credentials(username)
     
     if request.method == 'POST':
         summary = data.get('summary') or data.get('title') or 'Class / Study Session'

@@ -258,8 +258,14 @@ function triggerGoogleBackup() {
 
 // ===== FIRST TIME USER & LIVE GOOGLE AUTH DETECTION =====
 async function checkGoogleStatus() {
+  const savedAccount = localStorage.getItem('hdsfd_google_account');
+  if (!savedAccount) {
+    googleAccount = null;
+    googleAccountName = null;
+    return;
+  }
   try {
-    const res = await fetch(`${API_BASE}/google/status`);
+    const res = await fetch(`${API_BASE}/google/status?username=${encodeURIComponent(savedAccount)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.connected && data.email) {
@@ -269,6 +275,10 @@ async function checkGoogleStatus() {
           googleAccountName = data.name;
           localStorage.setItem('hdsfd_google_name', data.name);
         }
+      } else {
+        googleAccount = null;
+        googleAccountName = null;
+        localStorage.removeItem('hdsfd_google_account');
       }
     }
   } catch (e) {
@@ -279,16 +289,21 @@ async function checkGoogleStatus() {
 async function checkFirstTimeUser() {
   const urlParams = new URLSearchParams(window.location.search);
   const gAccount = urlParams.get('google_account');
+  const gName = urlParams.get('name');
   if (gAccount) {
     googleAccount = gAccount;
     localStorage.setItem('hdsfd_google_account', gAccount);
+    if (gName) {
+      googleAccountName = gName;
+      localStorage.setItem('hdsfd_google_name', gName);
+    }
     window.history.replaceState({}, document.title, window.location.pathname);
   }
 
   // Always initialize session immediately so UI, clock, and local data are active with zero blocking
   initializeUserSession();
 
-  // Then check live Google OAuth status in background
+  // Then check live Google OAuth status in background if account is saved
   await checkGoogleStatus();
   initializeUserSession();
 }
@@ -332,17 +347,30 @@ function initializeUserSession() {
   const badgeText = document.getElementById('google-badge-text');
   const badge = document.getElementById('google-status-badge');
   const gdriveSettingsBadge = document.getElementById('settings-gdrive-badge');
+  const geminiUserBadge = document.getElementById('gemini-user-email-text');
 
   if (googleAccount) {
-    if (badgeText) badgeText.innerHTML = `<span class="hidden sm:inline">Google: ${escapeHtml(googleAccount)}</span><span class="sm:hidden">Connected</span>`;
+    const userLabel = googleAccountName || displayName || googleAccount;
+    if (badgeText) {
+      badgeText.innerHTML = `<span class="hidden sm:inline">Google: ${escapeHtml(userLabel)}</span><span class="sm:hidden">Connected</span>`;
+    }
     if (badge) {
       badge.className = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold transition-all shadow-sm';
-      badge.title = `Google Connected: ${googleAccount}`;
+      badge.title = `Google Connected: ${googleAccount} (${userLabel})`;
     }
     if (gdriveSettingsBadge) {
-      gdriveSettingsBadge.textContent = `Connected (${googleAccount})`;
+      gdriveSettingsBadge.textContent = `Connected (${userLabel})`;
+      gdriveSettingsBadge.title = googleAccount;
       gdriveSettingsBadge.className = 'text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold';
     }
+    if (geminiUserBadge) {
+      geminiUserBadge.textContent = userLabel;
+      geminiUserBadge.title = `Connected: ${googleAccount}`;
+    }
+    const pairBtn = document.getElementById('btn-pair-gdrive');
+    const disconnectBtn = document.getElementById('btn-disconnect-gdrive');
+    if (pairBtn) pairBtn.classList.add('hidden');
+    if (disconnectBtn) disconnectBtn.classList.remove('hidden');
   } else {
     if (badgeText) badgeText.innerHTML = '<span class="hidden sm:inline">Guest Mode (Pair Google)</span><span class="sm:hidden">Pair</span>';
     if (badge) {
@@ -350,9 +378,17 @@ function initializeUserSession() {
       badge.title = 'Guest Mode: Click to connect Google account';
     }
     if (gdriveSettingsBadge) {
-      gdriveSettingsBadge.textContent = 'Guest Mode';
+      gdriveSettingsBadge.textContent = 'Guest Mode (Not Linked)';
       gdriveSettingsBadge.className = 'text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold';
     }
+    if (geminiUserBadge) {
+      geminiUserBadge.textContent = 'Guest (Offline)';
+      geminiUserBadge.title = 'Guest Mode';
+    }
+    const pairBtn = document.getElementById('btn-pair-gdrive');
+    const disconnectBtn = document.getElementById('btn-disconnect-gdrive');
+    if (pairBtn) pairBtn.classList.remove('hidden');
+    if (disconnectBtn) disconnectBtn.classList.add('hidden');
   }
 
   // Synchronous zero-latency render from localStorage first
@@ -3002,8 +3038,12 @@ function escapeHtml(str) {
 async function loadGeminiChatHistory() {
   const stream = document.getElementById('gemini-agent-chat-stream');
   const userBadge = document.getElementById('gemini-user-email-text');
-  const currentOwner = googleAccount || 'hdsystem.ahd@gmail.com';
-  if (userBadge) userBadge.textContent = currentOwner;
+  const currentOwner = googleAccount || userName || 'Guest';
+  if (userBadge) {
+    const userLabel = googleAccountName || userName || 'Guest (Offline)';
+    userBadge.textContent = googleAccount ? userLabel : 'Guest (Offline)';
+    userBadge.title = googleAccount ? `Connected: ${googleAccount}` : 'Guest Mode';
+  }
 
   try {
     const res = await fetch(`/api/gemini/history?username=${encodeURIComponent(currentOwner)}`);
@@ -3139,7 +3179,7 @@ async function sendGeminiAgentMessage(optPrompt) {
   if (!text) return;
 
   if (input) input.value = '';
-  const currentOwner = googleAccount || 'hdsystem.ahd@gmail.com';
+  const currentOwner = googleAccount || userName || 'Guest';
 
   // Add User turn to local state
   geminiChatHistory.push({
@@ -3225,7 +3265,7 @@ async function sendGeminiAgentMessage(optPrompt) {
 // ===== REAL-TIME AGENT ACTION EXECUTOR =====
 function executeAgentAction(action) {
   if (!action || !action.type) return;
-  const currentOwner = googleAccount || 'hdsystem.ahd@gmail.com';
+  const currentOwner = googleAccount || userName || 'Guest';
 
   console.log('⚡ Gemini Agent Executing Action:', action);
 
@@ -3407,7 +3447,7 @@ function closeClearGeminiModal() {
 }
 
 async function executeConfirmedClearGeminiHistory() {
-  const currentOwner = googleAccount || 'hdsystem.ahd@gmail.com';
+  const currentOwner = googleAccount || userName || 'Guest';
   closeClearGeminiModal();
   try {
     await fetch(`/api/gemini/history?username=${encodeURIComponent(currentOwner)}`, { method: 'DELETE' });
@@ -4273,12 +4313,18 @@ window.addEventListener('message', (event) => {
     googleAccount = event.data.username || 'GoogleUser';
     localStorage.setItem('hdsfd_google_account', googleAccount);
 
-    // Auto-extract and set clean Display Name from Google Account
-    if (googleAccount.includes('@')) {
+    if (event.data.name) {
+      googleAccountName = event.data.name;
+      localStorage.setItem('hdsfd_google_name', googleAccountName);
+      userName = googleAccountName;
+      localStorage.setItem('hdsfd_user_name', googleAccountName);
+      const nameInput = document.getElementById('settings-name-input');
+      if (nameInput) nameInput.value = googleAccountName;
+    } else if (googleAccount.includes('@')) {
       const emailPrefix = googleAccount.split('@')[0];
       const formattedName = emailPrefix.replace(/[._-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
       userName = formattedName;
-      localStorage.setItem('hdsfd_display_name', formattedName);
+      localStorage.setItem('hdsfd_user_name', formattedName);
       const nameInput = document.getElementById('settings-name-input');
       if (nameInput) nameInput.value = formattedName;
     }
@@ -4294,6 +4340,17 @@ window.addEventListener('message', (event) => {
     updateShopCardsUI();
   }
 });
+
+function disconnectGoogleAccount() {
+  googleAccount = null;
+  googleAccountName = null;
+  localStorage.removeItem('hdsfd_google_account');
+  localStorage.removeItem('hdsfd_google_name');
+  initializeUserSession();
+  updateStatsOverview();
+  updateShopCardsUI();
+  showInAppNotification('👋 Disconnected Google Account. Returned to Guest Mode.');
+}
 
 function setTheme(theme) {
   if (!theme) return;
@@ -4756,36 +4813,49 @@ function closeYouTubeSubModal() {
   }
 }
 
+let ytChannelLinkClicked = false;
+let ytSubCountdownInterval = null;
+
 function onYouTubeSubChannelClicked() {
+  ytChannelLinkClicked = true;
   const verifyBtn = document.getElementById('yt-verify-btn');
   if (!verifyBtn) return;
 
-  verifyBtn.textContent = 'Verifying Subscription (5s)...';
-  let countdown = 5;
+  if (ytSubCountdownInterval) clearInterval(ytSubCountdownInterval);
 
-  const intId = setInterval(() => {
+  verifyBtn.textContent = 'Verifying Subscription (5s)...';
+  verifyBtn.disabled = true;
+  verifyBtn.className = 'w-full bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold py-2 px-4 rounded-xl text-xs transition-all animate-pulse';
+
+  let countdown = 5;
+  ytSubCountdownInterval = setInterval(() => {
     countdown--;
     if (countdown > 0) {
       verifyBtn.textContent = `Verifying Subscription (${countdown}s)...`;
     } else {
-      clearInterval(intId);
+      clearInterval(ytSubCountdownInterval);
+      ytSubCountdownInterval = null;
       verifyBtn.disabled = false;
-      verifyBtn.className = 'w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2 px-4 rounded-xl text-xs transition-all active:scale-95 shadow-lg shadow-emerald-500/30';
-      verifyBtn.textContent = 'Claim Reward (+1000 🪙 & Crown) ✓';
+      verifyBtn.className = 'w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs transition-all active:scale-95 shadow-lg shadow-emerald-500/30 animate-bounce';
+      verifyBtn.textContent = 'Claim Reward (+1,000 🪙 & Crown) ✓';
     }
   }, 1000);
 }
 
 function verifyYouTubeSubscription() {
+  if (!ytChannelLinkClicked && localStorage.getItem('hdsfd_has_crown') !== 'true') {
+    showInAppNotification('⚠️ Please click "Subscribe on YouTube" to open @HyperHrishiHD channel first!');
+    return;
+  }
+
   localStorage.setItem('hdsfd_has_crown', 'true');
-  const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
-  localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + 1000));
+  awardActivityCoins(1000, '👑 Zen Master YouTube Crown');
 
   closeYouTubeSubModal();
   initializeUserSession();
   updateStatsOverview();
   updateShopCardsUI();
-  showInAppNotification('👑 Zen Master Crown unlocked! +1,000 Coins added to your sanctuary.');
+  showInAppNotification('👑 Zen Master Crown unlocked! +1,000 Coins added to your sanctuary balance.');
 }
 
 // Update Dynamic Shop Cards Labels & Buttons
