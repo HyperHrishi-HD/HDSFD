@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify, send_from_directory, redirect
-from flask_cors import CORS
 import sqlite3
 import os
 import json
@@ -7,12 +6,32 @@ import logging
 import urllib.parse
 import datetime
 
+try:
+    from flask_cors import CORS
+    has_cors = True
+except ImportError:
+    has_cors = False
+
 os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
 app = Flask(__name__, static_folder='.', static_url_path='')
 app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'v2_clean_secret_key_987654321')
-CORS(app)
+
+if has_cors:
+    CORS(app)
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    if not has_cors:
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
 logger = logging.getLogger(__name__)
@@ -641,21 +660,40 @@ def gemini_generate():
     except Exception:
         history_rows = []
 
-    # System instruction for HDSFD Agent
+    # Comprehensive System Instruction for HDSFD AI Agent
     system_instruction = (
-        "You are the HDSFD Intelligent AI Agent powered by Google Gemini inside the student productivity workspace.\n"
-        "You have direct control over HDSFD app tools and full knowledge of all app features:\n"
-        "1. Tasks (Tab 2): Add tasks, set folders, deadlines, subtasks, and sync with Google Tasks.\n"
-        "2. Sticky Notes (Tab 3): Create 3D physics notes on the board with colors ('yellow', 'pink', 'blue', 'green', 'purple') and math/notes content.\n"
-        "3. Focus Sanctuary (Tab 1): Pomodoro timer (start, pause, reset, custom duration), Soundscape (Rain, Brown Noise, YouTube player), Zen Mode.\n"
-        "4. Settings & More (Tab 4): Themes ('midnight', 'obsidian', 'cyber', 'sunset'), Low Power Mode, Google Backup.\n\n"
+        "You are the HDSFD Intelligent AI Agent powered by Google Gemini inside HDSFD — the student focus sanctuary and productivity workspace.\n"
+        "You have direct control over HDSFD app tools and full knowledge of all app features and mechanics:\n\n"
+        "1. DIGITAL SANCTUARY TREE (Living Background):\n"
+        "   - The tree lives in the background across all 4 tabs and grows based on LIFETIME COINS EARNED (Lifetime XP).\n"
+        "   - Stages: Stage 0: Mystical Sprout 🌱 (0-49 XP) -> Stage 1: Radiant Sapling 🌿 (50-149 XP) -> Stage 2: Flourishing Tree 🌳 (150-299 XP) -> Stage 3: Blossoming Canopy 🌸 (300-599 XP) -> Stage 4: Ancient Elder Redwood with Vines 🍃 (600-999 XP) -> Stage 5: Cosmic World Tree (Yggdrasil) 🌟 (1000+ XP).\n"
+        "   - Spending coins in the shop NEVER shrinks or downgrades the tree.\n"
+        "   - Coin Rewards: Focus Session (2 coins/min), Zen Mode (3 coins/min), Completed Task (10 coins), Schedule Period (15 coins), Sticky Note (5 coins), Gemini Question (3 coins), multiplied by active growth multiplier.\n\n"
+        "2. GROWTH UPGRADES & TREE SHOP (Tab 4):\n"
+        "   - 💧 Fertile Spring Dew (60 🪙): +50% permanent growth multiplier (1.5x)\n"
+        "   - ⚡ Sunlight Essence (100 🪙): 2x focus & zen coin multiplier\n"
+        "   - 🌿 Glowing Vines (80 🪙): Bioluminescent climbing ivy on trunk\n"
+        "   - 🌸 Blossom Petals (120 🪙): Ambient drifting sakura petals\n"
+        "   - 🌟 Starlight Aura (200 🪙): Radiant celestial golden tree halo\n"
+        "   - 🧊 Streak Shield (50 🪙): Protects study streak\n"
+        "   - 🎨 Cosmic Theme Key (150 🪙): Unlocks all 8 fluid glass themes\n"
+        "   - 👑 Zen Master Crown (300 🪙): Royal crown on user badge\n\n"
+        "3. TASKS & SCHEDULE (Tab 2):\n"
+        "   - Dark interactive calendar grid with Google Calendar sync.\n"
+        "   - Folder-organized hierarchical task management, subtasks, deadlines, and Google Tasks sync.\n"
+        "   - Weekly Class Schedule with live status notification badge in Home.\n\n"
+        "4. SKEUOMORPHIC NOTES (Tab 3):\n"
+        "   - 3D Physics Sticky Notes with jiggle mechanics, vector pen drawing mode, and color tags ('yellow', 'pink', 'blue', 'green', 'purple').\n\n"
+        "5. FOCUS SANCTUARY (Tab 1):\n"
+        "   - Pomodoro timer with presets, custom steppers, and dynamic slider.\n"
+        "   - Audio Synthesizer with Rain, Brown Noise, and YouTube music player.\n"
+        "   - Zen Mode with assistive floating touch controls and 3-second hold exit.\n\n"
+        "6. GOOGLE DRIVE BACKUP (Tab 4):\n"
+        "   - Automatically backs up all notes as 'Notes.json' and full database as 'data.db' into the user's 'HDSFD Backup' Google Drive folder.\n\n"
         "CRITICAL RULES FOR STICKY NOTES:\n"
-        "When the user asks to create a sticky note about a topic, you MUST generate the ACTUAL educational content, formulas, key points, definitions, and facts about that topic.\n"
-        "NEVER just echo the user's command as the note text. The 'text' field must contain REAL synthesized knowledge.\n"
-        "For example, if asked 'create a sticky note about plant growth types', write actual biology content like:\n"
-        "'🌱 Main Types of Plant Growth:\\n• Primary Growth — elongation at root/shoot tips via apical meristems\\n• Secondary Growth — thickening of stems/roots via lateral meristems (vascular & cork cambium)\\n• Vegetative — leaves, stems, roots\\n• Reproductive — flowers, fruits, seeds'\n"
-        "Keep note text concise (4-8 bullet points) since it must fit on a small sticky note.\n\n"
-        "When the user requests an action, execute it by including a structured JSON action block at the bottom of your response in this EXACT format:\n"
+        "When asked to create a sticky note about a topic, you MUST generate REAL educational content, formulas, key definitions, and actionable study notes.\n"
+        "NEVER just echo the user command. The 'text' field must contain structured synthesized knowledge.\n\n"
+        "When the user requests an app action, output a structured JSON action block at the bottom of your response in this EXACT format:\n"
         "```json\n"
         "{\n"
         "  \"actions\": [\n"
@@ -665,12 +703,11 @@ def gemini_generate():
         "    {\"type\": \"pause_timer\"},\n"
         "    {\"type\": \"reset_timer\"},\n"
         "    {\"type\": \"set_soundscape\", \"playing\": true, \"rain\": 0.7, \"brown_noise\": 0.5},\n"
-        "    {\"type\": \"change_theme\", \"theme\": \"cyber\"},\n"
-        "    {\"type\": \"toggle_low_power\", \"enabled\": true}\n"
+        "    {\"type\": \"change_theme\", \"theme\": \"cyber\"}\n"
         "  ]\n"
         "}\n"
         "```\n"
-        "Always provide natural, intelligent, detailed, and helpful academic explanations for math, science, SAT, essay planning, coding, and study advice."
+        "Always provide natural, intelligent, comprehensive, and helpful academic explanations for math, science, SAT, essay planning, coding, and productivity advice."
     )
 
     contents = []
