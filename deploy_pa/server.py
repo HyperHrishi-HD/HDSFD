@@ -167,12 +167,10 @@ def save_user_tokens(username, creds, display_name=None):
     conn.close()
 
 def get_google_credentials(username=None):
+    if not username or username.lower() in ['guest', 'user', 'null', 'undefined', '']:
+        return None
     conn = get_db()
-    row = None
-    if username:
-        row = conn.execute("SELECT username, token_json FROM user_tokens WHERE username = ?", (username,)).fetchone()
-    if not row:
-        row = conn.execute("SELECT username, token_json FROM user_tokens ORDER BY updated_at DESC LIMIT 1").fetchone()
+    row = conn.execute("SELECT username, token_json FROM user_tokens WHERE username = ?", (username,)).fetchone()
     conn.close()
     if not row:
         return None
@@ -1375,8 +1373,8 @@ def gdrive_auth():
 
     redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
     scopes = [
-        'email',
-        'profile',
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/drive.file',
         'https://www.googleapis.com/auth/calendar',
         'https://www.googleapis.com/auth/tasks'
