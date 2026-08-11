@@ -1371,6 +1371,12 @@ def save_gdrive_credentials():
         json.dump({"client_id": client_id, "client_secret": client_secret}, f)
     return jsonify({"status": "success", "message": "Google Client Credentials saved successfully!"})
 
+def get_oauth_redirect_uri():
+    redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
+    if 'pythonanywhere.com' in redirect_uri and redirect_uri.startswith('http://'):
+        redirect_uri = 'https://' + redirect_uri[7:]
+    return redirect_uri
+
 @app.route('/api/gdrive/auth', methods=['GET'])
 def gdrive_auth():
     username = request.args.get('username', 'User')
@@ -1384,7 +1390,7 @@ def gdrive_auth():
         except Exception:
             pass
 
-    redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
+    redirect_uri = get_oauth_redirect_uri()
     scopes = [
         'https://www.googleapis.com/auth/userinfo.profile',
         'https://www.googleapis.com/auth/userinfo.email',
@@ -1435,9 +1441,7 @@ def gdrive_callback():
         except Exception:
             pass
 
-    redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
-    if 'pythonanywhere.com' in redirect_uri and redirect_uri.startswith('http://'):
-        redirect_uri = 'https://' + redirect_uri[7:]
+    redirect_uri = get_oauth_redirect_uri()
 
     user_email = ''
     user_name = ''
