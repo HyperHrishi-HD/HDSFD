@@ -729,8 +729,8 @@
     <!-- Dashboard App Shell -->
     <div id="dashboard" class="h-full w-full flex flex-col relative z-10">
       
-      <!-- Top Navigation & Status Header -->
-      <header class="glass mx-2 sm:mx-4 mt-2 sm:mt-3 px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl flex items-center justify-between z-30 shadow-lg gap-1.5 sm:gap-2">
+      <!-- Top Navigation & Status Header (Always Above Canvas / Overlay) -->
+      <header class="glass mx-2 sm:mx-4 mt-2 sm:mt-3 px-3 sm:px-5 py-2 sm:py-2.5 rounded-2xl flex items-center justify-between z-[60] relative shadow-lg gap-1.5 sm:gap-2">
         <div class="flex items-center gap-2 sm:gap-3 shrink-0">
           <span class="text-xs font-black tracking-wider text-purple-300">HDSFD</span>
           <span id="header-user-name" class="text-[10px] sm:text-xs text-white/80 font-bold bg-white/10 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full border border-white/10 max-w-[75px] sm:max-w-[140px] truncate">User</span>
@@ -1047,10 +1047,12 @@
                   </div>
 
                   <!-- Legend Badges -->
-                  <div class="flex items-center gap-2 text-[8px] sm:text-[9px] font-bold">
+                  <div class="flex items-center gap-2 text-[8px] sm:text-[9px] font-bold flex-wrap">
                     <span class="flex items-center gap-0.5 text-sky-300"><span class="w-1.5 h-1.5 rounded-full bg-sky-400 inline-block shadow-sm"></span> Events</span>
                     <span class="flex items-center gap-0.5 text-purple-300"><span class="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block shadow-sm"></span> Tasks</span>
                     <span class="flex items-center gap-0.5 text-amber-300"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block shadow-sm"></span> Deadlines</span>
+                    <span class="flex items-center gap-0.5 text-emerald-300"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block shadow-sm"></span> Classes</span>
+                    <span class="flex items-center gap-0.5 text-rose-300"><span class="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block shadow-sm"></span> Exams</span>
                   </div>
                 </div>
 
@@ -1117,7 +1119,7 @@
             </div>
 
             <!-- Right: Tasks Menu (Ultra-Glassmorphic Suite, Repeat Modal, Custom Date/Time, Drive Attachments, Subtasks) -->
-            <div id="tasks-panel" class="w-full lg:w-[44%] h-full glass-panel flex flex-col p-4 space-y-3 transition-all overflow-hidden">
+            <div id="tasks-panel" class="w-full lg:w-[44%] h-full glass-panel flex flex-col p-4 space-y-3 transition-all overflow-hidden relative">
               
               <!-- Header -->
               <div class="flex justify-between items-center border-b border-white/10 pb-2">
@@ -1136,8 +1138,8 @@
                 <button onclick="filterGTasksByList('all')" class="gtask-tab-btn active bg-purple-500/30 text-purple-200 border border-purple-500/40 px-2.5 py-0.5 rounded-lg text-[10px] font-bold whitespace-nowrap">All Tasks</button>
               </div>
 
-              <!-- Comprehensive Task Creator Card -->
-              <div class="glass p-3 rounded-2xl border border-purple-500/30 space-y-2.5 text-left">
+              <!-- Comprehensive Task Creator Card (High Stacking Context for Dropdown) -->
+              <div class="glass p-3 rounded-2xl border border-purple-500/30 space-y-2.5 text-left relative z-50">
                 <!-- Title -->
                 <div class="flex items-center gap-2">
                   <span class="w-4 h-4 rounded-full border-2 border-purple-400/60 inline-block"></span>
@@ -1170,14 +1172,14 @@
                     <span id="gtask-repeat-btn-label">Repeat: None</span>
                   </button>
 
-                  <!-- Custom Glassmorphic Folder Dropdown -->
-                  <div class="relative z-30">
+                  <!-- Custom Glassmorphic Folder Dropdown with High Z-Index -->
+                  <div class="relative z-[100]">
                     <button type="button" id="gtask-folder-btn" onclick="toggleTaskFolderDropdown(event)" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white font-bold transition-all">
                       <span class="text-purple-300">📁</span>
                       <span id="gtask-folder-btn-label">My Tasks</span>
                       <span class="text-white/40 text-[8px]">▾</span>
                     </button>
-                    <div id="gtask-folder-dropdown-menu" class="hidden absolute left-0 mt-1 z-[999999] glass-card p-1.5 w-40 space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95 max-h-48 overflow-y-auto animate-fade-in" onclick="event.stopPropagation()">
+                    <div id="gtask-folder-dropdown-menu" class="hidden absolute left-0 mt-1 z-[999999] glass-card p-1.5 w-44 space-y-1 shadow-2xl border border-purple-500/50 bg-slate-950/98 max-h-56 overflow-y-auto animate-fade-in" onclick="event.stopPropagation()">
                       <!-- Injected dynamically -->
                     </div>
                   </div>
@@ -1211,7 +1213,7 @@
               </div>
 
               <!-- Live Tasks List Items (Scrollable, Subtask Expand/Collapse, Reorder Up/Down, 3-Dots, Completed at Bottom) -->
-              <div id="gtasks-live-list" class="flex-1 overflow-y-auto space-y-2 pr-1 text-left">
+              <div id="gtasks-live-list" class="flex-1 overflow-y-auto space-y-2 pr-1 text-left relative z-10">
                 <p class="text-white/40 text-xs italic text-center py-10">Loading Tasks...</p>
               </div>
 
@@ -1571,6 +1573,10 @@
                     <span>🗄️ data.db</span>
                     <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Backup</span>
                   </div>
+                  <div class="flex justify-between items-center text-[11px] text-purple-300">
+                    <span>🤖 ai.json</span>
+                    <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Backup</span>
+                  </div>
                 </div>
               </div>
               <p id="backup-msg" class="hidden text-xs text-emerald-400 font-bold"></p>
@@ -1600,7 +1606,7 @@
       </main>
 
       <!-- Bottom Floating Nav Bar (Home, Tasks, Notes, More) -->
-      <nav class="fixed bottom-5 left-4 right-4 z-40 pointer-events-none">
+      <nav class="fixed bottom-5 left-4 right-4 z-[60] pointer-events-none">
         <div class="glass rounded-full p-1.5 flex justify-between items-center max-w-sm mx-auto pointer-events-auto shadow-2xl border border-white/20">
           <button onclick="switchTab('focus')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-purple-300 font-bold transition-all" data-tab="focus">
             <i data-lucide="home" class="w-4 h-4"></i>
@@ -1623,8 +1629,8 @@
 
     </div>
 
-    <!-- Global Post-It Notes Pinned Overlay (Sits on top of all tabs & iframes) -->
-    <div id="global-postit-overlay" class="fixed inset-0 z-[99999] pointer-events-none overflow-hidden">
+    <!-- Global Post-It Notes Pinned Overlay (Sits behind header & bottom dock) -->
+    <div id="global-postit-overlay" class="fixed inset-0 z-30 pointer-events-none overflow-hidden">
       <!-- Pinned Notes Across Tabs Rendered Here -->
     </div>
 

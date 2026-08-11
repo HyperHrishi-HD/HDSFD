@@ -136,6 +136,18 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_stats (
+            username TEXT PRIMARY KEY,
+            coins INTEGER DEFAULT 0,
+            lifetime_xp INTEGER DEFAULT 0,
+            focus_mins INTEGER DEFAULT 0,
+            tasks_done INTEGER DEFAULT 0,
+            streak INTEGER DEFAULT 1,
+            upgrades_json TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -238,6 +250,62 @@ def get_google_status():
         "email": None,
         "name": None
     })
+
+@app.route('/api/user/stats', methods=['GET', 'POST'])
+def handle_user_stats():
+    conn = get_db()
+    if request.method == 'GET':
+        username = request.args.get('username', 'Guest')
+        row = conn.execute("SELECT * FROM user_stats WHERE username = ?", (username,)).fetchone()
+        if row:
+            upgrades = []
+            try:
+                if row['upgrades_json']:
+                    upgrades = json.loads(row['upgrades_json'])
+            except Exception:
+                upgrades = []
+            return jsonify({
+                "status": "success",
+                "coins": row['coins'],
+                "lifetime_xp": row['lifetime_xp'],
+                "focus_mins": row['focus_mins'],
+                "tasks_done": row['tasks_done'],
+                "streak": row['streak'],
+                "upgrades": upgrades
+            })
+        return jsonify({
+            "status": "success",
+            "coins": 0,
+            "lifetime_xp": 0,
+            "focus_mins": 0,
+            "tasks_done": 0,
+            "streak": 1,
+            "upgrades": []
+        })
+    else:
+        data = request.json or {}
+        username = data.get('username', 'Guest')
+        coins = int(data.get('coins', 0))
+        lifetime_xp = int(data.get('lifetime_xp', 0))
+        focus_mins = int(data.get('focus_mins', 0))
+        tasks_done = int(data.get('tasks_done', 0))
+        streak = int(data.get('streak', 1))
+        upgrades_json = json.dumps(data.get('upgrades', []))
+        
+        conn.execute('''
+            INSERT INTO user_stats (username, coins, lifetime_xp, focus_mins, tasks_done, streak, upgrades_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(username) DO UPDATE SET
+                coins = excluded.coins,
+                lifetime_xp = excluded.lifetime_xp,
+                focus_mins = excluded.focus_mins,
+                tasks_done = excluded.tasks_done,
+                streak = excluded.streak,
+                upgrades_json = excluded.upgrades_json,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (username, coins, lifetime_xp, focus_mins, tasks_done, streak, upgrades_json))
+        conn.commit()
+        return jsonify({"status": "success", "message": "Stats saved"})
 
 @app.route('/google9e2eaefbc0938497.html')
 def google_verification_exact():
@@ -1600,17 +1668,22 @@ def gdrive_backup():
                 file_metadata = {'name': 'Notes.json', 'parents': [folder_id]}
                 service.files().create(body=file_metadata, media_body=media_notes).execute()
                 
-            # 2. data.db SQLite database backup upload
-            if os.path.exists(DB_PATH):
-                media_db = MediaFileUpload(DB_PATH, mimetype='application/x-sqlite3')
-                db_q = f"name='data.db' and '{folder_id}' in parents and trashed=false"
-                existing_db = service.files().list(q=db_q, fields='files(id)').execute().get('files', [])
-                if existing_db:
-                    service.files().update(fileId=existing_db[0]['id'], media_body=media_db).execute()
-                else:
-                    db_metadata = {'name': 'data.db', 'parents': [folder_id]}
-                    service.files().create(body=db_metadata, media_body=media_db).execute()
-                    
+            # 3. ai.json backup upload (complete AI context, chat history, and study data)
+            ai_data = data.get('full_context') or {
+                'username': username,
+                'notes_count': len(notes),
+                'notes': notes,
+                'app_info': 'HDSFD Student Sanctuary & Productivity Workspace'
+            }
+            ai_body = json.dumps(ai_data, indent=2)
+            media_ai = MediaInMemoryUpload(ai_body.encode('utf-8'), mimetype='application/json')
+            ai_q = f"name='ai.json' and '{folder_id}' in parents and trashed=false"
+            existing_ai = service.files().list(q=ai_q, fields='files(id)').execute().get('files', [])
+            if existing_ai:
+                service.files().update(fileId=existing_ai[0]['id'], media_body=media_ai).execute()
+            else:
+                service.files().create(body={'name': 'ai.json', 'parents': [folder_id]}, media_body=media_ai).execute()
+
             drive_synced = True
         except Exception as e:
             logger.error(f"Google Drive Backup upload error: {e}")
@@ -1619,7 +1692,7 @@ def gdrive_backup():
         "status": "success",
         "drive_synced": drive_synced,
         "folder": "HDSFD Backup",
-        "files": ["Notes.json", "data.db"],
+        "files": ["Notes.json", "data.db", "ai.json"],
         "message": f"Backup for {username} saved in isolated Google Drive folder 'HDSFD Backup'."
     })
 
