@@ -71,7 +71,7 @@ let tempSubtasksList = [];
 // Active Floating Menu ID
 let activeFloatingMenuTaskId = null;
 
-const API_BASE = 'http://localhost:5050/api';
+const API_BASE = '/api';
 
 // ===== CURATED BRAINYQUOTE TOP QUOTES (HOURLY ROTATION) =====
 const BRAINY_QUOTES = [
@@ -334,9 +334,9 @@ function initializeUserSession() {
   const gdriveSettingsBadge = document.getElementById('settings-gdrive-badge');
 
   if (googleAccount) {
-    if (badgeText) badgeText.textContent = `Google: ${googleAccount}`;
+    if (badgeText) badgeText.innerHTML = `<span class="hidden sm:inline">Google: ${escapeHtml(googleAccount)}</span><span class="sm:hidden">Connected</span>`;
     if (badge) {
-      badge.className = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all shadow-sm';
+      badge.className = 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold transition-all shadow-sm';
       badge.title = `Google Connected: ${googleAccount}`;
     }
     if (gdriveSettingsBadge) {
@@ -344,9 +344,9 @@ function initializeUserSession() {
       gdriveSettingsBadge.className = 'text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold';
     }
   } else {
-    if (badgeText) badgeText.textContent = 'Guest Mode (Pair Google)';
+    if (badgeText) badgeText.innerHTML = '<span class="hidden sm:inline">Guest Mode (Pair Google)</span><span class="sm:hidden">Pair</span>';
     if (badge) {
-      badge.className = 'bg-amber-500/20 text-amber-200 border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 text-xs font-bold transition-all';
+      badge.className = 'bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full flex items-center gap-1 sm:gap-1.5 text-[10px] sm:text-xs font-bold transition-all';
       badge.title = 'Guest Mode: Click to connect Google account';
     }
     if (gdriveSettingsBadge) {
