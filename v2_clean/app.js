@@ -4340,8 +4340,8 @@ window.addEventListener('message', (event) => {
       if (nameInput) nameInput.value = formattedName;
     }
 
-    // Award +200 Free Coins for Cosmic Key on first Google Sign-In!
-    if (localStorage.getItem('hdsfd_cosmic_key_claimed') !== 'true') {
+    // Award +200 Free Coins for Cosmic Key ONLY on successful Google Sign-In!
+    if (googleAccount && googleAccount.includes('@') && localStorage.getItem('hdsfd_cosmic_key_claimed') !== 'true') {
       localStorage.setItem('hdsfd_cosmic_key_claimed', 'true');
       awardActivityCoins(200, '🌟 Cosmic Theme Key & Google Link Bonus');
     }

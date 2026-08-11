@@ -6,6 +6,7 @@ import logging
 import urllib.parse
 import datetime
 import threading
+import base64
 
 # Load-balanced Gemini API key pool from private secrets_config.json or environment variables
 GEMINI_KEY_POOL = []
@@ -1448,18 +1449,36 @@ def gdrive_callback():
 
             flow.fetch_token(authorization_response=auth_response_url)
             creds = flow.credentials
-            
-            import requests
-            u_res = requests.get(
-                'https://www.googleapis.com/oauth2/v2/userinfo',
-                headers={'Authorization': f'Bearer {creds.token}'},
-                timeout=15
-            )
-            if u_res.status_code == 200:
-                u_data = u_res.json()
-                user_email = u_data.get('email', '')
-                user_name = u_data.get('name', '') or u_data.get('given_name', '')
-            
+
+            # 1. Decode ID Token directly for instant user email and name
+            if hasattr(creds, 'id_token') and creds.id_token:
+                try:
+                    parts = creds.id_token.split('.')
+                    if len(parts) >= 2:
+                        p_b64 = parts[1] + '=' * (-len(parts[1]) % 4)
+                        id_payload = json.loads(base64.urlsafe_b64decode(p_b64).decode('utf-8'))
+                        user_email = id_payload.get('email', '')
+                        user_name = id_payload.get('name', '') or id_payload.get('given_name', '')
+                except Exception as ex:
+                    logger.warning(f"Error decoding ID token: {ex}")
+
+            # 2. Secondary check via userinfo endpoint if needed
+            if not user_email or not user_name:
+                try:
+                    import requests
+                    u_res = requests.get(
+                        'https://www.googleapis.com/oauth2/v2/userinfo',
+                        headers={'Authorization': f'Bearer {creds.token}'},
+                        timeout=10
+                    )
+                    if u_res.status_code == 200:
+                        u_data = u_res.json()
+                        user_email = user_email or u_data.get('email', '')
+                        user_name = user_name or u_data.get('name', '') or u_data.get('given_name', '')
+                except Exception as ex:
+                    logger.warning(f"Error calling userinfo: {ex}")
+
+            # 3. Fallback name to formatted email prefix if user_name is blank
             if not user_name and user_email and '@' in user_email:
                 prefix = user_email.split('@')[0]
                 user_name = prefix.replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
@@ -1467,7 +1486,7 @@ def gdrive_callback():
             if user_email:
                 save_user_tokens(user_email, creds, user_name)
         except Exception as e:
-            logger.warning(f"Failed to fetch user email in callback: {e}")
+            logger.error(f"Google OAuth token exchange failed: {e}")
 
     display_label = user_name or (user_email.split('@')[0].replace('.', ' ').title() if '@' in user_email else "Google User")
 
@@ -1492,18 +1511,20 @@ def gdrive_callback():
     <p style="color: #94a3b8; font-size: 12px;">Returning to your sanctuary...</p>
   </div>
   <script>
+    const userEmail = {json.dumps(user_email)};
+    const userName = {json.dumps(user_name or display_label)};
+    
+    if (userEmail && userEmail.indexOf('@') !== -1) {{
+      localStorage.setItem('hdsfd_google_account', userEmail);
+      localStorage.setItem('hdsfd_google_name', userName);
+      localStorage.setItem('hdsfd_user_name', userName);
+    }}
+    
     const authData = {{
       type: 'gdrive_linked',
-      username: {json.dumps(user_email)},
-      name: {json.dumps(user_name or display_label)}
+      username: userEmail,
+      name: userName
     }};
-    
-    // Save directly into localStorage on this origin
-    if (authData.username) {{
-      localStorage.setItem('hdsfd_google_account', authData.username);
-      localStorage.setItem('hdsfd_google_name', authData.name);
-      localStorage.setItem('hdsfd_user_name', authData.name);
-    }}
     
     if (window.opener && !window.opener.closed) {{
       try {{
@@ -1512,7 +1533,7 @@ def gdrive_callback():
       setTimeout(() => {{ window.close(); }}, 1000);
     }} else {{
       setTimeout(() => {{
-        window.location.href = '/?google_account=' + encodeURIComponent(authData.username) + '&name=' + encodeURIComponent(authData.name);
+        window.location.href = '/?google_account=' + encodeURIComponent(userEmail) + '&name=' + encodeURIComponent(userName);
       }}, 1000);
     }}
   </script>
