@@ -1,10 +1,10 @@
-# 🌿 HDSFD V2 — Student Focus Sanctuary & Productivity Workspace
+# 🌿 HDSFD — HD Student Focus Dashboard
 
 [![Live App](https://img.shields.io/badge/Live%20App-hdsfd.pythonanywhere.com-8b5cf6?style=for-the-badge&logo=google-chrome&logoColor=white)](https://hdsfd.pythonanywhere.com/)
 [![GitHub](https://img.shields.io/badge/GitHub-HyperHrishi--HD%2FHDSFD-10b981?style=for-the-badge&logo=github&logoColor=white)](https://github.com/HyperHrishi-HD/HDSFD)
 [![YouTube](https://img.shields.io/badge/Creator-HyperHrishi%20HD-ff0000?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/@HyperHrishiHD?sub_confirmation=1)
 
-> **HDSFD V2** is an ultra-fast, glassmorphic student productivity suite designed for deep focus sessions, intelligent academic planning, ambient audio synthesis, interactive physics notes, and a living botanical evolution sanctuary.
+> **HDSFD** (**HD Student Focus Dashboard**) is an ultra-fast, glassmorphic student productivity suite designed for deep focus sessions, intelligent academic planning, ambient audio synthesis, interactive physics notes, and a living botanical evolution sanctuary.
 
 ---
 

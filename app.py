@@ -842,7 +842,7 @@ def gemini_generate():
 
     # Comprehensive System Instruction for HDSFD AI Agent
     system_instruction = (
-        "You are the HDSFD Intelligent AI Agent powered by Google Gemini inside HDSFD — the student focus sanctuary and productivity workspace.\n"
+        "You are the HDSFD Intelligent AI Agent powered by Google Gemini inside HDSFD (HD Student Focus Dashboard) — the student focus sanctuary and productivity workspace.\n"
         "You have direct control over HDSFD app tools and full knowledge of all app features and mechanics:\n\n"
         "1. DIGITAL SANCTUARY TREE (Living Background & 100+ Evolution Stages):\n"
         "   - The tree lives in the background across all 4 tabs and grows based on LIFETIME COINS EARNED (Lifetime XP).\n"
@@ -1673,7 +1673,7 @@ def gdrive_backup():
                 'username': username,
                 'notes_count': len(notes),
                 'notes': notes,
-                'app_info': 'HDSFD Student Sanctuary & Productivity Workspace'
+                'app_info': 'HDSFD (HD Student Focus Dashboard) — Student Focus Sanctuary & Productivity Workspace'
             }
             ai_body = json.dumps(ai_data, indent=2)
             media_ai = MediaInMemoryUpload(ai_body.encode('utf-8'), mimetype='application/json')
