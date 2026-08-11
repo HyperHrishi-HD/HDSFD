@@ -224,13 +224,9 @@ def get_google_status():
         "name": None
     })
 
-@app.route('/google<code_id>.html')
-def google_verification_page(code_id):
-    filename = f"google{code_id}.html"
-    file_path = os.path.join(os.path.dirname(__file__), filename)
-    if os.path.exists(file_path):
-        return send_from_directory('.', filename)
-    return f"google-site-verification: google{code_id}.html", 200, {'Content-Type': 'text/html; charset=utf-8'}
+@app.route('/google9e2eaefbc0938497.html')
+def google_verification_exact():
+    return send_from_directory('.', 'google9e2eaefbc0938497.html', mimetype='text/html')
 
 @app.route('/')
 def index():
@@ -1422,7 +1418,7 @@ def gdrive_callback():
         except Exception:
             pass
 
-    user_email = state_username if state_username and state_username != 'User' else ''
+    user_email = ''
     user_name = ''
 
     if code and client_id and client_secret:
@@ -1449,12 +1445,21 @@ def gdrive_callback():
             flow.fetch_token(authorization_response=request.url)
             creds = flow.credentials
             
-            from googleapiclient.discovery import build
-            user_info_service = build('oauth2', 'v2', credentials=creds)
-            user_info = user_info_service.userinfo().get().execute()
-            user_email = user_info.get('email', user_email)
-            user_name = user_info.get('name', '') or user_info.get('given_name', '')
+            import requests
+            u_res = requests.get(
+                'https://www.googleapis.com/oauth2/v2/userinfo',
+                headers={'Authorization': f'Bearer {creds.token}'},
+                timeout=15
+            )
+            if u_res.status_code == 200:
+                u_data = u_res.json()
+                user_email = u_data.get('email', '')
+                user_name = u_data.get('name', '') or u_data.get('given_name', '')
             
+            if not user_name and user_email and '@' in user_email:
+                prefix = user_email.split('@')[0]
+                user_name = prefix.replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
+
             if user_email:
                 save_user_tokens(user_email, creds, user_name)
         except Exception as e:
