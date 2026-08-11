@@ -434,22 +434,28 @@ function initializeUserSession() {
     renderSanctuaryTree();
   }).catch(err => console.warn('Fetch data init warning:', err));
 
-  fetch(`${API_BASE}/user/stats?username=${encodeURIComponent(activeName)}`)
+  const statsUser = (googleAccount && googleAccount.includes('@')) ? googleAccount : activeName;
+  fetch(`${API_BASE}/user/stats?username=${encodeURIComponent(statsUser)}`)
     .then(r => r.json())
     .then(stats => {
       if (stats && stats.status === 'success') {
-        const localCoins = getUserCoinsBalance();
-        if (stats.coins > localCoins) {
-          localStorage.setItem(`hdsfd_coins_${activeName}`, stats.coins.toString());
+        if (typeof stats.coins === 'number') {
+          localStorage.setItem(`hdsfd_coins_${statsUser}`, stats.coins.toString());
         }
-        const localXP = getLifetimeCoins();
-        if (stats.lifetime_xp > localXP) {
-          localStorage.setItem(`hdsfd_lifetime_coins_${activeName}`, stats.lifetime_xp.toString());
+        if (typeof stats.lifetime_xp === 'number') {
+          localStorage.setItem(`hdsfd_lifetime_coins_${statsUser}`, stats.lifetime_xp.toString());
         }
-        if (Array.isArray(stats.upgrades) && stats.upgrades.length > 0) {
+        if (Array.isArray(stats.upgrades)) {
           const localUpgrades = JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]');
           const merged = Array.from(new Set([...localUpgrades, ...stats.upgrades]));
           localStorage.setItem('hdsfd_upgrades', JSON.stringify(merged));
+
+          if (stats.upgrades.includes('cosmic_claimed') && googleAccount) {
+            localStorage.setItem('hdsfd_cosmic_claimed_' + googleAccount, 'true');
+          }
+          if (stats.upgrades.includes('crown_claimed')) {
+            localStorage.setItem('hdsfd_has_crown', 'true');
+          }
         }
         updateStatsOverview();
         updateShopCardsUI();
@@ -4424,16 +4430,21 @@ window.addEventListener('message', (event) => {
       if (nameInput) nameInput.value = formattedName;
     }
 
-    // Award +200 Free Coins for Cosmic Key ONLY on first-time Google Sign-In per account!
-    const claimKey = 'hdsfd_cosmic_claimed_' + (googleAccount || '');
-    if (googleAccount && googleAccount.includes('@') && localStorage.getItem(claimKey) !== 'true') {
-      localStorage.setItem(claimKey, 'true');
-      awardActivityCoins(200, '🌟 Cosmic Theme Key & Google Link Bonus');
-    }
-
+    // Check server-backed single claim for Cosmic Key
     initializeUserSession();
-    updateStatsOverview();
-    updateShopCardsUI();
+    setTimeout(() => {
+      const claimKey = 'hdsfd_cosmic_claimed_' + (googleAccount || '');
+      const localUpgrades = JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]');
+      if (googleAccount && googleAccount.includes('@') && localStorage.getItem(claimKey) !== 'true' && !localUpgrades.includes('cosmic_claimed')) {
+        localStorage.setItem(claimKey, 'true');
+        localUpgrades.push('cosmic_claimed');
+        localStorage.setItem('hdsfd_upgrades', JSON.stringify(localUpgrades));
+        awardActivityCoins(200, '🌟 Cosmic Theme Key & Google Link Bonus');
+        syncUserStatsToServer();
+      }
+      updateStatsOverview();
+      updateShopCardsUI();
+    }, 500);
   }
 });
 
@@ -4939,13 +4950,25 @@ function onYouTubeSubChannelClicked() {
 }
 
 function verifyYouTubeSubscription() {
-  if (!ytChannelLinkClicked && localStorage.getItem('hdsfd_has_crown') !== 'true') {
+  const localUpgrades = JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]');
+  if (localStorage.getItem('hdsfd_has_crown') === 'true' || localUpgrades.includes('crown_claimed')) {
+    showInAppNotification('👑 Zen Master Crown has already been claimed on your account!');
+    closeYouTubeSubModal();
+    return;
+  }
+
+  if (!ytChannelLinkClicked) {
     showInAppNotification('⚠️ Please click "Subscribe on YouTube" to open @HyperHrishiHD channel first!');
     return;
   }
 
   localStorage.setItem('hdsfd_has_crown', 'true');
+  if (!localUpgrades.includes('crown_claimed')) {
+    localUpgrades.push('crown_claimed');
+    localStorage.setItem('hdsfd_upgrades', JSON.stringify(localUpgrades));
+  }
   awardActivityCoins(1000, '👑 Zen Master YouTube Crown');
+  syncUserStatsToServer();
 
   closeYouTubeSubModal();
   initializeUserSession();
@@ -5042,23 +5065,28 @@ function updateShopCardsUI() {
   const themeBtn = document.getElementById('buy-theme-btn');
   if (themeBtn) {
     if (googleAccount) {
-      themeBtn.textContent = 'Unlocked ✓';
-      themeBtn.className = 'mt-2.5 bg-purple-500/40 text-purple-200 border border-purple-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+      themeBtn.textContent = 'Unlocked ✓ (+200 🪙 Claimed)';
+      themeBtn.className = 'mt-2.5 bg-purple-500/40 text-purple-200 border border-purple-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default opacity-80';
+      themeBtn.disabled = true;
     } else {
-      themeBtn.textContent = 'Sign in.';
+      themeBtn.textContent = 'Sign in (+200 🪙)';
       themeBtn.className = 'mt-2.5 bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-purple-500/30 active:scale-95 transition-all';
+      themeBtn.disabled = false;
     }
   }
 
   // 8. Crown
   const crownBtn = document.getElementById('buy-crown-btn');
   if (crownBtn) {
-    if (localStorage.getItem('hdsfd_has_crown') === 'true') {
-      crownBtn.textContent = 'Claimed 👑';
-      crownBtn.className = 'mt-2.5 bg-amber-400/40 text-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
+    const localUpgrades = JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]');
+    if (localStorage.getItem('hdsfd_has_crown') === 'true' || localUpgrades.includes('crown_claimed')) {
+      crownBtn.textContent = 'Crown Unlocked 👑 (+1000 🪙 Claimed)';
+      crownBtn.className = 'mt-2.5 bg-amber-400/40 text-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default opacity-80';
+      crownBtn.disabled = true;
     } else {
       crownBtn.textContent = 'Subscribe to HyperHrishi HD';
       crownBtn.className = 'mt-2.5 bg-amber-400/20 text-amber-100 border border-amber-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-400/30 active:scale-95 transition-all';
+      crownBtn.disabled = false;
     }
   }
 }
