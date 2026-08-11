@@ -1368,11 +1368,7 @@ def gdrive_auth():
         except Exception:
             pass
 
-    if 'pythonanywhere.com' in request.host:
-        redirect_uri = 'https://' + request.host + '/api/gdrive/callback'
-    else:
-        redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
-
+    redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
     scopes = [
         'https://www.googleapis.com/auth/userinfo.profile',
         'https://www.googleapis.com/auth/userinfo.email',
@@ -1382,7 +1378,7 @@ def gdrive_auth():
     ]
     
     import secrets
-    state_token = secrets.token_urlsafe(16)
+    state_token = f"{secrets.token_urlsafe(12)}_{urllib.parse.quote(username)}"
     
     params = {
         'client_id': client_id,
@@ -1400,7 +1396,16 @@ def gdrive_auth():
 @app.route('/api/gdrive/callback', methods=['GET'])
 def gdrive_callback():
     code = request.args.get('code')
-    
+    raw_state = request.args.get('state') or ''
+    state_username = 'User'
+    if '_' in raw_state:
+        try:
+            state_username = urllib.parse.unquote(raw_state.split('_', 1)[1])
+        except Exception:
+            state_username = 'User'
+    elif request.args.get('username'):
+        state_username = request.args.get('username')
+        
     client_id = os.environ.get('GOOGLE_CLIENT_ID', '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com')
     client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
 
@@ -1414,17 +1419,13 @@ def gdrive_callback():
         except Exception:
             pass
 
-    if 'pythonanywhere.com' in request.host:
-        redirect_uri = 'https://' + request.host + '/api/gdrive/callback'
-    else:
-        redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
-
     user_email = ''
     user_name = ''
 
     if code and client_id and client_secret:
         try:
             from google_auth_oauthlib.flow import Flow
+            redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
             client_config = {
                 "web": {
                     "client_id": client_id,
@@ -1442,43 +1443,15 @@ def gdrive_callback():
                 'https://www.googleapis.com/auth/tasks'
             ])
             flow.redirect_uri = redirect_uri
-
-            auth_response_url = request.url
-            if auth_response_url.startswith('http://') and 'pythonanywhere.com' in request.host:
-                auth_response_url = 'https://' + auth_response_url[7:]
-
-            flow.fetch_token(authorization_response=auth_response_url)
+            flow.fetch_token(authorization_response=request.url)
             creds = flow.credentials
-
-            # 1. Decode ID Token directly for instant user email and name
-            if hasattr(creds, 'id_token') and creds.id_token:
-                try:
-                    parts = creds.id_token.split('.')
-                    if len(parts) >= 2:
-                        p_b64 = parts[1] + '=' * (-len(parts[1]) % 4)
-                        id_payload = json.loads(base64.urlsafe_b64decode(p_b64).decode('utf-8'))
-                        user_email = id_payload.get('email', '')
-                        user_name = id_payload.get('name', '') or id_payload.get('given_name', '')
-                except Exception as ex:
-                    logger.warning(f"Error decoding ID token: {ex}")
-
-            # 2. Secondary check via userinfo endpoint if needed
-            if not user_email or not user_name:
-                try:
-                    import requests
-                    u_res = requests.get(
-                        'https://www.googleapis.com/oauth2/v2/userinfo',
-                        headers={'Authorization': f'Bearer {creds.token}'},
-                        timeout=10
-                    )
-                    if u_res.status_code == 200:
-                        u_data = u_res.json()
-                        user_email = user_email or u_data.get('email', '')
-                        user_name = user_name or u_data.get('name', '') or u_data.get('given_name', '')
-                except Exception as ex:
-                    logger.warning(f"Error calling userinfo: {ex}")
-
-            # 3. Fallback name to formatted email prefix if user_name is blank
+            
+            from googleapiclient.discovery import build
+            user_info_service = build('oauth2', 'v2', credentials=creds)
+            user_info = user_info_service.userinfo().get().execute()
+            user_email = user_info.get('email', '')
+            user_name = user_info.get('name', '') or user_info.get('given_name', '')
+            
             if not user_name and user_email and '@' in user_email:
                 prefix = user_email.split('@')[0]
                 user_name = prefix.replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
@@ -1486,59 +1459,32 @@ def gdrive_callback():
             if user_email:
                 save_user_tokens(user_email, creds, user_name)
         except Exception as e:
-            logger.error(f"Google OAuth token exchange failed: {e}")
+            logger.warning(f"Failed in callback: {e}")
 
-    display_label = user_name or (user_email.split('@')[0].replace('.', ' ').title() if '@' in user_email else "Google User")
+    display_label = user_name or (user_email.split('@')[0].replace('.', ' ').title() if '@' in user_email else (state_username if state_username != 'User' else "Google User"))
+    if not user_email and state_username and '@' in state_username:
+        user_email = state_username
 
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Google Account Connected</title>
-  <style>
-    body {{ background: #0f172a; color: white; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }}
-    .card {{ background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 32px; border-radius: 24px; text-align: center; max-width: 400px; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }}
-    h2 {{ color: #c084fc; margin: 12px 0 8px 0; font-size: 22px; }}
-    p {{ color: #cbd5e1; font-size: 14px; margin: 0 0 16px 0; }}
-    .pill {{ background: rgba(168,85,247,0.2); border: 1px solid rgba(168,85,247,0.4); padding: 4px 12px; border-radius: 20px; color: #e9d5ff; font-weight: bold; }}
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div style="font-size: 44px;">✨</div>
-    <h2>Google Connected!</h2>
-    <p>Logged in as <span class="pill">{display_label}</span></p>
-    <p style="color: #94a3b8; font-size: 12px;">Returning to your sanctuary...</p>
-  </div>
-  <script>
-    const userEmail = {json.dumps(user_email)};
-    const userName = {json.dumps(user_name or display_label)};
-    
-    if (userEmail && userEmail.indexOf('@') !== -1) {{
-      localStorage.setItem('hdsfd_google_account', userEmail);
-      localStorage.setItem('hdsfd_google_name', userName);
-      localStorage.setItem('hdsfd_user_name', userName);
-    }}
-    
-    const authData = {{
-      type: 'gdrive_linked',
-      username: userEmail,
-      name: userName
-    }};
-    
-    if (window.opener && !window.opener.closed) {{
-      try {{
-        window.opener.postMessage(authData, '*');
-      }} catch (e) {{}}
-      setTimeout(() => {{ window.close(); }}, 1000);
-    }} else {{
-      setTimeout(() => {{
-        window.location.href = '/?google_account=' + encodeURIComponent(userEmail) + '&name=' + encodeURIComponent(userName);
-      }}, 1000);
-    }}
-  </script>
-</body>
-</html>"""
+    html = f"""
+    <html>
+      <body style="background: #0f172a; color: white; font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin:0;">
+        <div style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); padding: 30px; border-radius: 20px; text-align: center; max-width: 380px;">
+          <div style="font-size: 40px; margin-bottom: 10px;">✨</div>
+          <h2 style="color: #c084fc; margin: 0 0 10px 0;">Google Account Connected!</h2>
+          <p style="color: #cbd5e1; font-size: 14px; margin: 0 0 15px 0;">Logged in as <b>{display_label}</b> ({user_email})</p>
+          <p style="color: #94a3b8; font-size: 11px;">Closing window and returning to Sanctuary...</p>
+        </div>
+        <script>
+          if (window.opener) {{
+            window.opener.postMessage({{ type: 'gdrive_linked', username: {json.dumps(user_email)}, name: {json.dumps(user_name or display_label)} }}, '*');
+            setTimeout(function() {{ window.close(); }}, 1200);
+          }} else {{
+            window.location.href = '/?google_account=' + encodeURIComponent({json.dumps(user_email)}) + '&name=' + encodeURIComponent({json.dumps(user_name or display_label)});
+          }}
+        </script>
+      </body>
+    </html>
+    """
     return html
 
 @app.route('/api/gdrive/backup', methods=['POST'])
