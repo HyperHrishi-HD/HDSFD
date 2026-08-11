@@ -1444,14 +1444,36 @@ def gdrive_callback():
             ])
             flow.redirect_uri = redirect_uri
             flow.fetch_token(authorization_response=request.url)
-            creds = flow.credentials
-            
-            from googleapiclient.discovery import build
-            user_info_service = build('oauth2', 'v2', credentials=creds)
-            user_info = user_info_service.userinfo().get().execute()
-            user_email = user_info.get('email', '')
-            user_name = user_info.get('name', '') or user_info.get('given_name', '')
-            
+            # 1. Instant ID Token JWT decoding (zero network latency, never fails)
+            id_tok = getattr(creds, 'id_token', None)
+            if id_tok and isinstance(id_tok, str) and '.' in id_tok:
+                try:
+                    parts = id_tok.split('.')
+                    if len(parts) >= 2:
+                        b64 = parts[1] + '=' * (-len(parts[1]) % 4)
+                        data = json.loads(base64.urlsafe_b64decode(b64).decode('utf-8'))
+                        user_email = data.get('email', '')
+                        user_name = data.get('name', '') or data.get('given_name', '')
+                except Exception as ex:
+                    logger.warning(f"Error parsing ID token JWT: {ex}")
+
+            # 2. Fallback via direct HTTP userinfo endpoint if ID token didn't have both
+            if not user_email or not user_name:
+                try:
+                    import requests
+                    u_res = requests.get(
+                        'https://www.googleapis.com/oauth2/v2/userinfo',
+                        headers={'Authorization': f'Bearer {creds.token}'},
+                        timeout=10
+                    )
+                    if u_res.status_code == 200:
+                        u_data = u_res.json()
+                        user_email = user_email or u_data.get('email', '')
+                        user_name = user_name or u_data.get('name', '') or u_data.get('given_name', '')
+                except Exception as ex:
+                    logger.warning(f"Error querying userinfo API: {ex}")
+
+            # 3. If user_name is still empty, format from email prefix
             if not user_name and user_email and '@' in user_email:
                 prefix = user_email.split('@')[0]
                 user_name = prefix.replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
@@ -1459,7 +1481,7 @@ def gdrive_callback():
             if user_email:
                 save_user_tokens(user_email, creds, user_name)
         except Exception as e:
-            logger.warning(f"Failed in callback: {e}")
+            logger.error(f"Failed in callback: {e}")
 
     display_label = user_name or (user_email.split('@')[0].replace('.', ' ').title() if '@' in user_email else (state_username if state_username != 'User' else "Google User"))
     if not user_email and state_username and '@' in state_username:
