@@ -3864,6 +3864,8 @@ function setCustomPomoFromInput() {
 // ===== ZEN MODE =====
 let zenHoldTimer = null;
 let zenStartTime = null;
+let zenFadeTimeout = null;
+let zenHoldProgress = 0;
 
 function enterZenMode() {
   const zenOverlay = document.getElementById('zen-overlay');
