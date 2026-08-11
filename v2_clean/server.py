@@ -804,7 +804,7 @@ def gemini_generate():
                 "contents": contents,
                 "generationConfig": { "temperature": 0.7, "maxOutputTokens": 2048 }
             }
-            for model_candidate in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+            for model_candidate in ["gemini-flash-latest", "gemini-2.0-flash", "gemini-1.5-flash"]:
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent"
                 res = requests.post(url, headers=headers, json=payload, timeout=20)
                 if res.status_code == 200:
@@ -830,7 +830,7 @@ def gemini_generate():
         for candidate_key in key_candidates:
             if generated_text:
                 break
-            for model_candidate in ["gemini-2.0-flash", "gemini-1.5-flash"]:
+            for model_candidate in ["gemini-flash-latest", "gemini-3.5-flash", "gemini-flash-lite-latest", "gemini-2.0-flash", "gemini-1.5-flash"]:
                 try:
                     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_candidate}:generateContent?key={candidate_key}"
                     res = requests.post(url, json=payload, timeout=20)
