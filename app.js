@@ -46,16 +46,8 @@ let pickerViewingDate = new Date();
 let pickerSelectedDateStr = null;
 let pickerSelectedTimeStr = '';
 
-// Custom Repeat Configuration State
-let currentRepeatConfig = {
-  interval: 1,
-  unit: 'day',
-  time: '',
-  starts: '',
-  endType: 'never',
-  endDate: '',
-  endOccurrences: 30
-};
+// Custom Repeat Configuration State (Default: null / No Repeat)
+let currentRepeatConfig = null;
 
 // Selected Folder for New Task
 let selectedNewTaskFolder = 'My Tasks';
@@ -230,6 +222,29 @@ async function deleteData(id) {
 function triggerGoogleBackup() {
   const owner = googleAccount || userName || 'Guest';
   const notes = allData.filter(d => d.type === 'note');
+  const tasks = allData.filter(d => d.type === 'task');
+  const schedules = allData.filter(d => d.type === 'schedule_entry');
+  const exams = allData.filter(d => d.type === 'exam_entry');
+  
+  const fullContext = {
+    username: owner,
+    google_account: googleAccount,
+    timestamp: new Date().toISOString(),
+    stats: {
+      coins: userCoins,
+      lifetime_xp: userLifetimeXP,
+      focus_time_mins: totalFocusTimeMinutes,
+      tasks_completed: totalTasksCompleted,
+      streak_days: currentStreakDays
+    },
+    notes: notes,
+    tasks: tasks,
+    schedules: schedules,
+    exams: exams,
+    gemini_chat_history: geminiChatHistory,
+    app_info: 'HDSFD Student Focus Sanctuary & Intelligent Workspace'
+  };
+
   const msgEl = document.getElementById('backup-msg');
   if (msgEl) {
     msgEl.classList.remove('hidden');
@@ -239,12 +254,16 @@ function triggerGoogleBackup() {
   fetch(`${API_BASE}/gdrive/backup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: owner, notes: notes })
+    body: JSON.stringify({
+      username: owner,
+      notes: notes,
+      full_context: fullContext
+    })
   })
   .then(res => res.json())
   .then(res => {
     if (msgEl) {
-      msgEl.textContent = res.drive_synced ? '✅ Backup saved to Google Drive (HDSFD Backup: Notes.json & data.db)!' : '⚠️ Saved locally.';
+      msgEl.textContent = res.drive_synced ? '✅ Backup saved to Google Drive (Notes.json, data.db, ai.json)!' : '⚠️ Saved locally.';
       setTimeout(() => msgEl.classList.add('hidden'), 4000);
     }
   })
@@ -409,12 +428,33 @@ function initializeUserSession() {
   renderYTHistory();
   initZenAssistiveTouch();
   initSplitResizer();
-  renderSanctuaryTree();
   fetchData().then(() => {
     autoSyncGoogleTasksAndCalendar();
     renderCurrentTab();
     renderSanctuaryTree();
   }).catch(err => console.warn('Fetch data init warning:', err));
+
+  fetch(`${API_BASE}/user/stats?username=${encodeURIComponent(activeName)}`)
+    .then(r => r.json())
+    .then(stats => {
+      if (stats && stats.status === 'success') {
+        const localCoins = getUserCoinsBalance();
+        if (stats.coins > localCoins) {
+          localStorage.setItem(`hdsfd_coins_${activeName}`, stats.coins.toString());
+        }
+        const localXP = getLifetimeCoins();
+        if (stats.lifetime_xp > localXP) {
+          localStorage.setItem(`hdsfd_lifetime_coins_${activeName}`, stats.lifetime_xp.toString());
+        }
+        if (Array.isArray(stats.upgrades) && stats.upgrades.length > 0) {
+          const localUpgrades = JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]');
+          const merged = Array.from(new Set([...localUpgrades, ...stats.upgrades]));
+          localStorage.setItem('hdsfd_upgrades', JSON.stringify(merged));
+        }
+        updateStatsOverview();
+        updateShopCardsUI();
+      }
+    }).catch(() => {});
 }
 
 // ===== THROTTLED GLOBAL SYNC =====
@@ -967,6 +1007,13 @@ function onRepeatEndTypeChange() {
   }
 }
 
+function clearRepeatConfiguration() {
+  currentRepeatConfig = null;
+  const labelEl = document.getElementById('gtask-repeat-btn-label');
+  if (labelEl) labelEl.textContent = 'Repeat: None';
+  closeRepeatModal();
+}
+
 function saveRepeatConfiguration() {
   const interval = parseInt(document.getElementById('repeat-interval-num').value, 10) || 1;
   const unit = document.getElementById('repeat-unit-select').value || 'day';
@@ -976,10 +1023,10 @@ function saveRepeatConfiguration() {
   currentRepeatConfig = {
     interval,
     unit,
-    time: currentRepeatConfig.time || '',
-    starts: currentRepeatConfig.starts || new Date().toISOString().split('T')[0],
+    time: (currentRepeatConfig && currentRepeatConfig.time) || '',
+    starts: (currentRepeatConfig && currentRepeatConfig.starts) || new Date().toISOString().split('T')[0],
     endType,
-    endDate: currentRepeatConfig.endDate || '',
+    endDate: (currentRepeatConfig && currentRepeatConfig.endDate) || '',
     endOccurrences: occurrences
   };
 
@@ -1265,7 +1312,7 @@ function saveComprehensiveTask() {
     due: due ? (due.length === 10 ? due + 'T00:00:00.000Z' : due) : '',
     due_time: dueTime,
     deadline: deadline,
-    repeat_config: currentRepeatConfig.unit ? { ...currentRepeatConfig } : null,
+    repeat_config: (currentRepeatConfig && currentRepeatConfig.unit) ? { ...currentRepeatConfig } : null,
     subtasks: formattedSubtasks,
     attachments: attachments,
     completed: false,
@@ -1311,6 +1358,7 @@ function saveComprehensiveTask() {
   pendingNewTaskAttachment = null;
   removePendingAttachment();
 
+  currentRepeatConfig = null;
   const dueBtn = document.getElementById('gtask-due-btn-label');
   if (dueBtn) dueBtn.textContent = 'Due Date & Time';
   const deadlineBtn = document.getElementById('gtask-deadline-btn-label');
@@ -1423,7 +1471,7 @@ function renderDarkCalendarGrid() {
           `).join('')}
 
           ${daySchedules.map(s => `
-            <div class="cal-event-chip bg-purple-600/30 text-purple-200 border border-purple-500/40 font-semibold" title="🕒 Class: ${escapeHtml(s.title)} (${s.start_time || ''})">
+            <div class="cal-event-chip bg-emerald-500/30 text-emerald-200 border border-emerald-500/40 font-semibold" title="🕒 Class: ${escapeHtml(s.title)} (${s.start_time || ''})">
               🕒 ${escapeHtml(s.title)}
             </div>
           `).join('')}
@@ -3397,19 +3445,27 @@ function executeAgentAction(action) {
 // ===== CURATED & DYNAMIC YOUTUBE MUSIC SEARCH PLAYER =====
 function playCuratedOrSearchedYouTube(queryOrUrl) {
   if (!queryOrUrl) return;
-  let url = queryOrUrl.trim();
+  let raw = queryOrUrl.trim();
+  let url = raw;
 
-  const lower = url.toLowerCase();
+  const lower = raw.toLowerCase();
   const curatedStreams = {
     'lofi': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
     'rain': 'https://www.youtube.com/watch?v=mPZkdNFkNps',
     'piano': 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
     'mozart': 'https://www.youtube.com/watch?v=Rb0UmrCXxVA',
+    'beethoven': 'https://www.youtube.com/watch?v=W-fFHeTX70Q',
+    'chopin': 'https://www.youtube.com/watch?v=wygy721nzRc',
     'classical': 'https://www.youtube.com/watch?v=jgpJVI3tDbY',
     'synthwave': 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
     'chill': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
     'jazz': 'https://www.youtube.com/watch?v=Dx5qFachd3A',
-    'nature': 'https://www.youtube.com/watch?v=eKFTSSKCzWA'
+    'nature': 'https://www.youtube.com/watch?v=eKFTSSKCzWA',
+    'interstellar': 'https://www.youtube.com/watch?v=UDVtMYqUAyw',
+    'hans zimmer': 'https://www.youtube.com/watch?v=UDVtMYqUAyw',
+    'lofi girl': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    'study beats': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    'coffee': 'https://www.youtube.com/watch?v=5qap5aO4i9A'
   };
 
   for (const [key, streamUrl] of Object.entries(curatedStreams)) {
@@ -3420,7 +3476,7 @@ function playCuratedOrSearchedYouTube(queryOrUrl) {
   }
 
   if (!url.startsWith('http') && !url.includes('youtu')) {
-    url = `https://www.youtube.com/watch?v=jfKfPfyJRdk`;
+    url = `https://www.youtube.com/results?search_query=${encodeURIComponent(raw)}`;
   }
 
   const ytInput = document.getElementById('yt-song-input');
@@ -3436,6 +3492,7 @@ function playCuratedOrSearchedYouTube(queryOrUrl) {
 
   isYTPlaying = false;
   toggleYouTubePlayback();
+  showInAppNotification(`🎵 Loading on YouTube: ${raw}`);
 }
 
 // ===== CUSTOM IN-APP MODAL FOR CLEARING GEMINI HISTORY =====
@@ -3528,6 +3585,35 @@ function updateStatsOverview() {
   if (barEl) barEl.style.width = `${stageInfo.progressPct}%`;
 
   renderSanctuaryTree();
+  syncUserStatsToServer();
+}
+
+let statsSyncDebounceTimer = null;
+function syncUserStatsToServer() {
+  clearTimeout(statsSyncDebounceTimer);
+  statsSyncDebounceTimer = setTimeout(() => {
+    const owner = googleAccount || userName || 'Guest';
+    const lifetimeCoins = getLifetimeCoins();
+    const currentCoins = getUserCoinsBalance();
+    const sessions = allData.filter(d => d.type === 'focus_session');
+    const mins = sessions.reduce((sum, s) => sum + (s.minutes || 0), 0);
+    const tasks = allData.filter(d => d.type === 'task');
+    const completedTasks = tasks.filter(t => t.completed).length;
+
+    fetch(`${API_BASE}/user/stats`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: owner,
+        coins: currentCoins,
+        lifetime_xp: lifetimeCoins,
+        focus_mins: mins,
+        tasks_done: completedTasks,
+        streak: 1,
+        upgrades: JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]')
+      })
+    }).catch(() => {});
+  }, 2000);
 }
 
 // ===== DIGITAL CLOCK WITH LIVE SECONDS =====
@@ -4338,9 +4424,10 @@ window.addEventListener('message', (event) => {
       if (nameInput) nameInput.value = formattedName;
     }
 
-    // Award +200 Free Coins for Cosmic Key ONLY on successful Google Sign-In!
-    if (googleAccount && googleAccount.includes('@') && localStorage.getItem('hdsfd_cosmic_key_claimed') !== 'true') {
-      localStorage.setItem('hdsfd_cosmic_key_claimed', 'true');
+    // Award +200 Free Coins for Cosmic Key ONLY on first-time Google Sign-In per account!
+    const claimKey = 'hdsfd_cosmic_claimed_' + (googleAccount || '');
+    if (googleAccount && googleAccount.includes('@') && localStorage.getItem(claimKey) !== 'true') {
+      localStorage.setItem(claimKey, 'true');
       awardActivityCoins(200, '🌟 Cosmic Theme Key & Google Link Bonus');
     }
 
@@ -5057,12 +5144,8 @@ function saveExamEntry() {
   } else {
     allData.push(examObj);
 
-    // Auto-create matching Task Folder for this Exam Subject!
-    let customFolders = getCustomTaskFolders();
-    if (!customFolders.includes(title)) {
-      customFolders.push(title);
-      localStorage.setItem('hdsfd_custom_folders', JSON.stringify(customFolders));
-    }
+    // Auto-create matching Task Folder for this Exam Subject
+    populateTaskFolderMenus();
 
     // Auto-create initial study checkpoint task
     const studyTask = {
