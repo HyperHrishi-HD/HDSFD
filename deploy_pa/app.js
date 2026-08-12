@@ -439,11 +439,25 @@ function initializeUserSession() {
     .then(r => r.json())
     .then(stats => {
       if (stats && stats.status === 'success') {
-        if (typeof stats.coins === 'number') {
-          localStorage.setItem(`hdsfd_coins_${statsUser}`, stats.coins.toString());
-        }
-        if (typeof stats.lifetime_xp === 'number') {
+        // Restore bonus XP from server — take max of local and server so coins never go backwards
+        if (typeof stats.lifetime_xp === 'number' && stats.lifetime_xp > 0) {
+          const localBonusXP = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
+          if (stats.lifetime_xp > localBonusXP) {
+            localStorage.setItem('hdsfd_lifetime_bonus_xp', stats.lifetime_xp.toString());
+          }
           localStorage.setItem(`hdsfd_lifetime_coins_${statsUser}`, stats.lifetime_xp.toString());
+        }
+        // Restore spent coins from server
+        if (typeof stats.coins === 'number') {
+          const localLifetime = getLifetimeCoins();
+          const serverSpent = Math.max(0, localLifetime - stats.coins);
+          const localSpent = parseInt(localStorage.getItem('hdsfd_spent_coins') || '0', 10);
+          if (serverSpent < localSpent) {
+            // Server has fewer spent — trust local (it knows about recent purchases)
+          } else if (serverSpent > localSpent) {
+            localStorage.setItem('hdsfd_spent_coins', serverSpent.toString());
+          }
+          localStorage.setItem(`hdsfd_coins_${statsUser}`, stats.coins.toString());
         }
         if (Array.isArray(stats.upgrades)) {
           const localUpgrades = JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]');
@@ -1686,7 +1700,7 @@ function saveQuickDayItem() {
 // ===== CLASS & TIMETABLE SCHEDULE SYSTEM =====
 let currentTab2Subview = 'calendar';
 let activeScheduleDayFilter = 'all';
-let selectedScheduleDays = ['Mon', 'Wed', 'Fri'];
+let selectedScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 let selectedScheduleColor = 'purple';
 
 function switchTab2Subview(view) {
@@ -1775,7 +1789,7 @@ function openAddScheduleModal(editId = null) {
       if (startTimeInput) startTimeInput.value = entry.start_time || '09:00';
       if (endTimeInput) endTimeInput.value = entry.end_time || '10:15';
       if (locInput) locInput.value = entry.location || '';
-      selectedScheduleDays = Array.isArray(entry.days) ? [...entry.days] : ['Mon', 'Wed', 'Fri'];
+      selectedScheduleDays = Array.isArray(entry.days) ? [...entry.days] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
       selectedScheduleColor = entry.color || 'purple';
     }
   } else {
@@ -1785,7 +1799,7 @@ function openAddScheduleModal(editId = null) {
     if (startTimeInput) startTimeInput.value = '09:00';
     if (endTimeInput) endTimeInput.value = '10:15';
     if (locInput) locInput.value = '';
-    selectedScheduleDays = ['Mon', 'Wed', 'Fri'];
+    selectedScheduleDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
     selectedScheduleColor = 'purple';
   }
 
@@ -3452,12 +3466,31 @@ function executeAgentAction(action) {
 function playCuratedOrSearchedYouTube(queryOrUrl) {
   if (!queryOrUrl) return;
   let raw = queryOrUrl.trim();
-  let url = raw;
+
+  // If already a YouTube URL, play directly
+  if (raw.includes('youtube.com/watch') || raw.includes('youtu.be/')) {
+    const ytInput = document.getElementById('yt-song-input');
+    if (ytInput) ytInput.value = raw;
+    const drawer = document.getElementById('yt-drawer-content');
+    const icon = document.getElementById('yt-drawer-icon');
+    if (drawer && drawer.classList.contains('hidden')) {
+      drawer.classList.remove('hidden');
+      if (icon) icon.textContent = '▲';
+    }
+    isYTPlaying = false;
+    toggleYouTubePlayback();
+    showInAppNotification(`🎵 Playing: ${raw}`);
+    return;
+  }
 
   const lower = raw.toLowerCase();
+
+  // Expanded curated streams (study + popular genres)
   const curatedStreams = {
     'lofi': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    'lofi girl': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
     'rain': 'https://www.youtube.com/watch?v=mPZkdNFkNps',
+    'thunderstorm': 'https://www.youtube.com/watch?v=nDq6TstdEi8',
     'piano': 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
     'mozart': 'https://www.youtube.com/watch?v=Rb0UmrCXxVA',
     'beethoven': 'https://www.youtube.com/watch?v=W-fFHeTX70Q',
@@ -3465,15 +3498,54 @@ function playCuratedOrSearchedYouTube(queryOrUrl) {
     'classical': 'https://www.youtube.com/watch?v=jgpJVI3tDbY',
     'synthwave': 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
     'chill': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    'chillhop': 'https://www.youtube.com/watch?v=5yx6BWlEVcY',
     'jazz': 'https://www.youtube.com/watch?v=Dx5qFachd3A',
     'nature': 'https://www.youtube.com/watch?v=eKFTSSKCzWA',
+    'forest': 'https://www.youtube.com/watch?v=xNN7iTA57jM',
+    'ocean': 'https://www.youtube.com/watch?v=V1bFr2SWP1I',
+    'white noise': 'https://www.youtube.com/watch?v=nMfPqeZjc2c',
+    'brown noise': 'https://www.youtube.com/watch?v=RqzGzwTY-6w',
     'interstellar': 'https://www.youtube.com/watch?v=UDVtMYqUAyw',
     'hans zimmer': 'https://www.youtube.com/watch?v=UDVtMYqUAyw',
-    'lofi girl': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
     'study beats': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    'coffee': 'https://www.youtube.com/watch?v=5qap5aO4i9A'
+    'coffee': 'https://www.youtube.com/watch?v=5qap5aO4i9A',
+    'hip hop': 'https://www.youtube.com/watch?v=lTRiuFIWV54',
+    'drake': 'https://www.youtube.com/watch?v=uxpDa-c-4Mc',
+    'kendrick': 'https://www.youtube.com/watch?v=TVSFo0m28WA',
+    'travis scott': 'https://www.youtube.com/watch?v=6ONRf7h3Mdk',
+    'juice wrld': 'https://www.youtube.com/watch?v=RRhon5OM3L4',
+    'xxxtentacion': 'https://www.youtube.com/watch?v=i1sCUkhOv8E',
+    'pop smoke': 'https://www.youtube.com/watch?v=Jm3Lp0E6iFo',
+    'taylor swift': 'https://www.youtube.com/watch?v=nfWlot6h_JM',
+    'ariana grande': 'https://www.youtube.com/watch?v=GL1LzZFZn7Y',
+    'billie eilish': 'https://www.youtube.com/watch?v=DyDfgMOUjCI',
+    'the weeknd': 'https://www.youtube.com/watch?v=XXYlFuWEuKI',
+    'weeknd': 'https://www.youtube.com/watch?v=XXYlFuWEuKI',
+    'bad bunny': 'https://www.youtube.com/watch?v=BL36MsXFWZc',
+    'olivia rodrigo': 'https://www.youtube.com/watch?v=ZmDBbnmKpqQ',
+    'doja cat': 'https://www.youtube.com/watch?v=pok8BdcORGc',
+    'harry styles': 'https://www.youtube.com/watch?v=H5v3kku4y6Q',
+    'ed sheeran': 'https://www.youtube.com/watch?v=JJbMQFaUFqE',
+    'post malone': 'https://www.youtube.com/watch?v=ApXoWvfEYVU',
+    'eminem': 'https://www.youtube.com/watch?v=uelHwf8o7_U',
+    'rap': 'https://www.youtube.com/watch?v=lTRiuFIWV54',
+    'rnb': 'https://www.youtube.com/watch?v=Km9RxCMsqTA',
+    'r&b': 'https://www.youtube.com/watch?v=Km9RxCMsqTA',
+    'k-pop': 'https://www.youtube.com/watch?v=gdZLi9oWNZg',
+    'bts': 'https://www.youtube.com/watch?v=MBdVXkSdhwU',
+    'blackpink': 'https://www.youtube.com/watch?v=ioNng23DkIM',
+    'anime': 'https://www.youtube.com/watch?v=lDfSXBbBYnM',
+    'naruto': 'https://www.youtube.com/watch?v=dR3bpQQHUMY',
+    'phonk': 'https://www.youtube.com/watch?v=3sHBejEyI5I',
+    'motivational': 'https://www.youtube.com/watch?v=y49KQx3Y8vk',
+    'focus': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    'deep work': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
+    'gaming': 'https://www.youtube.com/watch?v=3nQNiWdeH2Q',
+    'epic': 'https://www.youtube.com/watch?v=pItWERCSECg',
+    'workout': 'https://www.youtube.com/watch?v=lbf8KqVbAYg',
   };
 
+  let url = null;
   for (const [key, streamUrl] of Object.entries(curatedStreams)) {
     if (lower.includes(key)) {
       url = streamUrl;
@@ -3481,24 +3553,49 @@ function playCuratedOrSearchedYouTube(queryOrUrl) {
     }
   }
 
-  if (!url.startsWith('http') && !url.includes('youtu')) {
-    url = `https://www.youtube.com/results?search_query=${encodeURIComponent(raw)}`;
+  if (url) {
+    // Curated match — play directly
+    const ytInput = document.getElementById('yt-song-input');
+    if (ytInput) ytInput.value = url;
+    const drawer = document.getElementById('yt-drawer-content');
+    const icon = document.getElementById('yt-drawer-icon');
+    if (drawer && drawer.classList.contains('hidden')) {
+      drawer.classList.remove('hidden');
+      if (icon) icon.textContent = '▲';
+    }
+    isYTPlaying = false;
+    toggleYouTubePlayback();
+    showInAppNotification(`🎵 Playing: ${raw}`);
+  } else {
+    // No curated match — search YouTube via server and play first result
+    showInAppNotification(`🔍 Searching YouTube for: "${raw}"...`);
+    fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(raw)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.video_url) {
+          const ytInput = document.getElementById('yt-song-input');
+          if (ytInput) ytInput.value = data.video_url;
+          const drawer = document.getElementById('yt-drawer-content');
+          const icon = document.getElementById('yt-drawer-icon');
+          if (drawer && drawer.classList.contains('hidden')) {
+            drawer.classList.remove('hidden');
+            if (icon) icon.textContent = '▲';
+          }
+          isYTPlaying = false;
+          toggleYouTubePlayback();
+          showInAppNotification(`🎵 Now playing: ${data.title || raw}`);
+        } else {
+          // Final fallback: open YouTube search in soundscape input
+          const fallbackUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(raw)}`;
+          const ytInput = document.getElementById('yt-song-input');
+          if (ytInput) ytInput.value = fallbackUrl;
+          showInAppNotification(`🎵 Search loaded — press Play for: ${raw}`);
+        }
+      })
+      .catch(() => {
+        showInAppNotification(`⚠️ Couldn't find "${raw}" — try a YouTube URL directly in Soundscape.`);
+      });
   }
-
-  const ytInput = document.getElementById('yt-song-input');
-  if (ytInput) ytInput.value = url;
-
-  // Open YouTube player drawer in Home tab so it is immediately visible
-  const drawer = document.getElementById('yt-drawer-content');
-  const icon = document.getElementById('yt-drawer-icon');
-  if (drawer && drawer.classList.contains('hidden')) {
-    drawer.classList.remove('hidden');
-    if (icon) icon.textContent = '▲';
-  }
-
-  isYTPlaying = false;
-  toggleYouTubePlayback();
-  showInAppNotification(`🎵 Loading on YouTube: ${raw}`);
 }
 
 // ===== CUSTOM IN-APP MODAL FOR CLEARING GEMINI HISTORY =====
@@ -3599,12 +3696,14 @@ function syncUserStatsToServer() {
   clearTimeout(statsSyncDebounceTimer);
   statsSyncDebounceTimer = setTimeout(() => {
     const owner = googleAccount || userName || 'Guest';
-    const lifetimeCoins = getLifetimeCoins();
+    // Save raw bonus_xp (manually awarded coins) — this is what we restore cross-device
+    const rawBonusXP = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
     const currentCoins = getUserCoinsBalance();
     const sessions = allData.filter(d => d.type === 'focus_session');
     const mins = sessions.reduce((sum, s) => sum + (s.minutes || 0), 0);
     const tasks = allData.filter(d => d.type === 'task');
     const completedTasks = tasks.filter(t => t.completed).length;
+    const streak = parseInt(localStorage.getItem('hdsfd_streak_days') || '1', 10);
 
     fetch(`${API_BASE}/user/stats`, {
       method: 'POST',
@@ -3612,10 +3711,10 @@ function syncUserStatsToServer() {
       body: JSON.stringify({
         username: owner,
         coins: currentCoins,
-        lifetime_xp: lifetimeCoins,
+        lifetime_xp: rawBonusXP,
         focus_mins: mins,
         tasks_done: completedTasks,
-        streak: 1,
+        streak: streak,
         upgrades: JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]')
       })
     }).catch(() => {});
@@ -4619,6 +4718,8 @@ function awardActivityCoins(baseAmount, activityName) {
     showInAppNotification(`✨ +${actualAmount} 🪙 earned (${activityName})!`);
   }
   checkStageMilestoneBonus();
+  // Sync to server so coins persist across devices
+  syncUserStatsToServer();
 }
 
 function deductActivityCoins(baseAmount, reason) {
@@ -4628,6 +4729,8 @@ function deductActivityCoins(baseAmount, reason) {
   if (reason) {
     showInAppNotification(`🔻 -${baseAmount} 🪙 (${reason})`);
   }
+  // Sync to server so deductions persist across devices
+  syncUserStatsToServer();
 }
 
 // 100+ Dynamic Sanctuary Tree Stages Engine
