@@ -1937,7 +1937,52 @@ def google_calendar_api():
             {"id": "cal_2", "summary": "Math Midterm Review", "start": "2026-08-22T14:00:00Z", "htmlLink": "https://calendar.google.com"}
         ])
 
+
+# ===== YOUTUBE SEARCH ENDPOINT =====
+@app.route('/api/youtube/search', methods=['GET'])
+def youtube_search():
+    """Search YouTube for a query and return the first video URL and title."""
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify({'error': 'No query provided'}), 400
+
+    try:
+        import urllib.request
+        import re as _re
+
+        # Use YouTube's search suggestions / scrape approach without API key
+        search_url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"
+        headers_req = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+        }
+        req = urllib.request.Request(search_url, headers=headers_req)
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+
+        # Extract video IDs from YouTube search results page
+        video_ids = _re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
+        titles = _re.findall(r'"title":{"runs":\[{"text":"([^"]+)"', html)
+
+        if video_ids:
+            vid = video_ids[0]
+            title = titles[0] if titles else query
+            return jsonify({
+                'video_id': vid,
+                'video_url': f'https://www.youtube.com/watch?v={vid}',
+                'title': title,
+                'query': query
+            })
+        else:
+            return jsonify({'error': 'No results found', 'query': query}), 404
+
+    except Exception as e:
+        logger.warning(f"YouTube search error for '{query}': {e}")
+        return jsonify({'error': str(e), 'query': query}), 500
+
+
 if __name__ == '__main__':
+
     init_db()
     print("Starting HD SFD V2 Clean Server on http://localhost:5050...")
     app.run(port=5050, debug=False, use_reloader=False)
