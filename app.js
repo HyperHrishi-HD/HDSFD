@@ -3106,6 +3106,160 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+// ===== HDSFD ACCOUNT + SCHOOL CONNECT =====
+function getHdsfdToken() {
+  return localStorage.getItem('hdsfd_auth_token') || null;
+}
+
+async function hdsfdLogin() {
+  const userEl = document.getElementById('school-login-username');
+  const passEl = document.getElementById('school-login-password');
+  const resultEl = document.getElementById('school-import-result');
+  if (!userEl || !passEl) return;
+  const username = userEl.value.trim();
+  const password = passEl.value;
+  if (username.length < 3 || password.length < 8) {
+    if (resultEl) {
+      resultEl.classList.remove('hidden');
+      resultEl.innerHTML = '<span class="text-amber-300">Username must be 3+ characters and password 8+ characters.</span>';
+    }
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.status !== 'success') {
+      if (resultEl) {
+        resultEl.classList.remove('hidden');
+        resultEl.innerHTML = `<span class="text-rose-300">${escapeHtml(data.message || 'Sign in failed')}</span>`;
+      }
+      return;
+    }
+    localStorage.setItem('hdsfd_auth_token', data.token);
+    localStorage.setItem('hdsfd_auth_user', data.username);
+    localStorage.setItem('hdsfd_auth_expires', data.expires_at);
+    passEl.value = '';
+    updateSchoolAccountUI();
+    refreshSchoolStatus();
+  } catch (err) {
+    if (resultEl) {
+      resultEl.classList.remove('hidden');
+      resultEl.innerHTML = '<span class="text-rose-300">Network error — could not reach the server.</span>';
+    }
+  }
+}
+
+async function hdsfdLogout() {
+  const token = getHdsfdToken();
+  if (token) {
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+    } catch (err) { /* token cleared locally regardless */ }
+  }
+  localStorage.removeItem('hdsfd_auth_token');
+  localStorage.removeItem('hdsfd_auth_user');
+  localStorage.removeItem('hdsfd_auth_expires');
+  updateSchoolAccountUI();
+}
+
+function updateSchoolAccountUI() {
+  const token = getHdsfdToken();
+  const user = localStorage.getItem('hdsfd_auth_user');
+  const loginForm = document.getElementById('school-login-form');
+  const accountView = document.getElementById('school-account-view');
+  const nameEl = document.getElementById('school-account-name');
+  const badge = document.getElementById('school-status-badge');
+  if (token && user) {
+    if (loginForm) loginForm.classList.add('hidden');
+    if (accountView) accountView.classList.remove('hidden');
+    if (nameEl) nameEl.textContent = user;
+    if (badge) {
+      badge.textContent = `Synced (${user})`;
+      badge.className = 'text-[9px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded font-bold';
+    }
+  } else {
+    if (loginForm) loginForm.classList.remove('hidden');
+    if (accountView) accountView.classList.add('hidden');
+    if (badge) {
+      badge.textContent = 'Guest Mode';
+      badge.className = 'text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold';
+    }
+  }
+}
+
+async function schoolImportFile() {
+  const fileEl = document.getElementById('school-import-file');
+  const resultEl = document.getElementById('school-import-result');
+  const token = getHdsfdToken();
+  if (!resultEl) return;
+  if (!token) {
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = '<span class="text-amber-300">Sign in to your HDSFD account first.</span>';
+    return;
+  }
+  if (!fileEl || !fileEl.files || !fileEl.files[0]) {
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = '<span class="text-amber-300">Choose a .ics or .csv file to import.</span>';
+    return;
+  }
+  const file = fileEl.files[0];
+  if (file.size > 1500000) {
+    resultEl.classList.remove('hidden');
+    resultEl.innerHTML = '<span class="text-rose-300">File is too large (max 1.5 MB).</span>';
+    return;
+  }
+  const format = file.name.toLowerCase().endsWith('.ics') ? 'ics' : 'csv';
+  resultEl.classList.remove('hidden');
+  resultEl.innerHTML = '<span class="text-white/50">Importing…</span>';
+  try {
+    const form = new FormData();
+    form.append('format', format);
+    form.append('file', file);
+    const res = await fetch(`${API_BASE}/school/import`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      resultEl.innerHTML = `<span class="text-rose-300">${escapeHtml(data.message || 'Import failed')}</span>`;
+      return;
+    }
+    const imp = data.import || {};
+    if (data.duplicate) {
+      resultEl.innerHTML = '<span class="text-amber-300">Already imported — no duplicates created.</span>';
+      return;
+    }
+    const warnCount = (imp.warnings || []).length;
+    resultEl.innerHTML = `<span class="text-emerald-300">Imported ${imp.created_count || 0} new, updated ${imp.updated_count || 0}.</span>` +
+      (warnCount ? `<span class="text-amber-300"> ${warnCount} warning(s).</span>` : '');
+    fileEl.value = '';
+  } catch (err) {
+    resultEl.innerHTML = '<span class="text-rose-300">Network error — import failed.</span>';
+  }
+}
+
+async function refreshSchoolStatus() {
+  const token = getHdsfdToken();
+  if (!token) return;
+  try {
+    const res = await fetch(`${API_BASE}/school/sources`, {
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (res.status === 401) {
+      // Session expired — clear stale token so the sign-in form reappears.
+      await hdsfdLogout();
+    }
+  } catch (err) { /* offline: keep showing signed-in state from localStorage */ }
+}
+
 async function loadGeminiChatHistory() {
   const stream = document.getElementById('gemini-agent-chat-stream');
   const userBadge = document.getElementById('gemini-user-email-text');
@@ -5738,6 +5892,8 @@ document.addEventListener('DOMContentLoaded', () => {
   renderExamCardsList();
   updateShopCardsUI();
   handleGoogleFirstTimeReward();
+  updateSchoolAccountUI();
+  refreshSchoolStatus();
   refreshIcons();
 
   // Passive income & decay checker interval (every 10 minutes)
