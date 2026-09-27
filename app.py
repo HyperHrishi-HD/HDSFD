@@ -7,6 +7,39 @@ import urllib.parse
 import datetime
 import threading
 import base64
+import hashlib
+import secrets
+import uuid
+from datetime import timedelta, timezone
+
+try:
+    from backend.school_connect import (
+        SUPPORTED_PROVIDERS,
+        clean_text,
+        default_source_id,
+        ensure_school_tables,
+        new_source_id,
+        now_iso,
+        parse_import,
+        public_source,
+        record_payload,
+        serialize_record,
+        validate_source_payload,
+    )
+except ImportError:
+    from school_connect import (
+        SUPPORTED_PROVIDERS,
+        clean_text,
+        default_source_id,
+        ensure_school_tables,
+        new_source_id,
+        now_iso,
+        parse_import,
+        public_source,
+        record_payload,
+        serialize_record,
+        validate_source_payload,
+    )
 
 # Load-balanced Gemini API key pool from private secrets_config.json or environment variables
 GEMINI_KEY_POOL = []
@@ -65,11 +98,15 @@ try:
 except ImportError:
     has_cors = False
 
-os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+if os.environ.get('FLASK_ENV', '').lower() != 'production':
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
 app = Flask(__name__, static_folder='.', static_url_path='')
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'v2_clean_secret_key_987654321')
+configured_secret = os.environ.get('FLASK_SECRET_KEY')
+if not configured_secret and os.environ.get('FLASK_ENV', '').lower() == 'production':
+    raise RuntimeError('FLASK_SECRET_KEY must be configured in production')
+app.secret_key = configured_secret or os.environ.get('HDSFD_DEV_SECRET', 'hdsfd-local-development-secret')
 
 if has_cors:
     CORS(app)
@@ -102,9 +139,23 @@ def init_db():
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
             username TEXT PRIMARY KEY,
+            password_hash TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    try:
+        cursor.execute('ALTER TABLE users ADD COLUMN password_hash TEXT')
+    except Exception:
+        pass
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            token_hash TEXT PRIMARY KEY,
+            username TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    ensure_school_tables(conn)
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS items (
             id TEXT PRIMARY KEY,
@@ -150,6 +201,64 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
+
+SESSION_TTL_SECONDS = int(os.environ.get('HDSFD_SESSION_TTL', str(60 * 60 * 24 * 30)))
+
+
+def hash_password(password):
+    return hashlib.scrypt(
+        str(password).encode('utf-8'),
+        salt=app.secret_key.encode('utf-8')[:16],
+        n=16384,
+        r=8,
+        p=1,
+    ).hex()
+
+
+def issue_session(username):
+    raw_token = secrets.token_urlsafe(32)
+    token_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+    expires = datetime.datetime.now(timezone.utc) + timedelta(seconds=SESSION_TTL_SECONDS)
+    conn = get_db()
+    conn.execute(
+        'INSERT INTO sessions (token_hash, username, expires_at) VALUES (?, ?, ?)',
+        (token_hash, username, expires.isoformat()),
+    )
+    conn.commit()
+    conn.close()
+    return raw_token, expires
+
+
+def current_user():
+    header = request.headers.get('Authorization', '')
+    if not header.startswith('Bearer '):
+        return None
+    raw_token = header[7:].strip()
+    if not raw_token:
+        return None
+    token_hash = hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT username, expires_at FROM sessions WHERE token_hash = ?',
+        (token_hash,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return None
+    try:
+        if datetime.datetime.fromisoformat(row['expires_at']) <= datetime.datetime.now(timezone.utc):
+            return None
+    except (TypeError, ValueError):
+        return None
+    return row['username']
+
+
+def require_owner(username=None):
+    owner = current_user()
+    if owner and (username is None or owner == username):
+        return owner
+    return None
+
 
 def save_user_tokens(username, creds, display_name=None):
     if not username or not creds:
@@ -216,6 +325,74 @@ def get_google_credentials(username=None):
         logger.warning(f"Error loading credentials: {e}")
         return None
 
+@app.route('/api/auth/login', methods=['POST'])
+def hdsfd_login():
+    data = request.get_json(silent=True) or {}
+    username = str(data.get('username', '')).strip()
+    password = data.get('password')
+    if len(username) < 3 or len(username) > 120 or not password:
+        return jsonify({'status': 'error', 'message': 'A username (3-120 characters) and password are required'}), 400
+    if any(char in username for char in '/\\?&#'):
+        return jsonify({'status': 'error', 'message': 'Username contains invalid characters'}), 400
+    if len(str(password)) < 8:
+        return jsonify({'status': 'error', 'message': 'Password must be at least 8 characters'}), 400
+
+    password_hash = hash_password(password)
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT username, password_hash FROM users WHERE username = ?', (username,)).fetchone()
+        if row and row['password_hash'] and not secrets.compare_digest(row['password_hash'], password_hash):
+            return jsonify({'status': 'error', 'message': 'Incorrect password'}), 401
+        if row and not row['password_hash']:
+            conn.execute('UPDATE users SET password_hash = ? WHERE username = ?', (password_hash, username))
+        elif not row:
+            conn.execute('INSERT INTO users (username, password_hash) VALUES (?, ?)', (username, password_hash))
+        conn.commit()
+    finally:
+        conn.close()
+
+    token, expires = issue_session(username)
+    return jsonify({
+        'status': 'success',
+        'username': username,
+        'token': token,
+        'expires_at': expires.isoformat(),
+        'new_user': row is None,
+    })
+
+
+@app.route('/api/auth/logout', methods=['POST'])
+def hdsfd_logout():
+    header = request.headers.get('Authorization', '')
+    if header.startswith('Bearer '):
+        token_hash = hashlib.sha256(header[7:].strip().encode('utf-8')).hexdigest()
+        conn = get_db()
+        conn.execute('DELETE FROM sessions WHERE token_hash = ?', (token_hash,))
+        conn.commit()
+        conn.close()
+    return jsonify({'status': 'success'})
+
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Unauthenticated liveness probe used by CI/CD health checks."""
+    db_ok = False
+    conn = None
+    try:
+        conn = get_db()
+        conn.execute('SELECT 1')
+        db_ok = True
+    except Exception:
+        logger.exception('Health check database probe failed')
+    finally:
+        if conn is not None:
+            conn.close()
+    return jsonify({
+        'status': 'ok' if db_ok else 'degraded',
+        'database': 'ok' if db_ok else 'error',
+    }), 200 if db_ok else 503
+
+
 @app.route('/api/google/status', methods=['GET'])
 def get_google_status():
     requested_username = request.args.get('username') or request.args.get('email')
@@ -250,6 +427,356 @@ def get_google_status():
         "email": None,
         "name": None
     })
+
+
+# --- SCHOOL CONNECT: provider-neutral, read-only academic imports ---
+SCHOOL_PROVIDER_INFO = {
+    "ics": {"label": "Calendar export", "mode": "import", "read_only": True},
+    "csv": {"label": "Assignment CSV", "mode": "import", "read_only": True},
+    "google_classroom": {"label": "Google Classroom", "mode": "official_oauth", "read_only": True},
+    "canvas": {"label": "Canvas", "mode": "official_oauth", "read_only": True},
+    "schoology": {"label": "Schoology", "mode": "official_oauth", "read_only": True},
+    "classlink": {"label": "ClassLink", "mode": "official_oauth", "read_only": True},
+    "clever": {"label": "Clever", "mode": "official_oauth", "read_only": True},
+    "hac": {"label": "Home Access Center", "mode": "official_api_required", "read_only": True},
+    "powerschool": {"label": "PowerSchool", "mode": "official_api_required", "read_only": True},
+}
+
+
+def school_owner():
+    return current_user()
+
+
+def school_json_payload():
+    payload = request.get_json(silent=True)
+    if isinstance(payload, dict):
+        return payload
+    if request.form:
+        return request.form.to_dict()
+    return {}
+
+
+def school_import_input():
+    payload = school_json_payload()
+    if request.files:
+        upload = request.files.get('file')
+        if upload:
+            content = upload.read()
+            filename = upload.filename or ''
+            import_format = clean_text(payload.get('format'), 10).lower() or (
+                'ics' if filename.lower().endswith('.ics') else 'csv'
+            )
+            return import_format, content, payload
+    content = payload.get('content')
+    if content is None:
+        raise ValueError('Import content is required')
+    return clean_text(payload.get('format'), 10).lower(), content, payload
+
+
+def school_source_row(conn, owner, source_id):
+    return conn.execute(
+        'SELECT * FROM school_sources WHERE owner = ? AND id = ?',
+        (owner, source_id),
+    ).fetchone()
+
+
+def school_public_records(conn, owner, source_id=None):
+    query = 'SELECT id, payload, created_at, updated_at FROM school_records WHERE owner = ?'
+    params = [owner]
+    if source_id:
+        query += ' AND source_id = ?'
+        params.append(source_id)
+    query += ' ORDER BY updated_at DESC, id ASC LIMIT 1000'
+    records = []
+    for row in conn.execute(query, params).fetchall():
+        try:
+            payload = json.loads(row['payload'])
+        except (TypeError, ValueError):
+            continue
+        payload.update({
+            'id': row['id'],
+            'created_at': row['created_at'],
+            'updated_at': row['updated_at'],
+        })
+        records.append(payload)
+    return records
+
+
+@app.route('/api/school/providers', methods=['GET'])
+def school_providers():
+    return jsonify([
+        {'id': provider, **SCHOOL_PROVIDER_INFO[provider]}
+        for provider in SUPPORTED_PROVIDERS
+        if provider in SCHOOL_PROVIDER_INFO
+    ])
+
+
+@app.route('/api/school/sources', methods=['GET', 'POST'])
+def school_sources():
+    owner = school_owner()
+    if not owner:
+        return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
+    conn = get_db()
+    try:
+        ensure_school_tables(conn)
+        if request.method == 'GET':
+            rows = conn.execute(
+                'SELECT * FROM school_sources WHERE owner = ? ORDER BY updated_at DESC',
+                (owner,),
+            ).fetchall()
+            return jsonify([public_source(row) for row in rows])
+
+        payload = school_json_payload()
+        try:
+            source_data = validate_source_payload(payload)
+        except ValueError as exc:
+            return jsonify({'status': 'error', 'message': str(exc)}), 400
+        requested_id = clean_text(payload.get('id') or payload.get('source_id'), 100)
+        if requested_id and not all(char.isalnum() or char in '_-' for char in requested_id):
+            return jsonify({'status': 'error', 'message': 'Invalid source ID'}), 400
+        source_id = requested_id or new_source_id()
+        existing = conn.execute(
+            'SELECT owner FROM school_sources WHERE id = ?', (source_id,)
+        ).fetchone()
+        if existing and existing['owner'] != owner:
+            return jsonify({'status': 'error', 'message': 'Source ID is already in use'}), 409
+        conn.execute(
+            '''
+            INSERT INTO school_sources
+              (id, owner, provider, display_name, external_url, status, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(id) DO UPDATE SET
+              provider = excluded.provider,
+              display_name = excluded.display_name,
+              external_url = excluded.external_url,
+              status = excluded.status,
+              updated_at = CURRENT_TIMESTAMP
+            ''',
+            (
+                source_id,
+                owner,
+                source_data['provider'],
+                source_data['display_name'],
+                source_data['external_url'],
+                source_data['status'],
+            ),
+        )
+        conn.commit()
+        return jsonify(public_source(school_source_row(conn, owner, source_id))), 201
+    finally:
+        conn.close()
+
+
+@app.route('/api/school/sources/<path:source_id>', methods=['GET', 'DELETE'])
+def school_source_detail(source_id):
+    owner = school_owner()
+    if not owner:
+        return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
+    conn = get_db()
+    try:
+        row = school_source_row(conn, owner, source_id)
+        if not row:
+            return jsonify({'status': 'error', 'message': 'School source not found'}), 404
+        if request.method == 'GET':
+            return jsonify({
+                'source': public_source(row),
+                'records': school_public_records(conn, owner, source_id),
+            })
+        conn.execute('DELETE FROM school_records WHERE owner = ? AND source_id = ?', (owner, source_id))
+        conn.execute('DELETE FROM school_imports WHERE owner = ? AND source_id = ?', (owner, source_id))
+        conn.execute('DELETE FROM school_sources WHERE owner = ? AND id = ?', (owner, source_id))
+        conn.commit()
+        return jsonify({'status': 'deleted', 'source_id': source_id})
+    finally:
+        conn.close()
+
+
+@app.route('/api/school/records', methods=['GET'])
+def school_records():
+    owner = school_owner()
+    if not owner:
+        return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
+    source_id = clean_text(request.args.get('source_id'), 100) or None
+    conn = get_db()
+    try:
+        if source_id and not school_source_row(conn, owner, source_id):
+            return jsonify({'status': 'error', 'message': 'School source not found'}), 404
+        ensure_school_tables(conn)
+        return jsonify(school_public_records(conn, owner, source_id))
+    finally:
+        conn.close()
+
+
+@app.route('/api/school/imports', methods=['GET'])
+def school_imports():
+    owner = school_owner()
+    if not owner:
+        return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
+    conn = get_db()
+    try:
+        ensure_school_tables(conn)
+        rows = conn.execute(
+            '''
+            SELECT id, source_id, import_format, content_hash, imported_count,
+                   created_count, updated_count, warnings_json, created_at
+            FROM school_imports
+            WHERE owner = ?
+            ORDER BY created_at DESC
+            LIMIT 100
+            ''',
+            (owner,),
+        ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item['warnings'] = json.loads(item.pop('warnings_json'))
+            except (TypeError, ValueError):
+                item['warnings'] = []
+            result.append(item)
+        return jsonify(result)
+    finally:
+        conn.close()
+
+
+@app.route('/api/school/import', methods=['POST'])
+def school_import():
+    owner = school_owner()
+    if not owner:
+        return jsonify({'status': 'error', 'message': 'Authentication required'}), 401
+    try:
+        import_format, content, payload = school_import_input()
+        parsed = parse_import(import_format, content)
+    except ValueError as exc:
+        return jsonify({'status': 'error', 'message': str(exc)}), 400
+
+    source_id = clean_text(payload.get('source_id'), 100) or default_source_id(owner, parsed['format'])
+    if not all(char.isalnum() or char in '_-' for char in source_id):
+        return jsonify({'status': 'error', 'message': 'Invalid source ID'}), 400
+    conn = get_db()
+    try:
+        ensure_school_tables(conn)
+        source = school_source_row(conn, owner, source_id)
+        if not source:
+            provider = parsed['format']
+            display_name = 'Calendar import' if provider == 'ics' else 'Assignment import'
+            conn.execute(
+                '''
+                INSERT INTO school_sources
+                  (id, owner, provider, display_name, status, updated_at)
+                VALUES (?, ?, ?, ?, 'ready', CURRENT_TIMESTAMP)
+                ''',
+                (source_id, owner, provider, display_name),
+            )
+            source = school_source_row(conn, owner, source_id)
+
+        duplicate = conn.execute(
+            '''
+            SELECT id, imported_count, created_count, updated_count, warnings_json, created_at
+            FROM school_imports
+            WHERE owner = ? AND source_id = ? AND content_hash = ?
+            ''',
+            (owner, source_id, parsed['content_hash']),
+        ).fetchone()
+        if duplicate:
+            return jsonify({
+                'status': 'duplicate',
+                'duplicate': True,
+                'source': public_source(source),
+                'import': {
+                    'id': duplicate['id'],
+                    'imported_count': duplicate['imported_count'],
+                    'created_count': duplicate['created_count'],
+                    'updated_count': duplicate['updated_count'],
+                    'warnings': json.loads(duplicate['warnings_json'] or '[]'),
+                    'created_at': duplicate['created_at'],
+                },
+                'records': school_public_records(conn, owner, source_id),
+            })
+
+        imported_at = now_iso()
+        created_count = 0
+        updated_count = 0
+        result_records = []
+        for record in parsed['records']:
+            payload_record = record_payload(record, owner, source_id, imported_at)
+            serialized = serialize_record(payload_record)
+            existing = conn.execute(
+                'SELECT id FROM school_records WHERE owner = ? AND source_id = ? AND external_id = ?',
+                (owner, source_id, record['external_id']),
+            ).fetchone()
+            if existing:
+                record_id = existing['id']
+                conn.execute(
+                    '''
+                    UPDATE school_records
+                    SET record_type = ?, payload = ?, content_hash = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE owner = ? AND source_id = ? AND external_id = ?
+                    ''',
+                    (
+                        record['record_type'], serialized, parsed['content_hash'],
+                        owner, source_id, record['external_id'],
+                    ),
+                )
+                updated_count += 1
+            else:
+                record_id = str(uuid.uuid4())
+                conn.execute(
+                    '''
+                    INSERT INTO school_records
+                      (id, owner, source_id, external_id, record_type, payload, content_hash, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ''',
+                    (
+                        record_id, owner, source_id, record['external_id'],
+                        record['record_type'], serialized, parsed['content_hash'],
+                    ),
+                )
+                created_count += 1
+            output = dict(payload_record)
+            output['id'] = record_id
+            result_records.append(output)
+
+        import_id = str(uuid.uuid4())
+        conn.execute(
+            '''
+            INSERT INTO school_imports
+              (id, owner, source_id, import_format, content_hash, imported_count,
+               created_count, updated_count, warnings_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            (
+                import_id, owner, source_id, parsed['format'], parsed['content_hash'],
+                len(parsed['records']), created_count, updated_count,
+                json.dumps(parsed['warnings'], ensure_ascii=True),
+            ),
+        )
+        conn.execute(
+            "UPDATE school_sources SET status = 'ready', updated_at = CURRENT_TIMESTAMP WHERE owner = ? AND id = ?",
+            (owner, source_id),
+        )
+        conn.commit()
+        source = school_source_row(conn, owner, source_id)
+        return jsonify({
+            'status': 'success',
+            'duplicate': False,
+            'source': public_source(source),
+            'import': {
+                'id': import_id,
+                'imported_count': len(parsed['records']),
+                'created_count': created_count,
+                'updated_count': updated_count,
+                'warnings': parsed['warnings'],
+                'content_hash': parsed['content_hash'],
+            },
+            'records': result_records,
+        }), 201
+    except Exception:
+        conn.rollback()
+        logger.exception('School Connect import failed')
+        return jsonify({'status': 'error', 'message': 'School import could not be saved'}), 500
+    finally:
+        conn.close()
 
 @app.route('/api/user/stats', methods=['GET', 'POST'])
 def handle_user_stats():
