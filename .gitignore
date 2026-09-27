@@ -4,6 +4,7 @@ dist/
 __pycache__/
 *.db
 *.log
+*.migration_manifest.json
 .DS_Store
 *credentials*.json
 google_credentials.json
