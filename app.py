@@ -3070,6 +3070,18 @@ def youtube_search():
         return jsonify({'error': str(e), 'query': query}), 500
 
 
+@app.errorhandler(404)
+def hdsfd_not_found(error):
+    """API callers get JSON; browsers still get the default 404 page."""
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'status': 'error',
+            'message': 'Unknown API endpoint',
+            'path': request.path,
+        }), 404
+    return error
+
+
 if __name__ == '__main__':
 
     init_db()
