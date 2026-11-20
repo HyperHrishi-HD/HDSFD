@@ -19,3 +19,4 @@ backend/.enc_key
 *.migration_manifest.json
 
 
+.pa-token
