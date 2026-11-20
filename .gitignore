@@ -11,4 +11,11 @@ google_credentials.json
 secrets_config.json
 .env*
 backups/
+shots/
+*.mp4
+v2_clean/backups/
+backend/backups/
+backend/.enc_key
+*.migration_manifest.json
+
 

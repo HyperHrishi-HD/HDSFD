@@ -7,6 +7,14 @@ let activeTab = 'focus';
 let allData = [];
 let isLowPowerMode = localStorage.getItem('hdsfd_low_power') === 'true';
 
+// Applies the saved low-power preference. (Previously called but never defined,
+// which threw during startup and aborted the rest of the init sequence.)
+function applyLowPowerState() {
+  const root = document.documentElement;
+  root.classList.toggle('low-power-mode', !!isLowPowerMode);
+  root.classList.toggle('reduce-motion', !!isLowPowerMode);
+}
+
 // Audio Synthesizer State
 let isPlayingSoundscape = false;
 let audioContext = null;
@@ -226,16 +234,20 @@ function triggerGoogleBackup() {
   const schedules = allData.filter(d => d.type === 'schedule_entry');
   const exams = allData.filter(d => d.type === 'exam_entry');
   
+  const focusMins = allData
+    .filter(d => d.type === 'focus_session')
+    .reduce((sum, session) => sum + (session.minutes || 0), 0);
+
   const fullContext = {
     username: owner,
     google_account: googleAccount,
     timestamp: new Date().toISOString(),
     stats: {
-      coins: userCoins,
-      lifetime_xp: userLifetimeXP,
-      focus_time_mins: totalFocusTimeMinutes,
-      tasks_completed: totalTasksCompleted,
-      streak_days: currentStreakDays
+      coins: typeof getUserCoinsBalance === 'function' ? getUserCoinsBalance() : 0,
+      lifetime_xp: typeof getLifetimeCoins === 'function' ? getLifetimeCoins() : 0,
+      focus_time_mins: focusMins,
+      tasks_completed: tasks.filter(t => t.completed).length,
+      streak_days: parseInt(localStorage.getItem('hdsfd_streak_days') || '1', 10)
     },
     notes: notes,
     tasks: tasks,
@@ -263,13 +275,13 @@ function triggerGoogleBackup() {
   .then(res => res.json())
   .then(res => {
     if (msgEl) {
-      msgEl.textContent = res.drive_synced ? '✅ Backup saved to Google Drive (Notes.json, data.db, ai.json)!' : '⚠️ Saved locally.';
+      msgEl.textContent = res.drive_synced ? 'Backup saved to Google Drive (Notes.json, data.db, ai.json).' : 'Saved locally.';
       setTimeout(() => msgEl.classList.add('hidden'), 4000);
     }
   })
   .catch(() => {
     if (msgEl) {
-      msgEl.textContent = '⚠️ Backup error occurred.';
+      msgEl.textContent = 'Backup error occurred.';
       setTimeout(() => msgEl.classList.add('hidden'), 3000);
     }
   });
@@ -361,7 +373,7 @@ function initializeUserSession() {
   userName = displayName;
   
   const hasCrown = localStorage.getItem('hdsfd_has_crown') === 'true';
-  if (nameDisplay) nameDisplay.textContent = (hasCrown ? '👑 ' : '') + displayName;
+  if (nameDisplay) nameDisplay.textContent = displayName;
   if (settingsInput && !settingsInput.matches(':focus')) settingsInput.value = displayName;
 
   const activeName = googleAccount || userName || 'Guest';
@@ -607,8 +619,8 @@ function populateTaskFolderMenus() {
   if (taskCreatorMenu) {
     taskCreatorMenu.innerHTML = folders.map(f => `
       <button type="button" onclick="selectTaskFolder('${f}')" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-purple-500/20 text-xs flex items-center justify-between transition-all ${selectedNewTaskFolder === f ? 'text-purple-300 font-bold bg-purple-500/10' : 'text-white/80'}">
-        <span class="truncate">📁 ${f}</span>
-        ${selectedNewTaskFolder === f ? '<span class="text-purple-300 text-[10px]">✓</span>' : ''}
+        <span class="truncate flex items-center gap-1.5">${hdsfdIcon('folder')} ${f}</span>
+        ${selectedNewTaskFolder === f ? `<span class="text-purple-300">${hdsfdIcon('check')}</span>` : ''}
       </button>
     `).join('');
   }
@@ -618,8 +630,8 @@ function populateTaskFolderMenus() {
   if (calDayMenu) {
     calDayMenu.innerHTML = folders.map(f => `
       <button type="button" onclick="selectCalDayFolder('${f}')" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-purple-500/20 text-xs flex items-center justify-between transition-all ${calDaySelectedFolder === f ? 'text-purple-300 font-bold bg-purple-500/10' : 'text-white/80'}">
-        <span class="truncate">📁 ${f}</span>
-        ${calDaySelectedFolder === f ? '<span class="text-purple-300 text-[10px]">✓</span>' : ''}
+        <span class="truncate flex items-center gap-1.5">${hdsfdIcon('folder')} ${f}</span>
+        ${calDaySelectedFolder === f ? `<span class="text-purple-300">${hdsfdIcon('check')}</span>` : ''}
       </button>
     `).join('');
   }
@@ -724,6 +736,9 @@ function renderDirectGTasks() {
     });
   }
 
+  const openCountEl = document.getElementById('tasks-open-count');
+  if (openCountEl) openCountEl.textContent = `${tasks.filter(t => !t.completed).length} open`;
+
   if (tasks.length === 0) {
     container.innerHTML = '<p class="text-white/40 text-xs italic text-center py-12">No tasks in this list. Add a task above!</p>';
     return;
@@ -747,20 +762,20 @@ function renderDirectGTasks() {
 
     let repeatLabel = '';
     if (t.repeat_config && t.repeat_config.unit) {
-      repeatLabel = `🔁 Every ${t.repeat_config.interval || 1} ${t.repeat_config.unit}`;
+      repeatLabel = `${hdsfdIcon('repeat')} Every ${t.repeat_config.interval || 1} ${t.repeat_config.unit}`;
       if (t.repeat_config.time) repeatLabel += ` (${t.repeat_config.time})`;
     } else if (t.repeat && t.repeat !== 'none') {
-      repeatLabel = `🔁 ${t.repeat}`;
+      repeatLabel = `${hdsfdIcon('repeat')} ${t.repeat}`;
     }
 
     return `
-      <div class="glass p-3 rounded-2xl border border-white/10 hover:border-purple-500/40 transition-all ${t.completed ? 'opacity-50' : ''} space-y-2" data-task-id="${t.id}">
+      <div class="glass task-card group p-2.5 rounded-xl border border-white/10 hover:border-purple-500/40 transition-all ${t.completed ? 'opacity-55' : ''} space-y-1.5" data-task-id="${t.id}">
         <div class="flex items-start justify-between gap-2">
           
-          <!-- Reorder Up/Down Buttons -->
-          <div class="flex flex-col gap-0.5 pt-0.5">
-            <button onclick="reorderTask('${t.id}', 'up')" class="w-4 h-4 rounded bg-white/5 hover:bg-white/20 text-[9px] text-white/60 hover:text-white flex items-center justify-center transition-all ${indexInPartition === 0 ? 'opacity-30 pointer-events-none' : ''}" title="Move Up">▲</button>
-            <button onclick="reorderTask('${t.id}', 'down')" class="w-4 h-4 rounded bg-white/5 hover:bg-white/20 text-[9px] text-white/60 hover:text-white flex items-center justify-center transition-all ${indexInPartition === partitionTotal - 1 ? 'opacity-30 pointer-events-none' : ''}" title="Move Down">▼</button>
+          <!-- Reorder Up/Down Buttons (appear on hover to keep the row calm) -->
+          <div class="flex flex-col gap-0.5 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+            <button onclick="reorderTask('${t.id}', 'up')" class="w-4 h-4 rounded bg-white/5 hover:bg-white/20 text-white/50 hover:text-white flex items-center justify-center transition-colors ${indexInPartition === 0 ? 'opacity-30 pointer-events-none' : ''}" title="Move Up">${hdsfdIcon('arrow-up')}</button>
+            <button onclick="reorderTask('${t.id}', 'down')" class="w-4 h-4 rounded bg-white/5 hover:bg-white/20 text-white/50 hover:text-white flex items-center justify-center transition-colors ${indexInPartition === partitionTotal - 1 ? 'opacity-30 pointer-events-none' : ''}" title="Move Down">${hdsfdIcon('arrow-down')}</button>
           </div>
 
           <div class="flex items-start gap-2.5 overflow-hidden flex-1">
@@ -772,10 +787,10 @@ function renderDirectGTasks() {
               
               <!-- Badges: Folder, Due Date/Time, Deadline, Repeat -->
               <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
-                ${t.folder ? `<span class="text-[9px] bg-purple-500/20 text-purple-200 border border-purple-500/30 px-1.5 py-0.2 rounded-md font-bold">📁 ${t.folder}</span>` : ''}
-                ${dueFormatted ? `<span class="text-[9px] bg-sky-500/20 text-sky-200 border border-sky-500/30 px-1.5 py-0.2 rounded-md font-bold">📅 ${dueFormatted}</span>` : ''}
-                ${deadlineFormatted ? `<span class="text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-1.5 py-0.2 rounded-md font-bold">🎯 Deadline: ${deadlineFormatted}</span>` : ''}
-                ${repeatLabel ? `<span class="text-[9px] bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-1.5 py-0.2 rounded-md font-bold">${repeatLabel}</span>` : ''}
+                ${t.folder ? `<span class="task-badge bg-purple-500/15 text-purple-200 border-purple-500/25">${hdsfdIcon('folder')} ${t.folder}</span>` : ''}
+                ${dueFormatted ? `<span class="task-badge bg-sky-500/15 text-sky-200 border-sky-500/25">${hdsfdIcon('calendar')} ${dueFormatted}</span>` : ''}
+                ${deadlineFormatted ? `<span class="task-badge bg-amber-500/15 text-amber-200 border-amber-500/25">${hdsfdIcon('target')} ${deadlineFormatted}</span>` : ''}
+                ${repeatLabel ? `<span class="task-badge bg-emerald-500/15 text-emerald-200 border-emerald-500/25">${repeatLabel}</span>` : ''}
               </div>
 
               <!-- Attachments Chips -->
@@ -783,7 +798,7 @@ function renderDirectGTasks() {
                 <div class="flex flex-wrap items-center gap-1.5 mt-1.5">
                   ${attachments.map(att => `
                     <a href="${att.url || '#'}" target="_blank" class="text-[9px] bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-200 border border-cyan-500/30 px-2 py-0.5 rounded-md font-bold flex items-center gap-1 transition-all">
-                      <span>📎</span> <span class="truncate max-w-[120px]">${att.name || 'Drive File'}</span> <span>↗</span>
+                      ${hdsfdIcon('paperclip')} <span class="truncate max-w-[120px]">${att.name || 'Drive File'}</span> ${hdsfdIcon('arrow-up-right')}
                     </a>
                   `).join('')}
                 </div>
@@ -793,8 +808,8 @@ function renderDirectGTasks() {
 
           <!-- Star & 3-Dots Button -->
           <div class="flex items-center gap-1">
-            <button onclick="toggleTaskImportance('${t.id}')" class="text-xs px-1 ${isImp ? 'text-amber-300' : 'text-white/20 hover:text-white/60'} transition-all" title="Toggle Starred">
-              ${isImp ? '⭐' : '☆'}
+            <button onclick="toggleTaskImportance('${t.id}')" class="px-1 ${isImp ? 'text-amber-300' : 'text-white/25 hover:text-white/60'} transition-colors" title="Toggle Starred">
+              ${hdsfdIcon('star')}
             </button>
             <button onclick="openTaskFloatingMenu('${t.id}', this, event)" class="text-white/40 hover:text-white text-xs px-1.5 py-0.5 rounded-lg font-bold hover:bg-white/10 transition-all" title="Options">⋮</button>
           </div>
@@ -805,7 +820,7 @@ function renderDirectGTasks() {
           <div class="pt-1">
             <div class="flex items-center justify-between text-[10px] text-white/50 font-bold mb-1">
               <button onclick="toggleSubtasksExpanded('${t.id}')" class="flex items-center gap-1 hover:text-purple-300 transition-all">
-                <span>${isSubtasksExpanded ? '▾' : '▸'}</span>
+                ${hdsfdIcon(isSubtasksExpanded ? 'chevron-down' : 'chevron-right')}
                 <span>Subtasks (${subtasks.filter(s => s.completed).length}/${subtasks.length})</span>
               </button>
               <button onclick="promptAddSubtask('${t.id}')" class="text-[9px] text-purple-300 hover:text-purple-200">+ Add</button>
@@ -819,7 +834,7 @@ function renderDirectGTasks() {
                       <input type="checkbox" ${st.completed ? 'checked' : ''} onchange="toggleSubtaskState('${t.id}', ${sIdx})" class="w-3 h-3 accent-purple-400 cursor-pointer flex-shrink-0">
                       <span class="${st.completed ? 'line-through text-white/30' : 'text-white/80'} truncate">${st.title}</span>
                     </label>
-                    <button onclick="removeSubtask('${t.id}', ${sIdx})" class="opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400 text-[10px] px-1 transition-all">✕</button>
+                    <button onclick="removeSubtask('${t.id}', ${sIdx})" class="opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400 px-1 transition-colors">${hdsfdIcon('x')}</button>
                   </div>
                 `).join('')}
               </div>
@@ -830,14 +845,18 @@ function renderDirectGTasks() {
     `;
   }
 
-  let html = uncompleted.map((t, idx) => renderTaskCard(t, idx, uncompleted.length, false)).join('');
+  let html = '';
+  if (uncompleted.length > 0) {
+    html += `
+      <div class="task-section-label"><span>Open</span><span>${uncompleted.length}</span></div>
+      ${uncompleted.map((t, idx) => renderTaskCard(t, idx, uncompleted.length, false)).join('')}
+    `;
+  }
 
   if (completed.length > 0) {
     html += `
-      <div class="pt-3 border-t border-white/10 mt-3 space-y-2">
-        <div class="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-white/40 px-1">
-          <span>Completed (${completed.length})</span>
-        </div>
+      <div class="pt-2 border-t border-white/10 mt-2 space-y-2">
+        <div class="task-section-label"><span>Completed</span><span>${completed.length}</span></div>
         ${completed.map((t, idx) => renderTaskCard(t, idx, completed.length, true)).join('')}
       </div>
     `;
@@ -891,23 +910,23 @@ function openTaskFloatingMenu(taskId, buttonEl, e) {
 
   menu.innerHTML = `
     <button onclick="toggleTaskImportance('${task.id}'); closeTaskFloatingMenu();" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-white/10 text-xs flex items-center gap-2 text-white/90">
-      <span>${isImp ? '★' : '☆'}</span> <span>${isImp ? 'Remove from Starred' : 'Add to Starred'}</span>
+      <span class="${isImp ? 'text-amber-300' : 'text-white/50'}">${hdsfdIcon('star')}</span> <span>${isImp ? 'Remove from Starred' : 'Add to Starred'}</span>
     </button>
 
     <button onclick="openCustomDateTimeModal('deadline', '${task.id}'); closeTaskFloatingMenu();" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-white/10 text-xs flex items-center gap-2 text-white/90">
-      <span>🎯</span> <span>Add / Edit Deadline</span>
+      <span class="text-amber-300">${hdsfdIcon('target')}</span> <span>Add / Edit Deadline</span>
     </button>
 
     <button onclick="openGDriveAttachModal('${task.id}'); closeTaskFloatingMenu();" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-white/10 text-xs flex items-center gap-2 text-cyan-300 font-medium">
-      <span>📎</span> <span>Add Drive Attachment</span>
+      <span class="text-cyan-300">${hdsfdIcon('paperclip')}</span> <span>Add Drive Attachment</span>
     </button>
 
     <button onclick="promptAddSubtask('${task.id}'); closeTaskFloatingMenu();" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-white/10 text-xs flex items-center gap-2 text-white/90">
-      <span>↳</span> <span>Add a Subtask</span>
+      <span class="text-white/60">${hdsfdIcon('corner-down-right')}</span> <span>Add a Subtask</span>
     </button>
 
     <button onclick="deleteData('${task.id}'); closeTaskFloatingMenu();" class="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-red-500/20 text-xs flex items-center gap-2 text-red-300 font-medium">
-      <span>🗑️</span> <span>Delete Task</span>
+      <span>${hdsfdIcon('trash-2')}</span> <span>Delete Task</span>
     </button>
 
     <div class="border-t border-white/10 pt-1.5 mt-1 max-h-36 overflow-y-auto">
@@ -915,7 +934,7 @@ function openTaskFloatingMenu(taskId, buttonEl, e) {
       ${folders.map(f => `
         <button onclick="moveTaskFolder('${task.id}', '${f}'); closeTaskFloatingMenu();" class="w-full text-left px-2.5 py-1 rounded-lg hover:bg-white/10 text-[11px] flex items-center justify-between ${task.folder === f ? 'text-purple-300 font-bold' : 'text-white/70'}">
           <span class="truncate">${f}</span>
-          ${task.folder === f ? '<span>✓</span>' : ''}
+          ${task.folder === f ? `<span class="text-purple-300">${hdsfdIcon('check')}</span>` : ''}
         </button>
       `).join('')}
     </div>
@@ -986,7 +1005,7 @@ function toggleAddSubtaskField() {
   row.className = 'flex items-center gap-1';
   row.innerHTML = `
     <input type="text" placeholder="Subtask title..." class="flex-1 bg-white/10 border border-white/15 rounded-xl px-2.5 py-1 text-white text-[11px] outline-none" oninput="tempSubtasksList[${subIdx}] = this.value">
-    <button type="button" onclick="this.parentElement.remove(); tempSubtasksList.splice(${subIdx}, 1);" class="text-white/40 hover:text-red-400 text-xs px-1">✕</button>
+    <button type="button" onclick="this.parentElement.remove(); tempSubtasksList.splice(${subIdx}, 1);" class="text-white/40 hover:text-red-400 px-1">${hdsfdIcon('x')}</button>
   `;
   list.appendChild(row);
 }
@@ -1279,7 +1298,7 @@ function saveDriveAttachment() {
     const chip = document.getElementById('new-task-attachment-chip');
     const chipName = document.getElementById('new-task-attachment-name');
     if (chip && chipName) {
-      chipName.textContent = `📎 ${name}`;
+      chipName.textContent = name;
       chip.classList.remove('hidden');
     }
   } else if (attachTargetTaskId) {
@@ -1485,32 +1504,32 @@ function renderDarkCalendarGrid() {
 
         <div class="space-y-0.5 overflow-hidden flex-1">
           ${dayExams.map(ex => `
-            <div class="cal-event-chip bg-rose-500/40 text-rose-100 border border-rose-400/50 font-bold" title="🎯 Exam: ${escapeHtml(ex.title)}">
-              🎯 ${escapeHtml(ex.title)}
+            <div class="cal-event-chip bg-rose-500/40 text-rose-100 border border-rose-400/50 font-bold" title="Exam: ${escapeHtml(ex.title)}">
+              ${hdsfdIcon('target')} ${escapeHtml(ex.title)}
             </div>
           `).join('')}
 
           ${daySchedules.map(s => `
-            <div class="cal-event-chip bg-emerald-500/30 text-emerald-200 border border-emerald-500/40 font-semibold" title="🕒 Class: ${escapeHtml(s.title)} (${s.start_time || ''})">
-              🕒 ${escapeHtml(s.title)}
+            <div class="cal-event-chip bg-emerald-500/30 text-emerald-200 border border-emerald-500/40 font-semibold" title="Class: ${escapeHtml(s.title)} (${s.start_time || ''})">
+              ${hdsfdIcon('clock')} ${escapeHtml(s.title)}
             </div>
           `).join('')}
 
           ${dayEvents.map(e => `
             <div class="cal-event-chip bg-sky-500/30 text-sky-200 border border-sky-500/40" title="Event: ${escapeHtml(e.summary || 'Event')}">
-              🔵 ${escapeHtml(e.summary || 'Event')}
+              ${hdsfdIcon('circle')} ${escapeHtml(e.summary || 'Event')}
             </div>
           `).join('')}
 
           ${dayTasks.map(t => `
             <div class="cal-event-chip bg-purple-500/30 text-purple-200 border border-purple-500/40 ${t.completed ? 'line-through opacity-40' : ''}" title="Task: ${escapeHtml(t.title)}">
-              📋 ${escapeHtml(t.title)}
+              ${hdsfdIcon('clipboard-list')} ${escapeHtml(t.title)}
             </div>
           `).join('')}
 
           ${dayDeadlines.map(t => `
             <div class="cal-event-chip bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold" title="Deadline: ${escapeHtml(t.title)}">
-              🎯 ${escapeHtml(t.title)}
+              ${hdsfdIcon('target')} ${escapeHtml(t.title)}
             </div>
           `).join('')}
         </div>
@@ -1560,9 +1579,9 @@ function openCalendarDayModal(dateStr) {
         html += `
           <div class="glass p-2.5 rounded-xl border border-rose-500/40 bg-rose-500/10 flex items-center justify-between text-xs">
             <div class="flex items-center gap-2">
-              <span class="text-rose-400 font-black">🎯 Exam:</span>
+              <span class="text-rose-400 font-black">${hdsfdIcon('target')} Exam:</span>
               <span class="text-white font-bold">${escapeHtml(ex.title)}</span>
-              <span class="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">+${ex.reward || 250} 🪙</span>
+              <span class="text-[9px] bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded font-bold">+${ex.reward || 250} ${hdsfdIcon('coins')}</span>
             </div>
             <span class="text-[10px] text-rose-200/80 font-mono">${formatTime12h(ex.time || '09:00')}</span>
           </div>
@@ -1574,7 +1593,7 @@ function openCalendarDayModal(dateStr) {
         html += `
           <div class="glass p-2.5 rounded-xl border border-purple-500/30 flex items-center justify-between text-xs">
             <div class="flex items-center gap-2">
-              <span class="text-purple-300 font-bold">🕒 Class:</span>
+              <span class="text-purple-300 font-bold">${hdsfdIcon('clock')} Class:</span>
               <span class="text-white font-medium">${escapeHtml(s.title)}</span>
               ${s.location ? `<span class="text-[10px] text-white/40">(${escapeHtml(s.location)})</span>` : ''}
             </div>
@@ -1588,7 +1607,7 @@ function openCalendarDayModal(dateStr) {
         html += `
           <div class="glass p-2.5 rounded-xl border border-sky-500/30 flex items-center justify-between text-xs">
             <div class="flex items-center gap-2">
-              <span class="text-sky-300 font-bold">🔵 Event</span>
+              <span class="text-sky-300 font-bold">${hdsfdIcon('circle')} Event</span>
               <span class="text-white font-medium">${escapeHtml(e.summary || 'Google Calendar Event')}</span>
             </div>
             <span class="text-[10px] text-sky-200/60">${e.start && e.start.dateTime ? new Date(e.start.dateTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'All Day'}</span>
@@ -1602,7 +1621,7 @@ function openCalendarDayModal(dateStr) {
           <div class="glass p-2.5 rounded-xl border border-purple-500/30 flex items-center justify-between text-xs ${t.completed ? 'opacity-40' : ''}">
             <label class="flex items-center gap-2 cursor-pointer overflow-hidden flex-1">
               <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTaskState('${t.id}'); openCalendarDayModal('${dateStr}');" class="w-3.5 h-3.5 accent-purple-400 cursor-pointer flex-shrink-0">
-              <span class="text-purple-300 font-bold">📋 Task:</span>
+              <span class="text-purple-300 font-bold">${hdsfdIcon('clipboard-list')} Task:</span>
               <span class="${t.completed ? 'line-through text-white/40' : 'text-white'} truncate">${escapeHtml(t.title)}</span>
             </label>
             <span class="text-[9px] bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded font-bold">${escapeHtml(t.folder || 'My Tasks')}</span>
@@ -1615,7 +1634,7 @@ function openCalendarDayModal(dateStr) {
         html += `
           <div class="glass p-2.5 rounded-xl border border-amber-500/30 flex items-center justify-between text-xs">
             <div class="flex items-center gap-2">
-              <span class="text-amber-300 font-bold">🎯 Deadline:</span>
+              <span class="text-amber-300 font-bold">${hdsfdIcon('target')} Deadline:</span>
               <span class="text-white">${escapeHtml(t.title)}</span>
             </div>
             <span class="text-[9px] bg-amber-500/20 text-amber-200 px-1.5 py-0.5 rounded font-bold">${escapeHtml(t.folder || 'My Tasks')}</span>
@@ -1883,7 +1902,7 @@ function saveScheduleEntry() {
     })
   }).then(res => res.json()).then(res => {
     if (res.synced) {
-      console.log('✅ Google Calendar Schedule Synced:', res.event);
+ console.log(' Google Calendar Schedule Synced:', res.event);
     }
   }).catch(err => console.warn('Google Calendar schedule sync warning:', err));
 
@@ -1892,7 +1911,7 @@ function saveScheduleEntry() {
   populateTaskFolderMenus();
   renderHomeStatusAndNotifications();
   if (!editId) {
-    awardActivityCoins(15, 'Schedule Period Added');
+ awardActivityCoins(15, 'Schedule Period Added');
   }
   triggerGoogleBackup();
 }
@@ -1935,13 +1954,13 @@ function renderScheduleGrid() {
   if (filtered.length === 0) {
     container.innerHTML = `
       <div class="glass p-6 rounded-2xl border border-white/10 text-center space-y-3 my-4">
-        <div class="text-3xl">🕒</div>
+        <div class="text-white/25">${hdsfdIcon('clock')}</div>
         <div>
           <h4 class="text-sm font-bold text-white">No Schedule Entries for ${activeScheduleDayFilter === 'all' ? 'this week' : activeScheduleDayFilter}</h4>
           <p class="text-xs text-white/50 mt-1">Add your daily classes, study periods, or routine blocks.</p>
         </div>
         <button onclick="openAddScheduleModal()" class="px-4 py-2 rounded-xl bg-purple-500/30 text-purple-200 border border-purple-500/40 text-xs font-bold hover:bg-purple-500/50 transition-all">
-          ➕ Add Class / Period
+          ${hdsfdIcon('plus')} Add Class / Period
         </button>
       </div>
     `;
@@ -1970,14 +1989,14 @@ function renderScheduleGrid() {
             <span class="text-[9px] font-bold px-2 py-0.5 rounded-full border ${cTheme.badge}">${daysStr}</span>
           </div>
           <div class="flex items-center gap-3 text-[11px] text-white/70">
-            <span class="flex items-center gap-1 text-purple-300 font-semibold">🕒 ${timeDisplay}</span>
-            ${item.location ? `<span class="flex items-center gap-1 text-white/50">📍 ${escapeHtml(item.location)}</span>` : ''}
+            <span class="flex items-center gap-1 text-purple-300 font-semibold">${hdsfdIcon('clock')} ${timeDisplay}</span>
+            ${item.location ? `<span class="flex items-center gap-1 text-white/50">${hdsfdIcon('pin')} ${escapeHtml(item.location)}</span>` : ''}
           </div>
         </div>
 
         <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-          <button onclick="openAddScheduleModal('${item.id}')" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 text-white/70 hover:text-white flex items-center justify-center text-xs transition-all" title="Edit Class">✏️</button>
-          <button onclick="deleteScheduleEntry('${item.id}')" class="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500/30 text-red-300 flex items-center justify-center text-xs transition-all" title="Delete Class">🗑️</button>
+          <button onclick="openAddScheduleModal('${item.id}')" class="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/15 text-white/70 hover:text-white flex items-center justify-center text-xs transition-all" title="Edit Class">${hdsfdIcon('pencil')}</button>
+          <button onclick="deleteScheduleEntry('${item.id}')" class="w-7 h-7 rounded-lg bg-red-500/10 hover:bg-red-500/30 text-red-300 flex items-center justify-center text-xs transition-all" title="Delete Class">${hdsfdIcon('trash-2')}</button>
         </div>
       </div>
     `;
@@ -2072,7 +2091,7 @@ function renderHomeStatusAndNotifications() {
       notificationsHtml += `
         <div class="flex items-center justify-between text-[11px] bg-white/[0.04] px-2.5 py-1.5 rounded-xl border border-white/10">
           <div class="flex items-center gap-1.5 truncate">
-            <span>📚</span>
+            <span class="text-sky-300">${hdsfdIcon('book')}</span>
             <span class="text-white font-semibold truncate">${escapeHtml(sc.title)}</span>
           </div>
           <span class="text-[9px] text-purple-300 font-bold bg-purple-500/20 px-1.5 py-0.5 rounded whitespace-nowrap">${daysStr} • ${formatTime12h(sc.start_time)}</span>
@@ -2086,7 +2105,7 @@ function renderHomeStatusAndNotifications() {
       notificationsHtml += `
         <div class="flex items-center justify-between text-[11px] bg-white/[0.04] px-2.5 py-1.5 rounded-xl border border-white/10">
           <div class="flex items-center gap-1.5 truncate">
-            <span>📅</span>
+            <span class="text-purple-300">${hdsfdIcon('calendar')}</span>
             <span class="text-sky-200 font-semibold truncate">${escapeHtml(ev.summary || 'Event')}</span>
           </div>
           <span class="text-[9px] text-sky-300 font-bold bg-sky-500/20 px-1.5 py-0.5 rounded whitespace-nowrap">Google Cal</span>
@@ -2179,7 +2198,7 @@ function renderHomeStarredTasks() {
   const tasks = allData.filter(d => d.type === 'task' && d.is_important);
 
   if (tasks.length === 0) {
-    const emptyMsg = '<p class="text-white/40 text-[11px] italic text-center py-8">No starred tasks! Click ☆ on any task in Tasks tab to pin here.</p>';
+    const emptyMsg = '<p class="text-white/40 text-[11px] italic text-center py-8">No starred tasks! Click the star on any task in Tasks tab to pin here.</p>';
     if (listEl) listEl.innerHTML = emptyMsg;
     if (zenListEl) zenListEl.innerHTML = '<span class="text-[10px] text-white/40 italic">No starred tasks</span>';
     return;
@@ -2201,7 +2220,7 @@ function renderHomeStarredTasks() {
     html += `
       <div class="space-y-1">
         <div class="text-[9px] uppercase font-bold tracking-wider text-purple-300/80 px-1 border-b border-white/5 pb-0.5 flex items-center gap-1">
-          <span>📁</span> <span>${folderName}</span>
+          <span class="text-purple-300">${hdsfdIcon('folder')}</span> <span>${folderName}</span>
         </div>
         ${groupTasks.map(t => {
           const dueFormatted = t.due ? new Date(t.due).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
@@ -2211,10 +2230,10 @@ function renderHomeStarredTasks() {
                 <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTaskState('${t.id}')" class="w-3.5 h-3.5 accent-amber-400 cursor-pointer flex-shrink-0">
                 <div class="flex flex-col truncate">
                   <span class="text-xs ${t.completed ? 'line-through text-white/40' : 'text-white font-medium'} truncate">${t.title}</span>
-                  ${dueFormatted ? `<span class="text-[8px] text-amber-300/80">📅 ${dueFormatted}</span>` : ''}
+                  ${dueFormatted ? `<span class="text-[8px] text-amber-300/80 flex items-center gap-1">${hdsfdIcon('calendar')} ${dueFormatted}</span>` : ''}
                 </div>
               </div>
-              <button onclick="toggleTaskImportance('${t.id}')" class="text-xs text-amber-300 px-1 hover:scale-110 transition-all" title="Unstar to remove from Home">⭐</button>
+              <button onclick="toggleTaskImportance('${t.id}')" class="text-xs text-amber-300 px-1 hover:scale-110 transition-all" title="Unstar to remove from Home">${hdsfdIcon('star')}</button>
             </div>
           `;
         }).join('')}
@@ -2277,7 +2296,7 @@ function toggleTaskState(id) {
     }
 
     task.earned_coins = baseCoins;
-    awardActivityCoins(baseCoins, task.is_important ? 'Starred Task Completed ⭐' : 'Task Completed');
+ awardActivityCoins(baseCoins, task.is_important ? 'Starred Task Completed ' : 'Task Completed');
     healSanctuaryTree(15);
   } else {
     // Unchecking task: deduct previously earned coins
@@ -2353,7 +2372,7 @@ function addPhysicsPostIt() {
 
   createData(noteItem);
   renderPhysicsPostIts();
-  awardActivityCoins(5, 'Sticky Note Created');
+ awardActivityCoins(5, 'Sticky Note Created');
 }
 
 function addPostItNote() {
@@ -2395,14 +2414,14 @@ function renderPhysicsPostIts() {
         <!-- Top Tape Strip (Clean Physical Grab Handle) -->
         <div class="note-tape" title="Hold & drag to lift note across any tab"></div>
 
-        <!-- Top Left Corner: Mode Toggle (✏️ / ✍️) -->
+        <!-- Top Left Corner: Mode Toggle -->
         <button type="button" onclick="toggleNoteDrawMode('${note.id}', event)" class="note-corner-btn-left" title="${isDrawMode ? 'Switch to Typing' : 'Switch to Drawing'}">
-          <span class="${isDrawMode ? 'text-purple-950 font-bold scale-110' : 'text-black/60'}">${isDrawMode ? '✏️' : '✍️'}</span>
+          <span class="${isDrawMode ? 'text-purple-950 font-bold scale-110' : 'text-black/60'}">${hdsfdIcon(isDrawMode ? 'pencil' : 'pen-line')}</span>
         </button>
 
-        <!-- Top Right Corner: Delete ✕ (Triggers Custom In-App Modal) -->
+        <!-- Top Right Corner: Delete (custom in-app modal) -->
         <button type="button" onclick="openDeleteNoteModal('${note.id}', event)" class="note-corner-btn-right" title="Delete Sticky Note">
-          ✕
+          ${hdsfdIcon('x')}
         </button>
 
         <!-- Bottom Right Corner: Smooth Resize Corner -->
@@ -3022,11 +3041,20 @@ document.addEventListener('keydown', (e) => {
 });
 
 let noteDebounceTimers = {};
+
+// Notes are persisted locally, synced to the server and copied into Drive
+// backups, so each note gets a hard ceiling to keep payloads and storage bounded.
+const MAX_NOTE_CHARS = 2000;
+function clampNoteText(text) {
+  const value = String(text == null ? '' : text);
+  return value.length > MAX_NOTE_CHARS ? value.slice(0, MAX_NOTE_CHARS) : value;
+}
+
 function debounceUpdateNoteText(id, text) {
   const currentOwner = googleAccount || userName || 'Guest';
   const target = allData.find(d => d.id === id);
   if (target) {
-    target.content = text;
+    target.content = clampNoteText(text);
     localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
   }
 
@@ -3317,7 +3345,7 @@ function renderGeminiChatMessages() {
 
       return `
         <div class="flex items-start gap-3 max-w-[92%]">
-          <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-500 via-indigo-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-md">✦</div>
+          <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-500 via-indigo-500 to-pink-500 flex items-center justify-center text-white shrink-0 shadow-md">${hdsfdIcon('sparkles')}</div>
           <div class="bg-[#1e1f20] border border-white/10 p-3.5 rounded-2xl rounded-tl-sm text-slate-200 text-xs leading-relaxed space-y-2">
             <div>${formatted}</div>
             ${actionsHtml ? `<div class="pt-1.5 space-y-1">${actionsHtml}</div>` : ''}
@@ -3334,14 +3362,14 @@ function renderAgentActionBadge(act) {
   if (act.type === 'create_task') {
     return `
       <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-purple-500/20 border border-purple-500/30 text-purple-200 text-[11px] font-semibold">
-        <span>⚡ Action:</span>
+        <span class="inline-flex items-center gap-1">${hdsfdIcon('zap')} Action:</span>
         <span class="truncate">Added Task: <b>"${escapeHtml(act.title)}"</b> (${act.folder || 'General'})</span>
       </div>
     `;
   } else if (act.type === 'create_note') {
     return `
       <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-200 text-[11px] font-semibold">
-        <span>📌 Action:</span>
+        <span class="inline-flex items-center gap-1">${hdsfdIcon('pin')} Action:</span>
         <span class="truncate">Created ${act.color || 'yellow'} sticky note</span>
       </div>
     `;
@@ -3355,15 +3383,43 @@ function renderAgentActionBadge(act) {
   } else if (act.type === 'set_soundscape') {
     return `
       <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-cyan-500/20 border border-cyan-500/30 text-cyan-200 text-[11px] font-semibold">
-        <span>🎧 Action:</span>
+        <span class="inline-flex items-center gap-1">${hdsfdIcon('headphones')} Action:</span>
         <span>Updated focus soundscape</span>
       </div>
     `;
   } else if (act.type === 'change_theme') {
     return `
       <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-200 text-[11px] font-semibold">
-        <span>🎨 Action:</span>
+        <span class="inline-flex items-center gap-1">${hdsfdIcon('palette')} Action:</span>
         <span>Changed theme to ${escapeHtml(act.theme)}</span>
+      </div>
+    `;
+  } else if (act.type === 'play_song' || act.type === 'play_youtube' || act.type === 'search_music') {
+    return `
+      <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-200 text-[11px] font-semibold">
+        <span class="inline-flex items-center gap-1">${hdsfdIcon('music')} Action:</span>
+        <span class="truncate">Playing ${escapeHtml(act.query || act.title || act.url || 'music')}</span>
+      </div>
+    `;
+  } else if (act.type === 'complete_task') {
+    return `
+      <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-200 text-[11px] font-semibold">
+        <span class="inline-flex items-center gap-1">${hdsfdIcon('circle-check-big')} Action:</span>
+        <span class="truncate">Completed: ${escapeHtml(act.title || '')}</span>
+      </div>
+    `;
+  } else if (act.type === 'create_exam') {
+    return `
+      <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-rose-500/20 border border-rose-500/30 text-rose-200 text-[11px] font-semibold">
+        <span class="inline-flex items-center gap-1">${hdsfdIcon('file-text')} Action:</span>
+        <span class="truncate">Exam added: ${escapeHtml(act.title || '')}</span>
+      </div>
+    `;
+  } else if (act.type === 'create_schedule_entry') {
+    return `
+      <div class="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-teal-500/20 border border-teal-500/30 text-teal-200 text-[11px] font-semibold">
+        <span class="inline-flex items-center gap-1">${hdsfdIcon('clock')} Action:</span>
+        <span class="truncate">Class added: ${escapeHtml(act.title || '')}</span>
       </div>
     `;
   }
@@ -3397,6 +3453,117 @@ function submitAgentCommand(cmdText) {
   setAgentPromptPrefix(cmdText);
 }
 
+// Inline icon from the bundled Lucide sprite (no CDN, no layout shift).
+function hdsfdIcon(name, extraClass) {
+  const cls = extraClass ? `hdsfd-icon ${extraClass}` : 'hdsfd-icon';
+  return `<svg class="${cls}" aria-hidden="true" focusable="false"><use href="#i-${name}"></use></svg>`;
+}
+
+// ===== LIVE WORKSPACE CONTEXT SENT WITH EVERY AI MESSAGE =====
+// Only the slice an answer can use: open work first, then a little recent
+// history. Keeps every request small so replies stay fast.
+const AI_CONTEXT_LIMITS = { openTasks: 12, doneTasks: 3, notes: 6, schedule: 8, exams: 5, folders: 10 };
+
+function buildAIWorkspaceContext() {
+  const clip = (value, limit) => String(value == null ? '' : value)
+    .replace(/\s+/g, ' ').trim().slice(0, limit || 70);
+
+  const tasks = allData.filter(d => d.type === 'task');
+  const notes = allData.filter(d => d.type === 'note');
+  const schedule = allData.filter(d => d.type === 'schedule_entry');
+  const exams = allData.filter(d => d.type === 'exam_entry');
+  const sessions = allData.filter(d => d.type === 'focus_session');
+
+  const openTasks = tasks.filter(t => !t.completed);
+  const completedTasks = tasks.filter(t => t.completed);
+
+  // Soonest due first, undated last — that is the order the assistant needs to
+  // answer "what should I do now?".
+  const byDueDate = (a, b) => {
+    const aDue = a.due || a.deadline || '';
+    const bDue = b.due || b.deadline || '';
+    if (aDue && bDue) return aDue < bDue ? -1 : (aDue > bDue ? 1 : 0);
+    if (aDue) return -1;
+    if (bDue) return 1;
+    return 0;
+  };
+
+  const prioritizedTasks = openTasks.slice().sort(byDueDate).slice(0, AI_CONTEXT_LIMITS.openTasks);
+  const recentDoneTasks = completedTasks.slice(-AI_CONTEXT_LIMITS.doneTasks);
+  const upcomingExams = exams.slice()
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')))
+    .slice(0, AI_CONTEXT_LIMITS.exams);
+
+  return {
+    user: googleAccountName || userName || 'Guest',
+    tab: activeTab,
+    folders: (typeof getAvailableFolders === 'function' ? getAvailableFolders() : []).slice(0, AI_CONTEXT_LIMITS.folders),
+    tasks: [...prioritizedTasks, ...recentDoneTasks].map(t => ({
+      title: clip(t.title, 70),
+      folder: clip(t.folder, 26),
+      due: clip(t.due || t.deadline, 26),
+      completed: !!t.completed
+    })),
+    notes: notes.slice(-AI_CONTEXT_LIMITS.notes).map(n => ({ title: clip(n.title || n.content, 80) })),
+    schedule: schedule.slice(-AI_CONTEXT_LIMITS.schedule).map(s => ({
+      title: clip(s.title, 60),
+      days: Array.isArray(s.days) ? s.days : [],
+      start: clip(s.start_time, 8),
+      end: clip(s.end_time, 8)
+    })),
+    exams: upcomingExams.map(e => ({
+      title: clip(e.title, 60),
+      date: clip(e.date, 12),
+      time: clip(e.time, 8)
+    })),
+    counts: {
+      open_tasks: openTasks.length,
+      notes: notes.length,
+      classes: schedule.length,
+      exams: exams.length
+    },
+    stats: {
+      coins: typeof getUserCoinsBalance === 'function' ? getUserCoinsBalance() : 0,
+      lifetime_xp: typeof getLifetimeCoins === 'function' ? getLifetimeCoins() : 0,
+      focus_mins: sessions.reduce((sum, s) => sum + (s.minutes || 0), 0),
+      tasks_done: tasks.filter(t => t.completed).length,
+      streak: parseInt(localStorage.getItem('hdsfd_streak_days') || '1', 10)
+    },
+    music_now_playing: musicState.current
+      ? { title: clip(musicState.current.title, 80), channel: clip(musicState.current.channel, 40) }
+      : null
+  };
+}
+
+function updateAIContextBadge(context) {
+  const badge = document.getElementById('ai-context-badge');
+  if (!badge || !context) return;
+  const counts = context.counts || {};
+  const pick = (key, fallback) => (typeof counts[key] === 'number' ? counts[key] : fallback);
+  const parts = [
+    `${pick('open_tasks', (context.tasks || []).length)} open`,
+    `${pick('notes', (context.notes || []).length)} notes`,
+    `${pick('classes', (context.schedule || []).length)} classes`,
+    `${pick('exams', (context.exams || []).length)} exams`
+  ];
+  badge.innerHTML = `${hdsfdIcon('list-todo')} ${parts.join(' · ')}`;
+  badge.title = 'The AI reads this live workspace snapshot on every message';
+}
+
+function setAIEngineBadge(data) {
+  const badge = document.getElementById('ai-engine-badge');
+  if (!badge) return;
+  const source = (data && data.source) || 'built_in';
+  const labels = {
+    google_oauth_api: 'Gemini · OAuth',
+    google_api_key_pool: 'Gemini · key pool',
+    built_in: 'Offline engine'
+  };
+  badge.textContent = labels[source] || 'Gemini';
+  badge.dataset.source = source;
+  badge.title = `Model: ${(data && data.model) || 'unknown'}`;
+}
+
 async function sendGeminiAgentMessage(optPrompt) {
   if (isGeminiThinking) return;
   const input = document.getElementById('gemini-agent-input');
@@ -3412,7 +3579,7 @@ async function sendGeminiAgentMessage(optPrompt) {
     content: text,
     created_at: new Date().toISOString()
   });
-  awardActivityCoins(3, null);
+ awardActivityCoins(3, null);
   renderGeminiChatMessages();
 
   // Show Thinking bubble
@@ -3424,7 +3591,7 @@ async function sendGeminiAgentMessage(optPrompt) {
     thinkEl.id = thinkingId;
     thinkEl.className = 'flex items-start gap-3 max-w-[92%]';
     thinkEl.innerHTML = `
-      <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-500 via-indigo-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold shrink-0 shadow-md animate-pulse">✦</div>
+      <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-500 via-indigo-500 to-pink-500 flex items-center justify-center text-white shrink-0 shadow-md animate-pulse">${hdsfdIcon('sparkles')}</div>
       <div class="bg-[#1e1f20] border border-white/10 p-3.5 rounded-2xl rounded-tl-sm text-slate-400 text-xs italic flex items-center gap-2">
         <span class="inline-block w-2 h-2 rounded-full bg-sky-400 animate-ping"></span>
         <span>Gemini AI is analyzing & executing...</span>
@@ -3436,13 +3603,16 @@ async function sendGeminiAgentMessage(optPrompt) {
 
   try {
     const savedApiKey = localStorage.getItem('hdsfd_gemini_api_key') || '';
+    const aiContext = buildAIWorkspaceContext();
+    updateAIContextBadge(aiContext);
     const res = await fetch('/api/gemini/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         prompt: text,
         username: currentOwner,
-        api_key: savedApiKey
+        api_key: savedApiKey,
+        context: aiContext
       })
     });
 
@@ -3453,6 +3623,7 @@ async function sendGeminiAgentMessage(optPrompt) {
     if (data.status === 'success') {
       const responseText = data.text || '';
       const actions = data.actions || [];
+      setAIEngineBadge(data);
 
       geminiChatHistory.push({
         role: 'model',
@@ -3477,7 +3648,7 @@ async function sendGeminiAgentMessage(optPrompt) {
 
     geminiChatHistory.push({
       role: 'model',
-      content: `⚠️ Error executing request: ${err.message}. Please check connection.`,
+      content: `Error executing request: ${err.message}. Please check connection.`,
       actions: [],
       created_at: new Date().toISOString()
     });
@@ -3492,7 +3663,7 @@ function executeAgentAction(action) {
   if (!action || !action.type) return;
   const currentOwner = googleAccount || userName || 'Guest';
 
-  console.log('⚡ Gemini Agent Executing Action:', action);
+ console.log(' Gemini Agent Executing Action:', action);
 
   if (action.type === 'create_task') {
     const newTask = {
@@ -3521,7 +3692,7 @@ function executeAgentAction(action) {
     const newNote = {
       id: `note_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
       type: 'note',
-      content: action.text || '',
+      content: clampNoteText(action.text || ''),
       title: 'Sticky Note',
       color: action.color || 'yellow',
       tab: 'notes',
@@ -3541,10 +3712,34 @@ function executeAgentAction(action) {
     renderPhysicsPostIts();
     triggerGoogleBackup();
   }
-  else if (action.type === 'play_youtube' || action.type === 'play_song') {
+  else if (action.type === 'play_youtube' || action.type === 'play_song' || action.type === 'search_music') {
     const songUrl = action.url || '';
     const query = action.query || action.song || action.title || '';
-    playCuratedOrSearchedYouTube(songUrl || query);
+    musicHandleQuery(songUrl || query);
+  }
+  else if (action.type === 'navigate_tab') {
+    const allowed = ['focus', 'tasks-notes', 'notes', 'settings'];
+    if (allowed.includes(action.tab)) switchTab(action.tab);
+  }
+  else if (action.type === 'complete_task' || action.type === 'delete_task') {
+    const wanted = String(action.title || '').toLowerCase().trim();
+    if (!wanted) return;
+    const match = allData.find(d => d.type === 'task'
+      && String(d.title || '').toLowerCase().includes(wanted));
+    if (!match) {
+ showInAppNotification(`No task matched “${action.title}”`);
+      return;
+    }
+    if (action.type === 'delete_task') {
+      deleteData(match.id);
+    } else {
+      match.completed = true;
+      match.completed_at = new Date().toISOString();
+      createData(match);
+    }
+ showInAppNotification(action.type === 'delete_task'
+      ? `Deleted task: ${match.title}`
+      : `Completed task: ${match.title}`);
   }
   else if (action.type === 'create_exam') {
     const examDate = action.date || new Date().toISOString().split('T')[0];
@@ -3616,139 +3811,642 @@ function executeAgentAction(action) {
   }
 }
 
-// ===== CURATED & DYNAMIC YOUTUBE MUSIC SEARCH PLAYER =====
-function playCuratedOrSearchedYouTube(queryOrUrl) {
-  if (!queryOrUrl) return;
-  let raw = queryOrUrl.trim();
+// ===== HDSFD MUSIC ENGINE (search • ad-free audio • queue • recents) =====
+// Playback strategy: the server resolves the real audio stream (yt-dlp) and proxies it,
+// so we get audio-only ad-free playback with working seek. If extraction is blocked the
+// player silently falls back to the official YouTube embed so music never stops.
+const musicState = {
+  queue: [],
+  index: -1,
+  current: null,
+  results: [],
+  query: '',
+  view: 'results',
+  volume: (() => {
+    const stored = parseFloat(localStorage.getItem('hdsfd_music_volume'));
+    return isNaN(stored) ? 0.7 : Math.min(1, Math.max(0, stored));
+  })(),
+  shuffle: localStorage.getItem('hdsfd_music_shuffle') === 'true',
+  repeat: localStorage.getItem('hdsfd_music_repeat') || 'off',
+  recent: (() => {
+    try { return JSON.parse(localStorage.getItem('hdsfd_music_recent') || '[]'); }
+    catch (e) { return []; }
+  })(),
+  engine: 'idle',
+  loading: false
+};
+let musicSearchTimer = null;
+let musicSearchAbort = null;
 
-  // If already a YouTube URL, play directly
-  if (raw.includes('youtube.com/watch') || raw.includes('youtu.be/')) {
-    const ytInput = document.getElementById('yt-song-input');
-    if (ytInput) ytInput.value = raw;
-    const drawer = document.getElementById('yt-drawer-content');
-    const icon = document.getElementById('yt-drawer-icon');
-    if (drawer && drawer.classList.contains('hidden')) {
-      drawer.classList.remove('hidden');
-      if (icon) icon.textContent = '▲';
+function musicAudioEl() {
+  return document.getElementById('music-audio');
+}
+
+function musicFmt(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const mins = Math.floor(total / 60);
+  return `${mins}:${String(total % 60).padStart(2, '0')}`;
+}
+
+function musicSetEngineBadge(text, tone) {
+  const badge = document.getElementById('music-engine-badge');
+  if (badge) {
+    badge.textContent = text;
+    badge.dataset.tone = tone || 'audio';
+  }
+  const mini = document.getElementById('music-mini-engine');
+  if (mini) mini.textContent = text.replace(/^[●•]\s*/, '');
+}
+
+// ---------- modal ----------
+function openMusicPlayer(initialQuery) {
+  const modal = document.getElementById('music-modal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  musicRenderResults();
+  musicRenderQueue();
+  musicRenderRecent();
+  musicRenderNowPlaying();
+  const input = document.getElementById('music-search-input');
+  if (initialQuery && String(initialQuery).trim()) {
+    musicSearch(String(initialQuery).trim(), true);
+  } else if (input) {
+    setTimeout(() => input.focus(), 60);
+  }
+}
+
+function closeMusicPlayer() {
+  const modal = document.getElementById('music-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+}
+
+function musicSetView(view) {
+  musicState.view = view;
+  ['results', 'queue', 'recent'].forEach(name => {
+    const panel = document.getElementById(`music-panel-${name}`);
+    const tab = document.getElementById(`music-tab-${name}`);
+    if (panel) panel.classList.toggle('hidden', name !== view);
+    if (tab) tab.classList.toggle('is-active', name === view);
+  });
+}
+
+// ---------- search ----------
+function musicOnSearchInput(value) {
+  clearTimeout(musicSearchTimer);
+  const query = (value || '').trim();
+  if (!query) {
+    musicState.results = [];
+    musicState.loading = false;
+    musicRenderResults();
+    return;
+  }
+  musicSearchTimer = setTimeout(() => musicSearch(query, false), 320);
+}
+
+function musicOnSearchKey(event) {
+  if (event.key === 'Enter') {
+    clearTimeout(musicSearchTimer);
+    musicSearch(document.getElementById('music-search-input').value.trim(), false);
+  }
+}
+
+async function musicSearch(query, autoPlay) {
+  const cleaned = (query || '').trim();
+  if (!cleaned) return;
+  musicState.query = cleaned;
+  musicState.loading = true;
+  musicState.results = [];
+  musicSetView('results');
+  musicRenderResults();
+
+  if (musicSearchAbort) musicSearchAbort.abort();
+  musicSearchAbort = new AbortController();
+
+  try {
+    const res = await fetch(`${API_BASE}/music/search?q=${encodeURIComponent(cleaned)}`, {
+      signal: musicSearchAbort.signal
+    });
+    const data = await res.json();
+    musicState.results = Array.isArray(data.results) ? data.results : [];
+    musicState.loading = false;
+    musicRenderResults();
+    if (autoPlay && musicState.results.length) {
+      musicPlayResult(0);
+    } else if (!musicState.results.length) {
+ showInAppNotification(`No results for "${cleaned}"`);
     }
-    isYTPlaying = false;
-    toggleYouTubePlayback();
-    showInAppNotification(`🎵 Playing: ${raw}`);
+  } catch (err) {
+    if (err && err.name === 'AbortError') return;
+    musicState.loading = false;
+    musicState.results = [];
+    musicRenderResults();
+    const empty = document.getElementById('music-results-list');
+    if (empty) {
+      empty.innerHTML = `<div class="music-empty"><div class="music-empty-icon">${hdsfdIcon('triangle-alert')}</div><div class="music-empty-title">Search failed</div><div class="music-empty-sub">Check your connection and try again.</div></div>`;
+    }
+  }
+}
+
+function musicRenderResults() {
+  const container = document.getElementById('music-results-list');
+  if (!container) return;
+
+  if (musicState.loading && !musicState.results.length) {
+    container.innerHTML = Array.from({ length: 6 }).map(() => `
+      <div class="music-row music-skeleton">
+        <div class="music-skel-thumb"></div>
+        <div class="music-skel-lines">
+          <div class="music-skel-line" style="width:72%"></div>
+          <div class="music-skel-line" style="width:38%"></div>
+        </div>
+      </div>`).join('');
     return;
   }
 
-  const lower = raw.toLowerCase();
-
-  // Expanded curated streams (study + popular genres)
-  const curatedStreams = {
-    'lofi': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    'lofi girl': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    'rain': 'https://www.youtube.com/watch?v=mPZkdNFkNps',
-    'thunderstorm': 'https://www.youtube.com/watch?v=nDq6TstdEi8',
-    'piano': 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
-    'mozart': 'https://www.youtube.com/watch?v=Rb0UmrCXxVA',
-    'beethoven': 'https://www.youtube.com/watch?v=W-fFHeTX70Q',
-    'chopin': 'https://www.youtube.com/watch?v=wygy721nzRc',
-    'classical': 'https://www.youtube.com/watch?v=jgpJVI3tDbY',
-    'synthwave': 'https://www.youtube.com/watch?v=4xDzrJKXOOY',
-    'chill': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    'chillhop': 'https://www.youtube.com/watch?v=5yx6BWlEVcY',
-    'jazz': 'https://www.youtube.com/watch?v=Dx5qFachd3A',
-    'nature': 'https://www.youtube.com/watch?v=eKFTSSKCzWA',
-    'forest': 'https://www.youtube.com/watch?v=xNN7iTA57jM',
-    'ocean': 'https://www.youtube.com/watch?v=V1bFr2SWP1I',
-    'white noise': 'https://www.youtube.com/watch?v=nMfPqeZjc2c',
-    'brown noise': 'https://www.youtube.com/watch?v=RqzGzwTY-6w',
-    'interstellar': 'https://www.youtube.com/watch?v=UDVtMYqUAyw',
-    'hans zimmer': 'https://www.youtube.com/watch?v=UDVtMYqUAyw',
-    'study beats': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    'coffee': 'https://www.youtube.com/watch?v=5qap5aO4i9A',
-    'hip hop': 'https://www.youtube.com/watch?v=lTRiuFIWV54',
-    'drake': 'https://www.youtube.com/watch?v=uxpDa-c-4Mc',
-    'kendrick': 'https://www.youtube.com/watch?v=TVSFo0m28WA',
-    'travis scott': 'https://www.youtube.com/watch?v=6ONRf7h3Mdk',
-    'juice wrld': 'https://www.youtube.com/watch?v=RRhon5OM3L4',
-    'xxxtentacion': 'https://www.youtube.com/watch?v=i1sCUkhOv8E',
-    'pop smoke': 'https://www.youtube.com/watch?v=Jm3Lp0E6iFo',
-    'taylor swift': 'https://www.youtube.com/watch?v=nfWlot6h_JM',
-    'ariana grande': 'https://www.youtube.com/watch?v=GL1LzZFZn7Y',
-    'billie eilish': 'https://www.youtube.com/watch?v=DyDfgMOUjCI',
-    'the weeknd': 'https://www.youtube.com/watch?v=XXYlFuWEuKI',
-    'weeknd': 'https://www.youtube.com/watch?v=XXYlFuWEuKI',
-    'bad bunny': 'https://www.youtube.com/watch?v=BL36MsXFWZc',
-    'olivia rodrigo': 'https://www.youtube.com/watch?v=ZmDBbnmKpqQ',
-    'doja cat': 'https://www.youtube.com/watch?v=pok8BdcORGc',
-    'harry styles': 'https://www.youtube.com/watch?v=H5v3kku4y6Q',
-    'ed sheeran': 'https://www.youtube.com/watch?v=JJbMQFaUFqE',
-    'post malone': 'https://www.youtube.com/watch?v=ApXoWvfEYVU',
-    'eminem': 'https://www.youtube.com/watch?v=uelHwf8o7_U',
-    'rap': 'https://www.youtube.com/watch?v=lTRiuFIWV54',
-    'rnb': 'https://www.youtube.com/watch?v=Km9RxCMsqTA',
-    'r&b': 'https://www.youtube.com/watch?v=Km9RxCMsqTA',
-    'k-pop': 'https://www.youtube.com/watch?v=gdZLi9oWNZg',
-    'bts': 'https://www.youtube.com/watch?v=MBdVXkSdhwU',
-    'blackpink': 'https://www.youtube.com/watch?v=ioNng23DkIM',
-    'anime': 'https://www.youtube.com/watch?v=lDfSXBbBYnM',
-    'naruto': 'https://www.youtube.com/watch?v=dR3bpQQHUMY',
-    'phonk': 'https://www.youtube.com/watch?v=3sHBejEyI5I',
-    'motivational': 'https://www.youtube.com/watch?v=y49KQx3Y8vk',
-    'focus': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    'deep work': 'https://www.youtube.com/watch?v=jfKfPfyJRdk',
-    'gaming': 'https://www.youtube.com/watch?v=3nQNiWdeH2Q',
-    'epic': 'https://www.youtube.com/watch?v=pItWERCSECg',
-    'workout': 'https://www.youtube.com/watch?v=lbf8KqVbAYg',
-  };
-
-  let url = null;
-  for (const [key, streamUrl] of Object.entries(curatedStreams)) {
-    if (lower.includes(key)) {
-      url = streamUrl;
-      break;
-    }
+  if (!musicState.results.length) {
+    container.innerHTML = `
+      <div class="music-empty">
+        <div class="music-empty-icon">${hdsfdIcon('headphones')}</div>
+        <div class="music-empty-title">Search any song, artist or genre</div>
+        <div class="music-empty-sub">Ad-free audio, full seek, queue and history — all saved.</div>
+      </div>`;
+    return;
   }
 
-  if (url) {
-    // Curated match — play directly
-    const ytInput = document.getElementById('yt-song-input');
-    if (ytInput) ytInput.value = url;
-    const drawer = document.getElementById('yt-drawer-content');
-    const icon = document.getElementById('yt-drawer-icon');
-    if (drawer && drawer.classList.contains('hidden')) {
-      drawer.classList.remove('hidden');
-      if (icon) icon.textContent = '▲';
-    }
-    isYTPlaying = false;
-    toggleYouTubePlayback();
-    showInAppNotification(`🎵 Playing: ${raw}`);
+  container.innerHTML = musicState.results.map((item, index) => `
+    <div class="music-row ${musicState.current && musicState.current.id === item.id ? 'is-playing' : ''}">
+      <button type="button" class="music-row-main" onclick="musicPlayResult(${index})">
+        <img class="music-thumb" src="${item.thumbnail}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+        <span class="music-row-text">
+          <span class="music-row-title">${escapeHtml(item.title || 'Untitled')}</span>
+          <span class="music-row-sub">${escapeHtml(item.channel || 'YouTube')}${item.duration ? ` • ${escapeHtml(item.duration)}` : ''}</span>
+        </span>
+      </button>
+      <button type="button" class="music-icon-btn" onclick="musicQueueAddResult(${index})" title="Add to queue">${hdsfdIcon('plus')}</button>
+      <button type="button" class="music-play-btn" onclick="musicPlayResult(${index})" title="Play">${hdsfdIcon('play')}</button>
+    </div>
+  `).join('');
+}
+
+function musicPlayResult(index) {
+  const item = musicState.results[index];
+  if (item) musicPlayItem(item, true);
+}
+
+function musicQueueAddResult(index) {
+  const item = musicState.results[index];
+  if (!item) return;
+  musicQueueAdd(item);
+ showInAppNotification(`Added to queue: ${item.title}`);
+}
+
+// ---------- playback ----------
+function musicHandleQuery(queryOrUrl) {
+  const raw = String(queryOrUrl || '').trim();
+  if (!raw) return;
+  const { videoId, playlistId } = parseYouTubeUrl(raw);
+  if (videoId) {
+    openMusicPlayer();
+    musicPlayItem({
+      id: videoId,
+      title: 'YouTube track',
+      channel: 'YouTube',
+      thumbnail: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+      url: `https://www.youtube.com/watch?v=${videoId}`
+    }, true);
+    return;
+  }
+  if (playlistId) {
+    openMusicPlayer();
+    musicPlayLegacyPlaylist(playlistId, raw);
+    return;
+  }
+  openMusicPlayer(raw);
+}
+
+function musicPlayLegacyPlaylist(playlistId, rawUrl) {
+  const input = document.getElementById('yt-song-input');
+  if (input) input.value = rawUrl;
+  ytCurrentVideoId = null;
+  ytCurrentPlaylistId = null;
+  isYTPlaying = false;
+  musicState.engine = 'youtube';
+  musicSetEngineBadge('YouTube playlist', 'youtube');
+  toggleYouTubePlayback();
+}
+
+function musicPlayItem(item, playNow) {
+  if (!item || !item.id) return;
+  item.thumbnail = item.thumbnail || `https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`;
+  item.url = item.url || `https://www.youtube.com/watch?v=${item.id}`;
+
+  musicState.current = item;
+  let existing = musicState.queue.findIndex(entry => entry.id === item.id);
+  if (existing >= 0) {
+    musicState.index = existing;
+  } else if (playNow) {
+    const insertAt = musicState.index >= 0 ? musicState.index + 1 : musicState.queue.length;
+    musicState.queue.splice(insertAt, 0, item);
+    musicState.index = insertAt;
   } else {
-    // No curated match — search YouTube via server and play first result
-    showInAppNotification(`🔍 Searching YouTube for: "${raw}"...`);
-    fetch(`${API_BASE}/youtube/search?q=${encodeURIComponent(raw)}`)
-      .then(r => r.json())
-      .then(data => {
-        if (data && data.video_url) {
-          const ytInput = document.getElementById('yt-song-input');
-          if (ytInput) ytInput.value = data.video_url;
-          const drawer = document.getElementById('yt-drawer-content');
-          const icon = document.getElementById('yt-drawer-icon');
-          if (drawer && drawer.classList.contains('hidden')) {
-            drawer.classList.remove('hidden');
-            if (icon) icon.textContent = '▲';
-          }
-          isYTPlaying = false;
-          toggleYouTubePlayback();
-          showInAppNotification(`🎵 Now playing: ${data.title || raw}`);
-        } else {
-          // Final fallback: open YouTube search in soundscape input
-          const fallbackUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(raw)}`;
-          const ytInput = document.getElementById('yt-song-input');
-          if (ytInput) ytInput.value = fallbackUrl;
-          showInAppNotification(`🎵 Search loaded — press Play for: ${raw}`);
-        }
-      })
-      .catch(() => {
-        showInAppNotification(`⚠️ Couldn't find "${raw}" — try a YouTube URL directly in Soundscape.`);
+    musicState.queue.push(item);
+    musicState.index = musicState.queue.length - 1;
+  }
+
+  musicAddRecent(item);
+  musicPersistState();
+  musicRenderNowPlaying();
+  musicRenderQueue();
+  musicRenderResults();
+  musicStartAudio(item);
+}
+
+function musicQueueAdd(item) {
+  if (!item || !item.id) return;
+  if (!musicState.queue.some(entry => entry.id === item.id)) {
+    musicState.queue.push(item);
+  } else if (!musicState.current) {
+    musicState.current = item;
+  }
+  if (musicState.index < 0 && musicState.queue.length === 1) musicState.index = 0;
+  musicPersistState();
+  musicRenderQueue();
+}
+
+function musicStartAudio(item) {
+  const audio = musicAudioEl();
+  musicState.engine = 'audio';
+  musicSetEngineBadge('Ad-free audio', 'audio');
+  musicSetPlayingUI(true);
+  updateYTTrackTitle(item.title || 'Loading…');
+
+  if (!audio) {
+    musicFallbackYouTube(item);
+    return;
+  }
+
+  try {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+  } catch (e) { /* noop */ }
+
+  audio.volume = musicState.volume;
+  audio.dataset.videoId = item.id;
+  audio.src = `${API_BASE}/music/stream/${item.id}`;
+
+  const promise = audio.play();
+  if (promise && promise.catch) {
+    promise.catch(() => { /* error listener handles fallback */ });
+  }
+}
+
+function musicFallbackYouTube(item) {
+  if (!item || !item.id) return;
+  const audio = musicAudioEl();
+  if (audio) {
+    try {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    } catch (e) { /* noop */ }
+  }
+  musicState.engine = 'youtube';
+  musicSetEngineBadge('YouTube embed', 'youtube');
+  const input = document.getElementById('yt-song-input');
+  if (input) input.value = `https://www.youtube.com/watch?v=${item.id}`;
+  ytCurrentVideoId = null;
+  ytCurrentPlaylistId = null;
+  isYTPlaying = false;
+  toggleYouTubePlayback();
+}
+
+function musicToggle() {
+  if (musicState.engine === 'youtube') {
+    toggleYouTubePlayback();
+    return;
+  }
+  const audio = musicAudioEl();
+  if (!audio || !audio.src) {
+    if (musicState.current) musicStartAudio(musicState.current);
+    else openMusicPlayer();
+    return;
+  }
+  if (audio.paused) {
+    const promise = audio.play();
+    if (promise && promise.catch) promise.catch(() => {});
+  } else {
+    audio.pause();
+  }
+}
+
+function musicNext() {
+  if (musicState.engine === 'youtube' && ytPlayer && ytCurrentPlaylistId && ytPlayer.nextVideo) {
+    ytPlayer.nextVideo();
+    return;
+  }
+  if (!musicState.queue.length) return;
+  if (musicState.shuffle && musicState.queue.length > 1) {
+    let next = musicState.index;
+    while (next === musicState.index) next = Math.floor(Math.random() * musicState.queue.length);
+    musicState.index = next;
+  } else if (musicState.index + 1 < musicState.queue.length) {
+    musicState.index += 1;
+  } else if (musicState.repeat === 'all') {
+    musicState.index = 0;
+  } else {
+    return;
+  }
+  const item = musicState.queue[musicState.index];
+  if (!item) return;
+  musicState.current = item;
+  musicAddRecent(item);
+  musicPersistState();
+  musicRenderNowPlaying();
+  musicRenderQueue();
+  musicRenderResults();
+  musicStartAudio(item);
+}
+
+function musicPrev() {
+  if (musicState.engine === 'youtube' && ytPlayer && ytCurrentPlaylistId && ytPlayer.previousVideo) {
+    ytPlayer.previousVideo();
+    return;
+  }
+  if (!musicState.queue.length) return;
+  musicState.index = musicState.index > 0 ? musicState.index - 1 : 0;
+  const item = musicState.queue[musicState.index];
+  if (!item) return;
+  musicState.current = item;
+  musicAddRecent(item);
+  musicPersistState();
+  musicRenderNowPlaying();
+  musicRenderQueue();
+  musicRenderResults();
+  musicStartAudio(item);
+}
+
+function musicHandleEnded() {
+  const audio = musicAudioEl();
+  if (musicState.repeat === 'one' && audio) {
+    audio.currentTime = 0;
+    const promise = audio.play();
+    if (promise && promise.catch) promise.catch(() => {});
+    return;
+  }
+  musicNext();
+}
+
+function musicSeek(percent) {
+  const value = Number(percent) || 0;
+  if (musicState.engine === 'youtube' && ytPlayer && ytPlayer.getDuration && ytPlayer.seekTo) {
+    const duration = ytPlayer.getDuration() || 0;
+    if (duration > 0) ytPlayer.seekTo((value / 100) * duration, true);
+    return;
+  }
+  const audio = musicAudioEl();
+  if (audio && audio.duration) {
+    audio.currentTime = (value / 100) * audio.duration;
+    musicUpdateProgress();
+  }
+}
+
+function musicSetVolume(value) {
+  const numeric = Math.min(100, Math.max(0, Number(value) || 0));
+  musicState.volume = numeric / 100;
+  const audio = musicAudioEl();
+  if (audio) audio.volume = musicState.volume;
+  if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(numeric);
+  const label = document.getElementById('music-volume-label');
+  if (label) label.textContent = `${Math.round(numeric)}%`;
+  localStorage.setItem('hdsfd_music_volume', String(musicState.volume));
+}
+
+function musicUpdateProgress() {
+  const audio = musicAudioEl();
+  if (!audio) return;
+  const duration = audio.duration || 0;
+  const current = audio.currentTime || 0;
+  const percent = duration > 0 ? (current / duration) * 100 : 0;
+
+  const seek = document.getElementById('music-seek');
+  const cur = document.getElementById('music-cur-time');
+  const dur = document.getElementById('music-dur-time');
+  const legacyTime = document.getElementById('yt-time-display');
+  if (seek && document.activeElement !== seek) seek.value = String(percent);
+  if (cur) cur.textContent = musicFmt(current);
+  if (dur) dur.textContent = musicFmt(duration);
+  if (legacyTime) legacyTime.textContent = `${musicFmt(current)} / ${musicFmt(duration)}`;
+}
+
+function musicSetPlayingUI(playing) {
+  const icon = document.getElementById('music-play-icon');
+  if (icon) icon.innerHTML = hdsfdIcon(playing ? 'pause' : 'play');
+  const miniIcon = document.getElementById('yt-btn-icon');
+  if (miniIcon) miniIcon.innerHTML = hdsfdIcon(playing ? 'pause' : 'play');
+}
+
+function musicToggleShuffle() {
+  musicState.shuffle = !musicState.shuffle;
+  localStorage.setItem('hdsfd_music_shuffle', musicState.shuffle);
+  const btn = document.getElementById('music-shuffle-btn');
+  if (btn) btn.classList.toggle('is-active', musicState.shuffle);
+}
+
+function musicCycleRepeat() {
+  musicState.repeat = musicState.repeat === 'off' ? 'all' : (musicState.repeat === 'all' ? 'one' : 'off');
+  localStorage.setItem('hdsfd_music_repeat', musicState.repeat);
+  const btn = document.getElementById('music-repeat-btn');
+  if (btn) {
+    btn.classList.toggle('is-active', musicState.repeat !== 'off');
+    btn.innerHTML = hdsfdIcon(musicState.repeat === 'one' ? 'repeat-1' : 'repeat');
+    btn.title = musicState.repeat === 'off' ? 'Repeat off' : (musicState.repeat === 'all' ? 'Repeat all' : 'Repeat one');
+  }
+}
+
+// ---------- rendering ----------
+function musicRenderNowPlaying() {
+  const item = musicState.current;
+  const thumb = document.getElementById('music-np-thumb');
+  const title = document.getElementById('music-np-title');
+  const channel = document.getElementById('music-np-channel');
+  const mini = document.getElementById('music-mini');
+  const miniThumb = document.getElementById('music-mini-thumb');
+  const miniTitle = document.getElementById('music-mini-title');
+  const miniArtist = document.getElementById('music-mini-artist');
+
+  if (item) {
+    if (thumb) thumb.src = item.thumbnail;
+    if (title) title.textContent = item.title || 'Unknown track';
+    if (channel) channel.textContent = item.channel || 'YouTube';
+    if (mini) mini.classList.add('is-visible');
+    if (miniThumb) miniThumb.src = item.thumbnail;
+    if (miniTitle) miniTitle.textContent = item.title || 'Unknown track';
+    if (miniArtist) miniArtist.textContent = item.channel || 'YouTube';
+    updateYTTrackTitle(item.title || '');
+  } else {
+    if (title) title.textContent = 'Nothing playing';
+    if (channel) channel.textContent = 'Pick a track to start';
+    if (mini) mini.classList.remove('is-visible');
+  }
+  musicUpdateMediaSession();
+}
+
+function musicUpdateMediaSession() {
+  if (!('mediaSession' in navigator) || !musicState.current) return;
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: musicState.current.title || 'HDSFD Music',
+      artist: musicState.current.channel || 'HDSFD',
+      album: 'HDSFD Music',
+      artwork: [{ src: musicState.current.thumbnail, sizes: '320x180', type: 'image/jpeg' }]
+    });
+    navigator.mediaSession.setActionHandler('play', () => musicToggle());
+    navigator.mediaSession.setActionHandler('pause', () => musicToggle());
+    navigator.mediaSession.setActionHandler('nexttrack', () => musicNext());
+    navigator.mediaSession.setActionHandler('previoustrack', () => musicPrev());
+  } catch (e) { /* noop */ }
+}
+
+function musicRenderQueue() {
+  const container = document.getElementById('music-queue-list');
+  const count = document.getElementById('music-queue-count');
+  if (count) count.textContent = String(musicState.queue.length);
+  if (!container) return;
+  if (!musicState.queue.length) {
+    container.innerHTML = `<div class="music-empty"><div class="music-empty-title">Queue is empty</div><div class="music-empty-sub">Use the add button on any result to line it up.</div></div>`;
+    return;
+  }
+  container.innerHTML = musicState.queue.map((item, index) => `
+    <div class="music-row ${index === musicState.index ? 'is-playing' : ''}">
+      <button type="button" class="music-row-main" onclick="musicPlayQueueIndex(${index})">
+        <img class="music-thumb" src="${item.thumbnail}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+        <span class="music-row-text">
+          <span class="music-row-title">${escapeHtml(item.title || 'Untitled')}</span>
+          <span class="music-row-sub">${escapeHtml(item.channel || 'YouTube')}</span>
+        </span>
+      </button>
+      <button type="button" class="music-icon-btn" onclick="musicRemoveQueueIndex(${index})" title="Remove">${hdsfdIcon('x')}</button>
+    </div>
+  `).join('');
+}
+
+function musicPlayQueueIndex(index) {
+  const item = musicState.queue[index];
+  if (!item) return;
+  musicState.index = index;
+  musicPlayItem(item, true);
+}
+
+function musicRemoveQueueIndex(index) {
+  if (index < 0 || index >= musicState.queue.length) return;
+  musicState.queue.splice(index, 1);
+  if (musicState.index > index) musicState.index -= 1;
+  if (musicState.index >= musicState.queue.length) musicState.index = musicState.queue.length - 1;
+  musicPersistState();
+  musicRenderQueue();
+}
+
+function musicAddRecent(item) {
+  if (!item || !item.id) return;
+  musicState.recent = musicState.recent.filter(entry => entry.id !== item.id);
+  musicState.recent.unshift({
+    id: item.id,
+    title: item.title || 'Untitled',
+    channel: item.channel || 'YouTube',
+    thumbnail: item.thumbnail || `https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`,
+    url: item.url || `https://www.youtube.com/watch?v=${item.id}`,
+    played_at: Date.now()
+  });
+  if (musicState.recent.length > 20) musicState.recent = musicState.recent.slice(0, 20);
+  localStorage.setItem('hdsfd_music_recent', JSON.stringify(musicState.recent));
+  musicRenderRecent();
+}
+
+function musicRenderRecent() {
+  const container = document.getElementById('music-recent-list');
+  if (!container) return;
+  if (!musicState.recent.length) {
+    container.innerHTML = `<div class="music-empty"><div class="music-empty-title">No history yet</div><div class="music-empty-sub">Everything you play is saved here.</div></div>`;
+    return;
+  }
+  container.innerHTML = musicState.recent.map((item, index) => `
+    <div class="music-row">
+      <button type="button" class="music-row-main" onclick="musicPlayRecent(${index})">
+        <img class="music-thumb" src="${item.thumbnail}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
+        <span class="music-row-text">
+          <span class="music-row-title">${escapeHtml(item.title || 'Untitled')}</span>
+          <span class="music-row-sub">${escapeHtml(item.channel || 'YouTube')}</span>
+        </span>
+      </button>
+      <button type="button" class="music-play-btn" onclick="musicPlayRecent(${index})" title="Play">${hdsfdIcon('play')}</button>
+    </div>
+  `).join('');
+}
+
+function musicPlayRecent(index) {
+  const item = musicState.recent[index];
+  if (!item) return;
+  musicPlayItem(item, true);
+}
+
+function musicPersistState() {
+  try {
+    localStorage.setItem('hdsfd_music_queue', JSON.stringify(musicState.queue.slice(0, 50)));
+    localStorage.setItem('hdsfd_music_index', String(musicState.index));
+  } catch (e) { /* noop */ }
+}
+
+function musicRestoreState() {
+  try {
+    const queue = JSON.parse(localStorage.getItem('hdsfd_music_queue') || '[]');
+    const index = parseInt(localStorage.getItem('hdsfd_music_index') || '-1', 10);
+    if (Array.isArray(queue) && queue.length) {
+      musicState.queue = queue;
+      musicState.index = Number.isInteger(index) && index >= 0 && index < queue.length ? index : 0;
+      musicState.current = queue[musicState.index] || null;
+      musicState.engine = 'idle';
+      musicRenderNowPlaying();
+      musicRenderQueue();
+    }
+  } catch (e) { /* noop */ }
+  musicSetVolume(musicState.volume * 100);
+  const shuffleBtn = document.getElementById('music-shuffle-btn');
+  if (shuffleBtn) shuffleBtn.classList.toggle('is-active', musicState.shuffle);
+  const repeatBtn = document.getElementById('music-repeat-btn');
+  if (repeatBtn) {
+    repeatBtn.classList.toggle('is-active', musicState.repeat !== 'off');
+    repeatBtn.innerHTML = hdsfdIcon(musicState.repeat === 'one' ? 'repeat-1' : 'repeat');
+  }
+  musicRenderRecent();
+}
+
+function bindMusicAudio() {
+  const audio = musicAudioEl();
+  if (!audio || audio.dataset.bound === '1') return;
+  audio.dataset.bound = '1';
+  audio.volume = musicState.volume;
+  audio.addEventListener('timeupdate', musicUpdateProgress);
+  audio.addEventListener('loadedmetadata', musicUpdateProgress);
+  audio.addEventListener('play', () => musicSetPlayingUI(true));
+  audio.addEventListener('pause', () => {
+    if (musicState.engine !== 'youtube') musicSetPlayingUI(false);
+  });
+  audio.addEventListener('ended', musicHandleEnded);
+  audio.addEventListener('error', () => {
+    if (musicState.current && musicState.engine === 'audio') {
+      musicFallbackYouTube(musicState.current);
+    }
+  });
+  if ('mediaSession' in navigator) {
+    try {
+      navigator.mediaSession.setActionHandler('seekto', (details) => {
+        if (audio && details.seekTime != null) audio.currentTime = details.seekTime;
       });
+    } catch (e) { /* noop */ }
   }
 }
 
@@ -3819,7 +4517,7 @@ function updateStatsOverview() {
   if (focusEl) focusEl.textContent = `${mins} mins`;
   if (tasksEl) tasksEl.textContent = `${completedTasks} done`;
   if (streakEl) streakEl.textContent = `1 Day`;
-  if (coinsEl) coinsEl.textContent = `🪙 ${currentCoins}`;
+  if (coinsEl) coinsEl.innerHTML = `${hdsfdIcon('coins')} ${currentCoins}`;
   if (headerCoins) headerCoins.textContent = `${currentCoins}`;
   if (multBadge) multBadge.textContent = `${mult.toFixed(1)}x Growth`;
 
@@ -3832,13 +4530,13 @@ function updateStatsOverview() {
   const iconEl = document.getElementById('stat-tree-icon');
   const barEl = document.getElementById('stat-tree-progress-bar');
 
-  const stageIcons = ['🌱', '🌿', '🌳', '🌸', '🍃', '🌟', '✨', '👑'];
+  const stageIcons = ['sprout', 'leaf', 'tree-deciduous', 'flower-2', 'leaf', 'star', 'sparkles', 'crown'];
   const curIcon = stageIcons[Math.min(stageIcons.length - 1, Math.floor(stageInfo.stageNumber / 10))];
 
   if (stageEl) stageEl.textContent = stageInfo.stageName;
   if (xpLabelEl) xpLabelEl.textContent = `${lifetimeCoins} / ${stageInfo.stageNextXP} Lifetime Coins XP`;
   if (pctEl) pctEl.textContent = `${stageInfo.progressPct}%`;
-  if (iconEl) iconEl.textContent = curIcon;
+  if (iconEl) iconEl.innerHTML = hdsfdIcon(curIcon);
   if (barEl) barEl.style.width = `${stageInfo.progressPct}%`;
 
   renderSanctuaryTree();
@@ -3911,7 +4609,7 @@ function toggleSoundscape() {
     isPlayingSoundscape = true;
     if (btn) btn.innerHTML = '<i data-lucide="square" class="w-4 h-4"></i> <span>Stop Soundscape</span>';
     if (badge) {
-      badge.textContent = 'Active 🎵';
+      badge.textContent = 'Active';
       badge.className = 'text-[9px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-bold';
     }
     if (rain) rain.play().catch(() => {});
@@ -3993,10 +4691,10 @@ function toggleYouTubeDrawer() {
   isYouTubeDrawerOpen = !isYouTubeDrawerOpen;
   if (isYouTubeDrawerOpen) {
     drawer.classList.remove('hidden');
-    if (icon) icon.textContent = '▲';
+    if (icon) icon.innerHTML = hdsfdIcon('chevron-up');
   } else {
     drawer.classList.add('hidden');
-    if (icon) icon.textContent = '▼';
+    if (icon) icon.innerHTML = hdsfdIcon('chevron-down');
   }
 }
 
@@ -4160,11 +4858,11 @@ function updateYTButtonState(playing) {
   const icon = document.getElementById('yt-btn-icon');
   const btn = document.getElementById('yt-toggle-btn');
   if (playing) {
-    if (icon) icon.textContent = '⏹';
-    if (btn) btn.className = 'bg-red-500 hover:bg-red-400 text-white font-black w-8 h-7 rounded-lg flex items-center justify-center text-xs shadow transition-all';
+    if (icon) icon.innerHTML = hdsfdIcon('pause');
+    if (btn) btn.className = 'bg-white/15 hover:bg-white/25 text-white font-black w-8 h-8 rounded-full border border-white/20 flex items-center justify-center shadow transition-all';
   } else {
-    if (icon) icon.textContent = '▶';
-    if (btn) btn.className = 'bg-amber-400 hover:bg-amber-300 text-slate-950 font-black w-8 h-7 rounded-lg flex items-center justify-center text-xs shadow transition-all';
+    if (icon) icon.innerHTML = hdsfdIcon('play');
+    if (btn) btn.className = 'bg-rose-500 hover:bg-rose-400 text-white font-black w-8 h-8 rounded-full flex items-center justify-center shadow transition-all';
   }
 }
 
@@ -4239,8 +4937,8 @@ function renderYTHistory() {
 
   container.innerHTML = ytSongHistory.map(item => `
     <button onclick="playFromYTHistory('${encodeURIComponent(item.url)}')" class="w-full text-left bg-white/5 hover:bg-white/10 p-1.5 rounded-lg flex items-center justify-between text-[9px] text-white/70 hover:text-white transition-all truncate group">
-      <span class="truncate font-medium">🎵 ${item.title}</span>
-      <span class="text-[8px] text-amber-300 font-bold ml-1 group-hover:scale-110 transition-transform">▶</span>
+      <span class="truncate font-medium flex items-center gap-1.5">${hdsfdIcon('music')} ${item.title}</span>
+      <span class="text-amber-300 ml-1 group-hover:scale-110 transition-transform">${hdsfdIcon('play')}</span>
     </button>
   `).join('');
 }
@@ -4296,7 +4994,7 @@ function startTimer() {
       const isSunlight = isSunlightEssenceActive();
       const baseCoinRate = isSunlight ? 4 : 2; // 2x on Sunlight (4 coins/min)
 
-      awardActivityCoins(minsEarned * baseCoinRate, `Focus Session Completed (${minsEarned}m)${isSunlight ? ' ⚡ Sunlight 2x' : ''}`);
+ awardActivityCoins(minsEarned * baseCoinRate, `Focus Session Completed (${minsEarned}m)${isSunlight ? ' Sunlight 2x' : ''}`);
       
       // Consume Sunlight Essence after 1 completed session
       if (isSunlight) {
@@ -4324,7 +5022,7 @@ function pauseTimer() {
     if (pomoSessionElapsedSeconds >= 60) {
       const partialMins = pomoSessionElapsedSeconds / 60;
       const partialCoins = Math.max(1, Math.round(partialMins * 2));
-      awardActivityCoins(partialCoins, `Focus Progress (${Math.round(partialMins)}m)`);
+ awardActivityCoins(partialCoins, `Focus Progress (${Math.round(partialMins)}m)`);
       healSanctuaryTree(Math.round(partialMins * 2));
       pomoSessionElapsedSeconds = 0;
     }
@@ -4452,7 +5150,7 @@ function exitZenMode() {
     if (elapsedMinutes >= 1) {
       const curZenMins = parseInt(localStorage.getItem('hdsfd_zen_minutes') || '0', 10);
       localStorage.setItem('hdsfd_zen_minutes', String(curZenMins + elapsedMinutes));
-      awardActivityCoins(elapsedMinutes * 3, `Zen Mode (${elapsedMinutes}m)`);
+ awardActivityCoins(elapsedMinutes * 3, `Zen Mode (${elapsedMinutes}m)`);
     }
     zenStartTime = null;
   }
@@ -4629,7 +5327,7 @@ function saveNameFromSettings() {
   const saveBtn = document.getElementById('settings-name-save-btn');
   if (saveBtn) {
     const originalText = saveBtn.textContent;
-    saveBtn.textContent = 'Saved! ✓';
+    saveBtn.textContent = 'Saved!';
     saveBtn.classList.remove('bg-white', 'text-slate-900');
     saveBtn.classList.add('bg-emerald-400', 'text-slate-950');
     setTimeout(() => {
@@ -4692,7 +5390,7 @@ window.addEventListener('message', (event) => {
         localStorage.setItem(claimKey, 'true');
         localUpgrades.push('cosmic_claimed');
         localStorage.setItem('hdsfd_upgrades', JSON.stringify(localUpgrades));
-        awardActivityCoins(200, '🌟 Cosmic Theme Key & Google Link Bonus');
+ awardActivityCoins(200, ' Cosmic Theme Key & Google Link Bonus');
         syncUserStatsToServer();
       }
       updateStatsOverview();
@@ -4709,7 +5407,7 @@ function disconnectGoogleAccount() {
   initializeUserSession();
   updateStatsOverview();
   updateShopCardsUI();
-  showInAppNotification('👋 Disconnected Google Account. Returned to Guest Mode.');
+ showInAppNotification(' Disconnected Google Account. Returned to Guest Mode.');
 }
 
 function setTheme(theme) {
@@ -4724,7 +5422,7 @@ function setTheme(theme) {
 
   // Theme Locking for Non-Signed-In Users
   if (normalized !== 'midnight' && !googleAccount && !localStorage.getItem('hdsfd_theme_unlocked_override')) {
-    showInAppNotification('🔒 Sign in with Google to unlock all 8 fluid gradient themes + get 200 Free Coins!');
+ showInAppNotification(' Sign in with Google to unlock all 8 fluid gradient themes + get 200 Free Coins!');
     return;
   }
 
@@ -4869,7 +5567,7 @@ function awardActivityCoins(baseAmount, activityName) {
   localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + actualAmount));
   updateStatsOverview();
   if (activityName) {
-    showInAppNotification(`✨ +${actualAmount} 🪙 earned (${activityName})!`);
+ showInAppNotification(` +${actualAmount} earned (${activityName})!`);
   }
   checkStageMilestoneBonus();
   // Sync to server so coins persist across devices
@@ -4881,7 +5579,7 @@ function deductActivityCoins(baseAmount, reason) {
   localStorage.setItem('hdsfd_lifetime_bonus_xp', String(Math.max(0, curBonus - baseAmount)));
   updateStatsOverview();
   if (reason) {
-    showInAppNotification(`🔻 -${baseAmount} 🪙 (${reason})`);
+ showInAppNotification(` -${baseAmount} (${reason})`);
   }
   // Sync to server so deductions persist across devices
   syncUserStatsToServer();
@@ -4947,7 +5645,7 @@ function checkStageMilestoneBonus() {
     localStorage.setItem('hdsfd_stage_100_awarded', 'true');
     const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
     localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + 10000));
-    showInAppNotification('🎊 CONGRATULATIONS! You reached Stage 100 and unlocked the 10,000 🪙 World Tree Blessing!');
+ showInAppNotification(' CONGRATULATIONS! You reached Stage 100 and unlocked the 10,000 World Tree Blessing!');
     updateStatsOverview();
   }
 }
@@ -5000,7 +5698,7 @@ function processBlossomPassiveIncome() {
     const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
     localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + earned));
     localStorage.setItem('hdsfd_petals_last_claim', String(Date.now()));
-    showInAppNotification(`🌸 Drifting Blossom Petals harvested +${earned} 🪙 passive income!`);
+ showInAppNotification(` Drifting Blossom Petals harvested +${earned} passive income!`);
     updateStatsOverview();
   }
 }
@@ -5014,7 +5712,7 @@ function buyFertileDew() {
   const cost = 50 * (currentTier + 1);
 
   if (currentCoins < cost) {
-    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+ showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
     return;
   }
 
@@ -5025,7 +5723,7 @@ function buyFertileDew() {
   updateStatsOverview();
   updateShopCardsUI();
   renderSanctuaryTree();
-  showInAppNotification(`💧 Upgraded Fertile Spring Dew to Tier ${currentTier + 1}! Growth multiplier increased by +10%.`);
+ showInAppNotification(` Upgraded Fertile Spring Dew to Tier ${currentTier + 1}! Growth multiplier increased by +10%.`);
 }
 
 // 2. Sunlight Essence (2x Focus/Zen for 1 Session)
@@ -5034,12 +5732,12 @@ function buySunlightEssence() {
   const cost = 100;
 
   if (currentCoins < cost) {
-    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+ showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
     return;
   }
 
   if (isSunlightEssenceActive()) {
-    showInAppNotification(`⚡ Sunlight Essence is already active! Complete your next focus session to consume it.`);
+ showInAppNotification(` Sunlight Essence is already active! Complete your next focus session to consume it.`);
     return;
   }
 
@@ -5052,7 +5750,7 @@ function buySunlightEssence() {
 
   updateStatsOverview();
   updateShopCardsUI();
-  showInAppNotification(`⚡ Sunlight Essence activated! Your next focus session will earn 2x Coins with a radiant timer aura.`);
+ showInAppNotification(` Sunlight Essence activated! Your next focus session will earn 2x Coins with a radiant timer aura.`);
 }
 
 // 3. Glowing Vines (1.5x Growth - 1 Day)
@@ -5062,7 +5760,7 @@ function buyGlowingVines() {
   const cost = 150 + ((currentTier - 1) * 50);
 
   if (currentCoins < cost) {
-    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+ showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
     return;
   }
 
@@ -5074,16 +5772,16 @@ function buyGlowingVines() {
   updateStatsOverview();
   updateShopCardsUI();
   renderSanctuaryTree();
-  showInAppNotification(`🌿 Enchanted tree with Glowing Vines for 24 Hours! (Growth x${(1.0 + currentTier * 0.5).toFixed(1)})`);
+ showInAppNotification(` Enchanted tree with Glowing Vines for 24 Hours! (Growth x${(1.0 + currentTier * 0.5).toFixed(1)})`);
 }
 
-// 4. Blossom Petals (1.5x Coins + 10 🪙/hr passive - 1 Day)
+// 4. Blossom Petals (1.5x Coins + 10 coins/hr passive - 1 Day)
 function buyBlossomPetals() {
   const currentCoins = getUserCoinsBalance();
   const cost = 200;
 
   if (currentCoins < cost) {
-    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+ showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
     return;
   }
 
@@ -5096,7 +5794,7 @@ function buyBlossomPetals() {
   updateStatsOverview();
   updateShopCardsUI();
   renderSanctuaryTree();
-  showInAppNotification(`🌸 Drifting Blossom Petals active for 24 Hours! (1.5x Coins + 10🪙/hr Passive Harvest).`);
+ showInAppNotification(` Drifting Blossom Petals active for 24 Hours! (1.5x Coins + 10/hr Passive Harvest).`);
 }
 
 // 5. Starlight Aura (2x Coins & 2x Growth - 1 Week)
@@ -5105,7 +5803,7 @@ function buyStarlightAura() {
   const cost = 500;
 
   if (currentCoins < cost) {
-    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+ showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
     return;
   }
 
@@ -5119,7 +5817,7 @@ function buyStarlightAura() {
   updateStatsOverview();
   updateShopCardsUI();
   renderSanctuaryTree();
-  showInAppNotification(`🌟 Starlight Cosmic Aura active for 1 Whole Week! (2x Coins & 2x Tree Growth).`);
+ showInAppNotification(` Starlight Cosmic Aura active for 1 Whole Week! (2x Coins & 2x Tree Growth).`);
 }
 
 // 6. Streak Shield (2 Days Protection)
@@ -5128,7 +5826,7 @@ function buyStreakShield() {
   const cost = 250;
 
   if (currentCoins < cost) {
-    showInAppNotification(`⚠️ Not enough coins! You need ${cost} 🪙 (Have: ${currentCoins} 🪙).`);
+ showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
     return;
   }
 
@@ -5139,13 +5837,13 @@ function buyStreakShield() {
 
   updateStatsOverview();
   updateShopCardsUI();
-  showInAppNotification(`🧊 Streak Freeze Shield activated! Protects daily streak & tree vitality for 48 Hours.`);
+ showInAppNotification(` Streak Freeze Shield activated! Protects daily streak & tree vitality for 48 Hours.`);
 }
 
 // 7. Cosmic Theme Key Action
 function handleThemeKeyAction() {
   if (googleAccount) {
-    showInAppNotification('🎨 All premium fluid themes are already unlocked with your connected Google account!');
+ showInAppNotification(' All premium fluid themes are already unlocked with your connected Google account!');
   } else {
     connectGoogleAccount();
   }
@@ -5155,7 +5853,7 @@ function handleThemeKeyAction() {
 let ytSubTimer = null;
 function openYouTubeSubFlow() {
   if (localStorage.getItem('hdsfd_has_crown') === 'true') {
-    showInAppNotification('👑 Zen Master Crown is already unlocked and active on your profile!');
+ showInAppNotification(' Zen Master Crown is already unlocked and active on your profile!');
     return;
   }
   const modal = document.getElementById('yt-sub-modal');
@@ -5163,7 +5861,7 @@ function openYouTubeSubFlow() {
   if (verifyBtn) {
     verifyBtn.disabled = true;
     verifyBtn.className = 'w-full bg-white/10 text-white/40 border border-white/10 font-bold py-2 px-4 rounded-xl text-xs transition-all cursor-not-allowed';
-    verifyBtn.textContent = 'Verify & Claim Reward (+1000 🪙)';
+    verifyBtn.innerHTML = `Verify & Claim Reward (+1000 ${hdsfdIcon('coins')})`;
   }
   if (modal) modal.classList.remove('hidden');
 }
@@ -5201,7 +5899,7 @@ function onYouTubeSubChannelClicked() {
       ytSubCountdownInterval = null;
       verifyBtn.disabled = false;
       verifyBtn.className = 'w-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs transition-all active:scale-95 shadow-lg shadow-emerald-500/30 animate-bounce';
-      verifyBtn.textContent = 'Claim Reward (+1,000 🪙 & Crown) ✓';
+      verifyBtn.innerHTML = `Claim Reward (+1,000 ${hdsfdIcon('coins')} & Crown)`;
     }
   }, 1000);
 }
@@ -5209,13 +5907,13 @@ function onYouTubeSubChannelClicked() {
 function verifyYouTubeSubscription() {
   const localUpgrades = JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]');
   if (localStorage.getItem('hdsfd_has_crown') === 'true' || localUpgrades.includes('crown_claimed')) {
-    showInAppNotification('👑 Zen Master Crown has already been claimed on your account!');
+ showInAppNotification(' Zen Master Crown has already been claimed on your account!');
     closeYouTubeSubModal();
     return;
   }
 
   if (!ytChannelLinkClicked) {
-    showInAppNotification('⚠️ Please click "Subscribe on YouTube" to open @HyperHrishiHD channel first!');
+ showInAppNotification(' Please click "Subscribe on YouTube" to open @HyperHrishiHD channel first!');
     return;
   }
 
@@ -5224,14 +5922,14 @@ function verifyYouTubeSubscription() {
     localUpgrades.push('crown_claimed');
     localStorage.setItem('hdsfd_upgrades', JSON.stringify(localUpgrades));
   }
-  awardActivityCoins(1000, '👑 Zen Master YouTube Crown');
+ awardActivityCoins(1000, ' Zen Master YouTube Crown');
   syncUserStatsToServer();
 
   closeYouTubeSubModal();
   initializeUserSession();
   updateStatsOverview();
   updateShopCardsUI();
-  showInAppNotification('👑 Zen Master Crown unlocked! +1,000 Coins added to your sanctuary balance.');
+ showInAppNotification(' Zen Master Crown unlocked! +1,000 Coins added to your sanctuary balance.');
 }
 
 // Update Dynamic Shop Cards Labels & Buttons
@@ -5244,7 +5942,7 @@ function updateShopCardsUI() {
   const dewBtn = document.getElementById('buy-dew-btn');
   if (dewBadge) dewBadge.textContent = `Tier ${dewTier + 1}`;
   if (dewDesc) dewDesc.textContent = `+${(dewTier + 1) * 10}% Permanent growth multiplier`;
-  if (dewBtn) dewBtn.textContent = `Buy (${dewCost} 🪙)`;
+  if (dewBtn) dewBtn.innerHTML = `Buy (${dewCost} ${hdsfdIcon('coins')})`;
 
   // 2. Sunlight
   const sunlightBtn = document.getElementById('buy-sunlight-btn');
@@ -5253,7 +5951,7 @@ function updateShopCardsUI() {
       sunlightBtn.textContent = 'Active (1 Session)';
       sunlightBtn.className = 'mt-2.5 bg-amber-500/40 text-amber-200 border border-amber-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
     } else {
-      sunlightBtn.textContent = 'Buy (100 🪙)';
+      sunlightBtn.innerHTML = `Buy (100 ${hdsfdIcon('coins')})`;
       sunlightBtn.className = 'mt-2.5 bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-500/30 active:scale-95 transition-all';
     }
   }
@@ -5271,7 +5969,7 @@ function updateShopCardsUI() {
       vinesBtn.textContent = `Active (${hoursLeft}h left)`;
       vinesBtn.className = 'mt-2.5 bg-teal-500/40 text-teal-200 border border-teal-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
     } else {
-      vinesBtn.textContent = `Buy (${vinesCost} 🪙)`;
+      vinesBtn.innerHTML = `Buy (${vinesCost} ${hdsfdIcon('coins')})`;
       vinesBtn.className = 'mt-2.5 bg-teal-500/20 text-teal-200 border border-teal-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-teal-500/30 active:scale-95 transition-all';
     }
   }
@@ -5285,7 +5983,7 @@ function updateShopCardsUI() {
       petalsBtn.textContent = `Active (${hoursLeft}h left)`;
       petalsBtn.className = 'mt-2.5 bg-rose-500/40 text-rose-200 border border-rose-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
     } else {
-      petalsBtn.textContent = 'Buy (200 🪙)';
+      petalsBtn.innerHTML = `Buy (200 ${hdsfdIcon('coins')})`;
       petalsBtn.className = 'mt-2.5 bg-rose-500/20 text-rose-200 border border-rose-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-rose-500/30 active:scale-95 transition-all';
     }
   }
@@ -5299,7 +5997,7 @@ function updateShopCardsUI() {
       starlightBtn.textContent = `Active (${daysLeft}d left)`;
       starlightBtn.className = 'mt-2.5 bg-yellow-400/40 text-yellow-100 border border-yellow-300 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
     } else {
-      starlightBtn.textContent = 'Buy (500 🪙)';
+      starlightBtn.innerHTML = `Buy (500 ${hdsfdIcon('coins')})`;
       starlightBtn.className = 'mt-2.5 bg-yellow-400/20 text-yellow-100 border border-yellow-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-yellow-400/30 active:scale-95 transition-all';
     }
   }
@@ -5313,7 +6011,7 @@ function updateShopCardsUI() {
       freezeBtn.textContent = `Shield Active (${hoursLeft}h)`;
       freezeBtn.className = 'mt-2.5 bg-cyan-500/40 text-cyan-200 border border-cyan-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default';
     } else {
-      freezeBtn.textContent = 'Buy (250 🪙)';
+      freezeBtn.innerHTML = `Buy (250 ${hdsfdIcon('coins')})`;
       freezeBtn.className = 'mt-2.5 bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30 active:scale-95 transition-all';
     }
   }
@@ -5322,11 +6020,11 @@ function updateShopCardsUI() {
   const themeBtn = document.getElementById('buy-theme-btn');
   if (themeBtn) {
     if (googleAccount) {
-      themeBtn.textContent = 'Unlocked ✓ (+200 🪙 Claimed)';
+      themeBtn.textContent = 'Unlocked (+200 coins claimed)';
       themeBtn.className = 'mt-2.5 bg-purple-500/40 text-purple-200 border border-purple-400 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default opacity-80';
       themeBtn.disabled = true;
     } else {
-      themeBtn.textContent = 'Sign in (+200 🪙)';
+      themeBtn.textContent = 'Sign in (+200 coins)';
       themeBtn.className = 'mt-2.5 bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-purple-500/30 active:scale-95 transition-all';
       themeBtn.disabled = false;
     }
@@ -5337,7 +6035,7 @@ function updateShopCardsUI() {
   if (crownBtn) {
     const localUpgrades = JSON.parse(localStorage.getItem('hdsfd_upgrades') || '[]');
     if (localStorage.getItem('hdsfd_has_crown') === 'true' || localUpgrades.includes('crown_claimed')) {
-      crownBtn.textContent = 'Crown Unlocked 👑 (+1000 🪙 Claimed)';
+      crownBtn.textContent = 'Crown unlocked (+1,000 coins claimed)';
       crownBtn.className = 'mt-2.5 bg-amber-400/40 text-amber-100 border border-amber-300 px-2.5 py-1.5 rounded-lg text-[10px] font-bold cursor-default opacity-80';
       crownBtn.disabled = true;
     } else {
@@ -5400,7 +6098,7 @@ function saveExamEntry() {
   const title = titleInput ? titleInput.value.trim() : '';
   const dateVal = dateInput ? dateInput.value : '';
   if (!title || !dateVal) {
-    showInAppNotification('⚠️ Please enter an exam name and date.');
+ showInAppNotification(' Please enter an exam name and date.');
     return;
   }
 
@@ -5461,7 +6159,7 @@ function saveExamEntry() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       username: currentOwner,
-      title: `🎯 EXAM: ${title}`,
+      title: `EXAM: ${title}`,
       start_date: `${dateVal}T${timeVal}:00`,
       location: location
     })
@@ -5474,7 +6172,7 @@ function saveExamEntry() {
   renderDirectGTasks();
   renderDarkCalendarGrid();
   renderHomeStatusAndNotifications();
-  showInAppNotification(`🎯 Exam added: ${title}! Task folder created.`);
+ showInAppNotification(` Exam added: ${title}! Task folder created.`);
   triggerGoogleBackup();
 }
 
@@ -5499,7 +6197,7 @@ function toggleExamCompleted(id) {
   localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
 
   if (exam.completed) {
-    awardActivityCoins(exam.reward || 250, `Exam Completed: ${exam.title} 🎯`);
+ awardActivityCoins(exam.reward || 250, `Exam Completed: ${exam.title} `);
     healSanctuaryTree(50);
   } else {
     deductActivityCoins(exam.reward || 250, 'Exam Unchecked');
@@ -5538,20 +6236,20 @@ function renderExamCardsList() {
         <div class="space-y-1">
           <div class="flex items-center gap-2">
             <button onclick="toggleExamCompleted('${ex.id}')" class="w-4 h-4 rounded border ${isCompleted ? 'bg-rose-500 border-rose-400 text-white' : 'border-rose-400/60 bg-transparent'} flex items-center justify-center text-[10px] font-bold">
-              ${isCompleted ? '✓' : ''}
+              ${isCompleted ? hdsfdIcon('check') : ''}
             </button>
             <h4 class="text-xs font-bold ${isCompleted ? 'line-through text-white/50' : 'text-white'}">${escapeHtml(ex.title)}</h4>
-            <span class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">+${ex.reward || 250} 🪙</span>
+            <span class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded">+${ex.reward || 250} ${hdsfdIcon('coins')}</span>
           </div>
           <div class="flex items-center gap-2.5 text-[10px] text-white/60">
-            <span class="text-rose-300 font-semibold">📅 ${dateFormatted} • ${timeFormatted}</span>
-            ${ex.location ? `<span>📍 ${escapeHtml(ex.location)}</span>` : ''}
+            <span class="text-rose-300 font-semibold inline-flex items-center gap-1">${hdsfdIcon('calendar')} ${dateFormatted} • ${timeFormatted}</span>
+            ${ex.location ? `<span class="inline-flex items-center gap-1">${hdsfdIcon('pin')} ${escapeHtml(ex.location)}</span>` : ''}
           </div>
         </div>
 
         <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
-          <button onclick="openAddExamModal('${ex.id}')" class="w-6 h-6 rounded bg-white/5 hover:bg-white/15 text-white/70 flex items-center justify-center text-xs" title="Edit Exam">✏️</button>
-          <button onclick="deleteExamEntry('${ex.id}')" class="w-6 h-6 rounded bg-red-500/10 hover:bg-red-500/30 text-red-300 flex items-center justify-center text-xs" title="Delete Exam">🗑️</button>
+          <button onclick="openAddExamModal('${ex.id}')" class="w-6 h-6 rounded bg-white/5 hover:bg-white/15 text-white/70 flex items-center justify-center text-xs" title="Edit Exam">${hdsfdIcon('pencil')}</button>
+          <button onclick="deleteExamEntry('${ex.id}')" class="w-6 h-6 rounded bg-red-500/10 hover:bg-red-500/30 text-red-300 flex items-center justify-center text-xs" title="Delete Exam">${hdsfdIcon('trash-2')}</button>
         </div>
       </div>
     `;
@@ -5836,13 +6534,40 @@ function refreshIcons() {
   }
 }
 
+// ===== SCROLL PAINT GUARD =====
+// Glass uses backdrop-filter plus an animated refraction field. During fast
+// scrolling the compositor can fall behind and paint a blank frame, so the
+// expensive effects pause for the duration of the scroll and come back once
+// it settles. Keeps scrolling smooth without changing the resting look.
+let scrollPaintGuardTimer = null;
+
+function markScrollActivity() {
+  const body = document.body;
+  if (!body.classList.contains('is-scrolling')) body.classList.add('is-scrolling');
+  clearTimeout(scrollPaintGuardTimer);
+  scrollPaintGuardTimer = setTimeout(() => {
+    body.classList.remove('is-scrolling');
+  }, 130);
+}
+
+function initScrollPaintGuard() {
+  const scrollers = [
+    document.getElementById('content-area'),
+    document.getElementById('gemini-agent-chat-stream'),
+    document.getElementById('notes-canvas-arena'),
+    document.getElementById('gtasks-live-list')
+  ].filter(Boolean);
+  scrollers.forEach(el => el.addEventListener('scroll', markScrollActivity, { passive: true }));
+  window.addEventListener('scroll', markScrollActivity, { passive: true });
+}
+
 // Google First-Time 200 Coin Bonus & Auto-Sync
 function handleGoogleFirstTimeReward() {
   if (googleAccount && !localStorage.getItem('hdsfd_google_signin_bonus_claimed')) {
     localStorage.setItem('hdsfd_google_signin_bonus_claimed', 'true');
     const curBonus = parseInt(localStorage.getItem('hdsfd_lifetime_bonus_xp') || '0', 10);
     localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + 200));
-    showInAppNotification('🎉 Welcome! Claimed +200 Free Coins for pairing your Google Account.');
+ showInAppNotification(' Welcome! Claimed +200 Free Coins for pairing your Google Account.');
     autoSyncGoogleTasksAndCalendar();
     updateStatsOverview();
     updateShopCardsUI();
@@ -5853,9 +6578,9 @@ function handleGoogleFirstTimeReward() {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then((reg) => {
-      console.log('HDSFD PWA Service Worker Registered:', reg.scope);
+ console.log('HDSFD PWA Service Worker Registered:', reg.scope);
     }).catch(err => {
-      console.log('SW registration error:', err);
+ console.log('SW registration error:', err);
     });
   });
 }
@@ -5873,7 +6598,7 @@ function triggerPwaInstall() {
     deferredPwaPrompt.prompt();
     deferredPwaPrompt.userChoice.then((choiceResult) => {
       if (choiceResult.outcome === 'accepted') {
-        console.log('User installed HDSFD PWA');
+ console.log('User installed HDSFD PWA');
       }
       deferredPwaPrompt = null;
       const installBtn = document.getElementById('pwa-install-header-btn');
@@ -5895,6 +6620,12 @@ document.addEventListener('DOMContentLoaded', () => {
   updateSchoolAccountUI();
   refreshSchoolStatus();
   refreshIcons();
+
+  // Music engine: bind the audio element and restore the saved session
+  bindMusicAudio();
+  musicRestoreState();
+  updateAIContextBadge(buildAIWorkspaceContext());
+  initScrollPaintGuard();
 
   // Passive income & decay checker interval (every 10 minutes)
   setInterval(() => {

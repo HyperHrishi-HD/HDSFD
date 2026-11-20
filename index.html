@@ -85,24 +85,36 @@
 
     /* Sleek Ultra-Glass Custom Scrollbars Everywhere */
     ::-webkit-scrollbar {
-      width: 5px;
-      height: 5px;
+      width: 9px;
+      height: 9px;
     }
     ::-webkit-scrollbar-track {
-      background: rgba(0, 0, 0, 0.2);
-      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.022);
+      border-radius: 999px;
     }
     ::-webkit-scrollbar-thumb {
-      background: rgba(168, 85, 247, 0.45);
-      border-radius: 8px;
-      backdrop-filter: blur(4px);
+      border-radius: 999px;
+      border: 2px solid transparent;
+      background-image: linear-gradient(180deg, rgba(196, 181, 253, 0.46), rgba(124, 58, 237, 0.34));
+      background-clip: padding-box;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.5),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.4);
     }
     ::-webkit-scrollbar-thumb:hover {
-      background: rgba(168, 85, 247, 0.75);
+      background-image: linear-gradient(180deg, rgba(233, 213, 255, 0.66), rgba(139, 92, 246, 0.52));
+      background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-thumb:active {
+      background-image: linear-gradient(180deg, rgba(245, 243, 255, 0.8), rgba(139, 92, 246, 0.65));
+      background-clip: padding-box;
+    }
+    ::-webkit-scrollbar-corner {
+      background: transparent;
     }
     * {
       scrollbar-width: thin;
-      scrollbar-color: rgba(168, 85, 247, 0.45) rgba(0, 0, 0, 0.2);
+      scrollbar-color: rgba(196, 181, 253, 0.48) rgba(255, 255, 255, 0.03);
     }
 
     .apple-clock-font {
@@ -139,37 +151,433 @@
     .theme-aurora { background: linear-gradient(-45deg, #064e3b, #0e7490, #4338ca, #1e1b4b); }
     .theme-rose { background: linear-gradient(-45deg, #4c0519, #831843, #3b0764, #1e1b4b); }
 
-    /* Ultra-Refined Glassmorphism Classes */
-    .glass {
-      background: rgba(255, 255, 255, 0.06);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    /* ===== LIQUID GLASS SYSTEM (depth • refraction • specular response) ===== */
+    .glass, .glass-card, .glass-panel, .glass-modal {
+      position: relative;
+      isolation: isolate;
+      background-clip: padding-box;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
     }
+
+    /* Specular sheen: sits above the glass fill, below every child */
+    .glass::before,
+    .glass-card::before,
+    .glass-panel::before,
+    .glass-modal::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      pointer-events: none;
+      z-index: -1;
+      background:
+        linear-gradient(155deg,
+          rgba(255, 255, 255, 0.16) 0%,
+          rgba(255, 255, 255, 0.05) 24%,
+          rgba(255, 255, 255, 0) 46%,
+          rgba(255, 255, 255, 0.04) 76%,
+          rgba(255, 255, 255, 0.10) 100%),
+        radial-gradient(120% 78% at 10% -12%, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0) 62%);
+      opacity: 0.85;
+      transition: opacity 0.5s ease;
+    }
+
+    .glass {
+      background:
+        radial-gradient(140% 120% at 0% 0%, rgba(168, 85, 247, 0.12), rgba(168, 85, 247, 0) 58%),
+        linear-gradient(160deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.028) 46%, rgba(255, 255, 255, 0.06)),
+        rgba(12, 16, 32, 0.42);
+      backdrop-filter: blur(26px) saturate(185%) brightness(1.05);
+      -webkit-backdrop-filter: blur(26px) saturate(185%) brightness(1.05);
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.32),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.34),
+        inset 0 0 24px rgba(255, 255, 255, 0.035),
+        0 10px 30px -8px rgba(0, 0, 0, 0.55);
+    }
+
     .glass-card {
-      background: rgba(255, 255, 255, 0.05);
-      backdrop-filter: blur(28px);
-      -webkit-backdrop-filter: blur(28px);
+      background:
+        linear-gradient(160deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.032) 44%, rgba(255, 255, 255, 0.06)),
+        radial-gradient(120% 100% at 8% -12%, rgba(168, 85, 247, 0.16), rgba(168, 85, 247, 0) 58%),
+        radial-gradient(90% 82% at 102% -4%, rgba(56, 189, 248, 0.08), rgba(56, 189, 248, 0) 62%),
+        rgba(11, 15, 30, 0.62);
+      backdrop-filter: blur(30px) saturate(190%) brightness(1.06);
+      -webkit-backdrop-filter: blur(30px) saturate(190%) brightness(1.06);
+      border: 1px solid rgba(255, 255, 255, 0.17);
+      border-radius: 24px;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.34),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.38),
+        inset 0 0 30px rgba(255, 255, 255, 0.03),
+        0 18px 44px -16px rgba(0, 0, 0, 0.72),
+        0 2px 8px rgba(0, 0, 0, 0.26);
+      transition: border-color 0.45s ease, box-shadow 0.45s ease;
+    }
+    .glass-card:hover {
+      border-color: rgba(255, 255, 255, 0.26);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.42),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.38),
+        inset 0 0 34px rgba(255, 255, 255, 0.05),
+        0 26px 58px -18px rgba(0, 0, 0, 0.78),
+        0 3px 12px rgba(0, 0, 0, 0.3);
+    }
+    .glass-card:hover::before { opacity: 1; }
+
+    .glass-panel {
+      background:
+        radial-gradient(120% 100% at 0% 0%, rgba(124, 58, 237, 0.20), rgba(124, 58, 237, 0) 60%),
+        linear-gradient(162deg, rgba(20, 26, 48, 0.62), rgba(12, 16, 32, 0.74));
+      backdrop-filter: blur(34px) saturate(180%);
+      -webkit-backdrop-filter: blur(34px) saturate(180%);
       border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 24px;
-      box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.45);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+        0 22px 54px -14px rgba(0, 0, 0, 0.75);
     }
-    .glass-panel {
-      background: rgba(18, 24, 45, 0.45);
-      backdrop-filter: blur(32px);
-      -webkit-backdrop-filter: blur(32px);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 24px;
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.15);
-    }
+
     .glass-modal {
-      background: rgba(15, 21, 42, 0.85);
-      backdrop-filter: blur(36px);
-      -webkit-backdrop-filter: blur(36px);
+      background:
+        radial-gradient(110% 90% at 0% -10%, rgba(124, 58, 237, 0.22), rgba(124, 58, 237, 0) 62%),
+        linear-gradient(160deg, rgba(17, 22, 44, 0.92), rgba(10, 13, 26, 0.95));
+      backdrop-filter: blur(38px) saturate(190%);
+      -webkit-backdrop-filter: blur(38px) saturate(190%);
       border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 24px;
-      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.2);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.32),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+        0 34px 90px -22px rgba(0, 0, 0, 0.9);
+    }
+
+    /* Ambient refraction field behind the app — gives the glass something to bend */
+    #liquid-refraction-layer {
+      position: fixed;
+      inset: -12%;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+      filter: blur(72px) saturate(115%);
+      opacity: 0.28;
+    }
+    .refract-blob {
+      position: absolute;
+      width: 46vmax;
+      height: 46vmax;
+      border-radius: 50%;
+      mix-blend-mode: screen;
+      will-change: transform;
+    }
+    .refract-blob-a {
+      top: -14%;
+      left: -10%;
+      background: radial-gradient(circle at 42% 42%, rgba(124, 58, 237, 0.42), rgba(124, 58, 237, 0) 68%);
+      animation: refractDriftA 26s ease-in-out infinite alternate;
+    }
+    .refract-blob-b {
+      bottom: -18%;
+      right: -12%;
+      background: radial-gradient(circle at 50% 50%, rgba(14, 165, 233, 0.32), rgba(14, 165, 233, 0) 70%);
+      animation: refractDriftB 32s ease-in-out infinite alternate;
+    }
+    .refract-blob-c {
+      top: 28%;
+      right: 22%;
+      width: 34vmax;
+      height: 34vmax;
+      background: radial-gradient(circle at 50% 50%, rgba(244, 63, 94, 0.16), rgba(244, 63, 94, 0) 72%);
+      animation: refractDriftC 38s ease-in-out infinite alternate;
+    }
+    @keyframes refractDriftA {
+      from { transform: translate3d(0, 0, 0) scale(1); }
+      to   { transform: translate3d(6%, 8%, 0) scale(1.12); }
+    }
+    @keyframes refractDriftB {
+      from { transform: translate3d(0, 0, 0) scale(1.06); }
+      to   { transform: translate3d(-7%, -6%, 0) scale(1); }
+    }
+    @keyframes refractDriftC {
+      from { transform: translate3d(0, 0, 0) scale(0.96); }
+      to   { transform: translate3d(-5%, 6%, 0) scale(1.1); }
+    }
+
+    /* ===== SCROLL STABILITY (Settings repaint flash fix) ===== */
+    #content-area {
+      position: relative;
+      transform: translateZ(0);
+      scrollbar-gutter: stable;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+      will-change: scroll-position;
+    }
+
+    /* While the user scrolls fast, drop the expensive compositing work so the
+       browser never paints an empty frame. Everything restores on its own. */
+    body.is-scrolling #liquid-refraction-layer { opacity: 0.18; }
+    body.is-scrolling .refract-blob { animation-play-state: paused; }
+    body.is-scrolling .glass,
+    body.is-scrolling .glass-card,
+    body.is-scrolling .glass-panel,
+    body.is-scrolling .glass-modal,
+    body.is-scrolling .music-shell {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    body.is-scrolling .glass { background-color: rgba(12, 16, 32, 0.84); }
+    body.is-scrolling .glass-card { background-color: rgba(11, 15, 30, 0.88); }
+    body.is-scrolling .glass-panel { background-color: rgba(14, 18, 36, 0.9); }
+    body.is-scrolling .glass-card::before { opacity: 0.45; }
+    @media (prefers-reduced-motion: reduce) {
+      body.is-scrolling #liquid-refraction-layer { transition: none; }
+    }
+    #gemini-agent-chat-stream,
+    #notes-canvas-arena,
+    .music-scroll {
+      transform: translateZ(0);
+      overscroll-behavior: contain;
+    }
+
+    /* ===== MUSIC PLAYER ===== */
+    .music-shell {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background:
+        radial-gradient(120% 90% at 0% -10%, rgba(244, 63, 94, 0.16), rgba(244, 63, 94, 0) 60%),
+        linear-gradient(162deg, rgba(20, 22, 40, 0.94), rgba(9, 11, 22, 0.97));
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 26px;
+      backdrop-filter: blur(40px) saturate(180%);
+      -webkit-backdrop-filter: blur(40px) saturate(180%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.24),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+        0 44px 110px -32px rgba(0, 0, 0, 0.92);
+    }
+    @media (max-width: 640px) {
+      .music-shell { border-radius: 0; border-left: 0; border-right: 0; }
+    }
+    .music-tab {
+      font-size: 11px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.45);
+      padding: 6px 12px;
+      border-radius: 999px;
+      transition: all 0.28s cubic-bezier(0.22, 0.61, 0.36, 1);
+      border: 1px solid transparent;
+    }
+    .music-tab:hover { color: rgba(255, 255, 255, 0.85); background: rgba(255, 255, 255, 0.05); }
+    .music-tab.is-active {
+      color: #fff;
+      background: rgba(244, 63, 94, 0.18);
+      border-color: rgba(244, 63, 94, 0.35);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+    .music-chip {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.6);
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      white-space: nowrap;
+      transition: all 0.24s ease;
+    }
+    .music-chip:hover {
+      color: #fff;
+      background: rgba(244, 63, 94, 0.18);
+      border-color: rgba(244, 63, 94, 0.35);
+      transform: translateY(-1px);
+    }
+    .music-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 16px;
+      transition: background 0.25s ease, box-shadow 0.25s ease;
+    }
+    .music-row:hover { background: rgba(255, 255, 255, 0.06); }
+    .music-row.is-playing {
+      background: linear-gradient(90deg, rgba(244, 63, 94, 0.20), rgba(244, 63, 94, 0.03));
+      box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.35);
+    }
+    .music-row-main {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      text-align: left;
+      background: none;
+      border: 0;
+      cursor: pointer;
+    }
+    .music-thumb {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      object-fit: cover;
+      background: rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
+      box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.6);
+    }
+    .music-row-text { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+    .music-row-title {
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .music-row-sub {
+      color: rgba(255, 255, 255, 0.45);
+      font-size: 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .music-play-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background: linear-gradient(160deg, #fb7185, #e11d48);
+      color: #fff;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      box-shadow: 0 8px 18px -6px rgba(225, 29, 72, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      transition: transform 0.2s ease, filter 0.2s ease;
+    }
+    .music-play-btn:hover { transform: scale(1.06); filter: brightness(1.1); }
+    .music-icon-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.6);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s ease;
+    }
+    .music-icon-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.14); }
+    .music-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-align: center;
+      padding: 52px 16px;
+      color: rgba(255, 255, 255, 0.4);
+    }
+    .music-empty-icon { font-size: 30px; opacity: 0.8; }
+    .music-empty-title { font-size: 13px; font-weight: 700; color: rgba(255, 255, 255, 0.75); }
+    .music-empty-sub { font-size: 11px; color: rgba(255, 255, 255, 0.4); max-width: 260px; }
+    .music-ctrl {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.65);
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.22s ease;
+    }
+    .music-ctrl:hover { color: #fff; background: rgba(255, 255, 255, 0.14); }
+    .music-ctrl.is-active { color: #fda4af; border-color: rgba(244, 63, 94, 0.45); background: rgba(244, 63, 94, 0.16); }
+    .music-ctrl-primary {
+      width: 42px;
+      height: 42px;
+      border-radius: 999px;
+      background: linear-gradient(160deg, #fb7185, #e11d48);
+      color: #fff;
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 12px 26px -10px rgba(225, 29, 72, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.32);
+      transition: transform 0.2s ease, filter 0.2s ease;
+    }
+    .music-ctrl-primary:hover { transform: scale(1.05); filter: brightness(1.08); }
+    .music-launch-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(244, 63, 94, 0.28);
+      background: linear-gradient(135deg, rgba(244, 63, 94, 0.22), rgba(168, 85, 247, 0.14));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 10px 26px -14px rgba(244, 63, 94, 0.9);
+      text-align: left;
+      transition: transform 0.24s cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 0.24s ease;
+    }
+    .music-launch-btn:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 16px 34px -16px rgba(244, 63, 94, 1); }
+    .music-launch-btn:active { transform: scale(0.985); }
+    .music-launch-icon { font-size: 18px; }
+    .music-launch-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+    .music-launch-title { color: #fff; font-size: 11px; font-weight: 800; letter-spacing: 0.01em; }
+    .music-launch-sub { color: rgba(255, 255, 255, 0.55); font-size: 9px; }
+    .music-launch-arrow { color: rgba(255, 255, 255, 0.5); font-size: 16px; font-weight: 700; }
+    .music-mini { display: none; }
+    .music-mini.is-visible { display: flex; }
+    .music-skeleton { pointer-events: none; }
+    .music-skel-thumb {
+      width: 52px;
+      height: 52px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.07);
+      animation: musicPulse 1.4s ease-in-out infinite;
+    }
+    .music-skel-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+    .music-skel-line {
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.07);
+      animation: musicPulse 1.4s ease-in-out infinite;
+    }
+    @keyframes musicPulse {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 0.9; }
+    }
+
+    /* ===== TAB TRANSITIONS ===== */
+    @keyframes hdsfdTabIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.001ms !important;
+        scroll-behavior: auto !important;
+      }
+      .refract-blob { animation: none !important; }
+    }
+
+    @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
+      .glass, .glass-card, .glass-panel, .glass-modal, .music-shell {
+        background-color: rgba(16, 20, 38, 0.92);
+      }
     }
 
     /* Assistive Floating Ball */
@@ -434,14 +842,216 @@
     }
 
     .tab-content { display: none; }
-    .tab-content.active { display: block; }
+    .tab-content.active { display: block; animation: hdsfdTabIn 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+    @media (prefers-reduced-motion: reduce) { .tab-content.active { animation: none; } }
+
+    /* ===== INLINE ICON SYSTEM (bundled Lucide sprite) ===== */
+    .hdsfd-icon {
+      width: 1em;
+      height: 1em;
+      display: inline-block;
+      vertical-align: -0.125em;
+      flex-shrink: 0;
+      pointer-events: none;
+    }
+    .hdsfd-icon-lg { width: 1.5em; height: 1.5em; }
+
+    /* ===== TASKS PANEL ===== */
+    .task-tool-btn {
+      width: 26px;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 9px;
+      color: rgba(255, 255, 255, 0.55);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 11px;
+      transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+    .task-tool-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.13);
+      border-color: rgba(255, 255, 255, 0.22);
+    }
+    .task-composer {
+      border: 1px solid rgba(168, 85, 247, 0.22);
+      background: linear-gradient(160deg, rgba(168, 85, 247, 0.09), rgba(255, 255, 255, 0.02));
+      border-radius: 18px;
+      padding: 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .task-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 600;
+      color: rgba(255, 255, 255, 0.82);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.11);
+      padding: 4px 8px;
+      border-radius: 9px;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+      max-width: 100%;
+    }
+    .task-chip:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.11);
+      border-color: rgba(196, 181, 253, 0.35);
+    }
+    .task-chip .hdsfd-icon { opacity: 0.75; }
+    .task-chip:hover .hdsfd-icon { opacity: 1; }
+    .task-chip-icon { padding: 5px 7px; }
+    .task-add-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: linear-gradient(160deg, #a855f7, #7c3aed);
+      color: #fff;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 7px 12px;
+      border-radius: 11px;
+      box-shadow: 0 8px 18px -8px rgba(168, 85, 247, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+      transition: transform 0.18s ease, filter 0.18s ease;
+    }
+    .task-add-btn:hover { filter: brightness(1.08); }
+    .task-add-btn:active { transform: scale(0.97); }
+    .task-section-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.38);
+      padding: 2px 6px 6px;
+    }
+    .task-section-label > span:last-child {
+      font-variant-numeric: tabular-nums;
+      color: rgba(255, 255, 255, 0.3);
+    }
+    .task-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      line-height: 1.5;
+      padding: 0 6px;
+      border-radius: 7px;
+      border: 1px solid transparent;
+      max-width: 100%;
+    }
+    .task-badge .hdsfd-icon { opacity: 0.85; }
+    .task-card { transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease; }
+
+    /* Music: the old amber play control washed out over the glass panel. */
+    #yt-toggle-btn {
+      background: linear-gradient(160deg, #fb7185, #e11d48) !important;
+      color: #fff !important;
+      box-shadow: 0 8px 18px -8px rgba(225, 29, 72, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    }
+    #yt-toggle-btn:hover { filter: brightness(1.08); }
   </style>
 </head>
 <body class="h-full">
+  <svg id="hdsfd-icon-sprite" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+  <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-search" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="11" cy="11" r="8" /> <path d="m21 21-4.3-4.3" /></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-play" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <polygon points="6 3 20 12 6 21 6 3" /></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-pause" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect x="14" y="4" width="4" height="16" rx="1" /> <rect x="6" y="4" width="4" height="16" rx="1" /></symbol>
+  <symbol id="i-skip-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-skip-back" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <polygon points="19 20 9 12 19 4 19 20" /> <line x1="5" x2="5" y1="19" y2="5" /></symbol>
+  <symbol id="i-skip-forward" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-skip-forward" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <polygon points="5 4 15 12 5 20 5 4" /> <line x1="19" x2="19" y1="5" y2="19" /></symbol>
+  <symbol id="i-shuffle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-shuffle" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m18 14 4 4-4 4" /> <path d="m18 2 4 4-4 4" /> <path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-8.6a4 4 0 0 1 3.3-1.7H22" /> <path d="M2 6h1.972a4 4 0 0 1 3.6 2.2" /> <path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45" /></symbol>
+  <symbol id="i-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-repeat" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m17 2 4 4-4 4" /> <path d="M3 11v-1a4 4 0 0 1 4-4h14" /> <path d="m7 22-4-4 4-4" /> <path d="M21 13v1a4 4 0 0 1-4 4H3" /></symbol>
+  <symbol id="i-repeat-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-repeat-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m17 2 4 4-4 4" /> <path d="M3 11v-1a4 4 0 0 1 4-4h14" /> <path d="m7 22-4-4 4-4" /> <path d="M21 13v1a4 4 0 0 1-4 4H3" /> <path d="M11 10h1v4" /></symbol>
+  <symbol id="i-volume-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-volume-2" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" /> <path d="M16 9a5 5 0 0 1 0 6" /> <path d="M19.364 18.364a9 9 0 0 0 0-12.728" /></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-x" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-plus" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /></symbol>
+  <symbol id="i-trash-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-trash-2" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 6h18" /> <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /> <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /> <line x1="10" x2="10" y1="11" y2="17" /> <line x1="14" x2="14" y1="11" y2="17" /></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-folder" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-calendar" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 2v4" /> <path d="M16 2v4" /> <rect width="18" height="18" x="3" y="4" rx="2" /> <path d="M3 10h18" /></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-clock" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <polyline points="12 6 12 12 16 14" /></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-target" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <circle cx="12" cy="12" r="6" /> <circle cx="12" cy="12" r="2" /></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-pin" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 17v5" /> <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" /></symbol>
+  <symbol id="i-sticky-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-sticky-note" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" /> <path d="M15 3v4a2 2 0 0 0 2 2h4" /></symbol>
+  <symbol id="i-clipboard-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-clipboard-list" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-check" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /></symbol>
+  <symbol id="i-circle-check-big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-circle-check-big" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.801 10A10 10 0 1 1 17 3.335" /> <path d="m9 11 3 3L22 4" /></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-star" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></symbol>
+  <symbol id="i-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-arrow-up-right" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 7h10v10" /> <path d="M7 17 17 7" /></symbol>
+  <symbol id="i-arrow-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-arrow-up" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m5 12 7-7 7 7" /> <path d="M12 19V5" /></symbol>
+  <symbol id="i-arrow-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-arrow-down" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 5v14" /> <path d="m19 12-7 7-7-7" /></symbol>
+  <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-chevron-down" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m6 9 6 6 6-6" /></symbol>
+  <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-chevron-right" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m9 18 6-6-6-6" /></symbol>
+  <symbol id="i-chevron-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-chevron-up" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m18 15-6-6-6 6" /></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-menu" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <line x1="4" x2="20" y1="12" y2="12" /> <line x1="4" x2="20" y1="6" y2="6" /> <line x1="4" x2="20" y1="18" y2="18" /></symbol>
+  <symbol id="i-chart-column" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-chart-column" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" /></symbol>
+  <symbol id="i-coins" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-coins" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="8" cy="8" r="6" /> <path d="M18.09 10.37A6 6 0 1 1 10.34 18" /> <path d="M7 6h1v4" /> <path d="m16.71 13.88.7.71-2.82 2.82" /></symbol>
+  <symbol id="i-droplet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-droplet" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z" /></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-zap" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" /></symbol>
+  <symbol id="i-leaf" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-leaf" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z" /> <path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12" /></symbol>
+  <symbol id="i-flower-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-flower-2" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 5a3 3 0 1 1 3 3m-3-3a3 3 0 1 0-3 3m3-3v1M9 8a3 3 0 1 0 3 3M9 8h1m5 0a3 3 0 1 1-3 3m3-3h-1m-2 3v-1" /> <circle cx="12" cy="8" r="2" /> <path d="M12 10v12" /> <path d="M12 22c4.2 0 7-1.667 7-5-4.2 0-7 1.667-7 5Z" /> <path d="M12 22c-4.2 0-7-1.667-7-5 4.2 0 7 1.667 7 5Z" /></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-sparkles" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" /> <path d="M20 3v4" /> <path d="M22 5h-4" /> <path d="M4 17v2" /> <path d="M5 18H3" /></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-shield" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /></symbol>
+  <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-palette" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="13.5" cy="6.5" r=".5" fill="currentColor" /> <circle cx="17.5" cy="10.5" r=".5" fill="currentColor" /> <circle cx="8.5" cy="7.5" r=".5" fill="currentColor" /> <circle cx="6.5" cy="12.5" r=".5" fill="currentColor" /> <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z" /></symbol>
+  <symbol id="i-crown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-crown" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11.562 3.266a.5.5 0 0 1 .876 0L15.39 8.87a1 1 0 0 0 1.516.294L21.183 5.5a.5.5 0 0 1 .798.519l-2.834 10.246a1 1 0 0 1-.956.734H5.81a1 1 0 0 1-.957-.734L2.02 6.02a.5.5 0 0 1 .798-.519l4.276 3.664a1 1 0 0 0 1.516-.294z" /> <path d="M5 21h14" /></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-music" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M9 18V5l12-2v13" /> <circle cx="6" cy="18" r="3" /> <circle cx="18" cy="16" r="3" /></symbol>
+  <symbol id="i-headphones" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-headphones" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" /></symbol>
+  <symbol id="i-cloud-rain" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-cloud-rain" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /> <path d="M16 14v6" /> <path d="M8 14v6" /> <path d="M12 16v6" /></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-radio" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9" /> <path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5" /> <circle cx="12" cy="12" r="2" /> <path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5" /> <path d="M19.1 4.9C23 8.8 23 15.1 19.1 19" /></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-upload" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <polyline points="17 8 12 3 7 8" /> <line x1="12" x2="12" y1="3" y2="15" /></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-download" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /> <polyline points="7 10 12 15 17 10" /> <line x1="12" x2="12" y1="15" y2="3" /></symbol>
+  <symbol id="i-refresh-cw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-refresh-cw" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /> <path d="M21 3v5h-5" /> <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /> <path d="M8 16H3v5" /></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-pencil" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" /> <path d="m15 5 4 4" /></symbol>
+  <symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-save" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" /> <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" /> <path d="M7 3v4a1 1 0 0 0 1 1h7" /></symbol>
+  <symbol id="i-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-triangle-alert" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /> <path d="M12 9v4" /> <path d="M12 17h.01" /></symbol>
+  <symbol id="i-circle-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-circle-help" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /> <path d="M12 17h.01" /></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-bot" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 8V4H8" /> <rect width="16" height="12" x="4" y="8" rx="2" /> <path d="M2 14h2" /> <path d="M20 14h2" /> <path d="M15 13v2" /> <path d="M9 13v2" /></symbol>
+  <symbol id="i-graduation-cap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-graduation-cap" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /></symbol>
+  <symbol id="i-database" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-database" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <ellipse cx="12" cy="5" rx="9" ry="3" /> <path d="M3 5V19A9 3 0 0 0 21 19V5" /> <path d="M3 12A9 3 0 0 0 21 12" /></symbol>
+  <symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-paperclip" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M13.234 20.252 21 12.3" /> <path d="m16 6-8.414 8.586a2 2 0 0 0 0 2.828 2 2 0 0 0 2.828 0l8.414-8.586a4 4 0 0 0 0-5.656 4 4 0 0 0-5.656 0l-8.415 8.585a6 6 0 1 0 8.486 8.486" /></symbol>
+  <symbol id="i-ellipsis-vertical" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-ellipsis-vertical" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="1" /> <circle cx="12" cy="5" r="1" /> <circle cx="12" cy="19" r="1" /></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-arrow-right" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="m12 5 7 7-7 7" /></symbol>
+  <symbol id="i-snowflake" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-snowflake" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m10 20-1.25-2.5L6 18" /> <path d="M10 4 8.75 6.5 6 6" /> <path d="m14 20 1.25-2.5L18 18" /> <path d="m14 4 1.25 2.5L18 6" /> <path d="m17 21-3-6h-4" /> <path d="m17 3-3 6 1.5 3" /> <path d="M2 12h6.5L10 9" /> <path d="m20 10-1.5 2 1.5 2" /> <path d="M22 12h-6.5L14 15" /> <path d="m4 10 1.5 2L4 14" /> <path d="m7 21 3-6-1.5-3" /> <path d="m7 3 3 6h4" /></symbol>
+  <symbol id="i-app-window" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-app-window" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect x="2" y="4" width="20" height="16" rx="2" /> <path d="M10 4v4" /> <path d="M2 8h20" /> <path d="M6 4v4" /></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-file-text" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" /> <path d="M14 2v4a2 2 0 0 0 2 2h4" /> <path d="M10 9H8" /> <path d="M16 13H8" /> <path d="M16 17H8" /></symbol>
+  <symbol id="i-house" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-house" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" /> <path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-timer" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <line x1="10" x2="14" y1="2" y2="2" /> <line x1="12" x2="15" y1="14" y2="11" /> <circle cx="12" cy="14" r="8" /></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-lock" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" /></symbol>
+  <symbol id="i-gift" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-gift" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect x="3" y="8" width="18" height="4" rx="1" /> <path d="M12 8v13" /> <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" /> <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5" /></symbol>
+  <symbol id="i-wand-sparkles" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-wand-sparkles" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m21.64 3.64-1.28-1.28a1.21 1.21 0 0 0-1.72 0L2.36 18.64a1.21 1.21 0 0 0 0 1.72l1.28 1.28a1.2 1.2 0 0 0 1.72 0L21.64 5.36a1.2 1.2 0 0 0 0-1.72" /> <path d="m14 7 3 3" /> <path d="M5 6v4" /> <path d="M19 14v4" /> <path d="M10 2v2" /> <path d="M7 8H3" /> <path d="M21 16h-4" /> <path d="M11 3H9" /></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-layers" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z" /> <path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12" /> <path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17" /></symbol>
+  <symbol id="i-sliders-horizontal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-sliders-horizontal" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <line x1="21" x2="14" y1="4" y2="4" /> <line x1="10" x2="3" y1="4" y2="4" /> <line x1="21" x2="12" y1="12" y2="12" /> <line x1="8" x2="3" y1="12" y2="12" /> <line x1="21" x2="16" y1="20" y2="20" /> <line x1="12" x2="3" y1="20" y2="20" /> <line x1="14" x2="14" y1="2" y2="6" /> <line x1="8" x2="8" y1="10" y2="14" /> <line x1="16" x2="16" y1="18" y2="22" /></symbol>
+  <symbol id="i-log-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-log-out" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /> <polyline points="16 17 21 12 16 7" /> <line x1="21" x2="9" y1="12" y2="12" /></symbol>
+  <symbol id="i-key-round" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-key-round" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" /> <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" /></symbol>
+  <symbol id="i-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-flame" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" /></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-bell" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M10.268 21a2 2 0 0 0 3.464 0" /> <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></symbol>
+  <symbol id="i-corner-down-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-corner-down-right" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <polyline points="15 10 20 15 15 20" /> <path d="M4 4v7a4 4 0 0 0 4 4h12" /></symbol>
+  <symbol id="i-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-circle" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-book" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20" /></symbol>
+  <symbol id="i-tree-deciduous" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-tree-deciduous" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z" /> <path d="M12 19v3" /></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-hand" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2" /> <path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" /> <path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8" /> <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" /></symbol>
+  <symbol id="i-party-popper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-party-popper" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5.8 11.3 2 22l10.7-3.79" /> <path d="M4 3h.01" /> <path d="M22 8h.01" /> <path d="M15 2h.01" /> <path d="M22 20h.01" /> <path d="m22 2-2.24.75a2.9 2.9 0 0 0-1.96 3.12c.1.86-.57 1.63-1.45 1.63h-.38c-.86 0-1.6.6-1.76 1.44L14 10" /> <path d="m22 13-.82-.33c-.86-.34-1.82.2-1.98 1.11c-.11.7-.72 1.22-1.43 1.22H17" /> <path d="m11 2 .33.82c.34.86-.2 1.82-1.11 1.98C9.52 4.9 9 5.52 9 6.23V7" /> <path d="M11 13c1.93 1.93 2.83 4.17 2 5-.83.83-3.07-.07-5-2-1.93-1.93-2.83-4.17-2-5 .83-.83 3.07.07 5 2Z" /></symbol>
+  <symbol id="i-list-todo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-list-todo" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect x="3" y="5" width="6" height="6" rx="1" /> <path d="m3 17 2 2 4-4" /> <path d="M13 6h8" /> <path d="M13 12h8" /> <path d="M13 18h8" /></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-globe" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" /></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-sun" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <circle cx="12" cy="12" r="4" /> <path d="M12 2v2" /> <path d="M12 20v2" /> <path d="m4.93 4.93 1.41 1.41" /> <path d="m17.66 17.66 1.41 1.41" /> <path d="M2 12h2" /> <path d="M20 12h2" /> <path d="m6.34 17.66-1.41 1.41" /> <path d="m19.07 4.93-1.41 1.41" /></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-moon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></symbol>
+</svg>
   <div id="app" class="h-full w-full relative overflow-hidden theme-midnight bg-gradient-animated">
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
     <div class="orb orb-3"></div>
+
+    <!-- Ambient liquid-glass refraction field -->
+    <div id="liquid-refraction-layer" aria-hidden="true">
+      <span class="refract-blob refract-blob-a"></span>
+      <span class="refract-blob refract-blob-b"></span>
+      <span class="refract-blob refract-blob-c"></span>
+    </div>
 
     <!-- ===== DIGITAL SANCTUARY TREE (BACKGROUND LIVING EVOLUTION) ===== -->
     <div id="sanctuary-tree-layer" class="fixed inset-0 pointer-events-none z-0 flex items-end justify-center overflow-hidden transition-all duration-1000 select-none">
@@ -460,7 +1070,7 @@
     <!-- Welcome Modal -->
     <div id="welcome-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
       <div class="glass-modal p-8 max-w-sm w-full text-center space-y-5 border border-purple-500/30 shadow-2xl">
-        <div class="w-14 h-14 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center mx-auto text-2xl">✨</div>
+        <div class="w-14 h-14 rounded-2xl bg-purple-500/20 text-purple-300 flex items-center justify-center mx-auto text-2xl"><svg class="hdsfd-icon"><use href="#i-sparkles"></use></svg></div>
         <div>
           <h2 class="text-2xl font-black text-white">Welcome to HDSFD</h2>
           <p class="text-xs text-white/60 mt-1">Your lightweight student focus sanctuary & productivity hub.</p>
@@ -496,7 +1106,7 @@
         <div class="pt-1">
           <button type="button" onclick="openCustomDateTimeModal('repeat')" class="w-full bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-4 py-2.5 text-xs text-white/80 font-medium flex items-center justify-between transition-all">
             <span id="repeat-time-label">Set time</span>
-            <span>🕒</span>
+            <span><svg class="hdsfd-icon"><use href="#i-clock"></use></svg></span>
           </button>
         </div>
 
@@ -504,7 +1114,7 @@
           <label class="text-[11px] font-bold text-white/60 block mb-1">Starts</label>
           <button type="button" onclick="openCustomDateTimeModal('repeat-start')" class="w-full bg-white/10 hover:bg-white/15 border border-white/20 rounded-xl px-4 py-2.5 text-xs text-white font-semibold flex items-center justify-between transition-all">
             <span id="repeat-start-date-label">Today</span>
-            <span>📅</span>
+            <span><svg class="hdsfd-icon"><use href="#i-calendar"></use></svg></span>
           </button>
         </div>
 
@@ -548,7 +1158,7 @@
       <div class="glass-modal p-6 max-w-sm w-full space-y-4 text-left border border-purple-500/30 shadow-2xl animate-fade-in">
         <div class="flex justify-between items-center border-b border-white/10 pb-2">
           <h3 id="datetime-modal-title" class="text-xs font-black uppercase tracking-wider text-purple-300">Select Date & Time</h3>
-          <button onclick="closeCustomDateTimeModal()" class="text-white/50 hover:text-white text-xs font-bold px-1">✕</button>
+          <button onclick="closeCustomDateTimeModal()" class="text-white/50 hover:text-white text-xs font-bold px-1"><svg class="hdsfd-icon"><use href="#i-x"></use></svg></button>
         </div>
 
         <!-- Quick Pre-Set Date Chips -->
@@ -562,9 +1172,9 @@
         <!-- Mini Calendar Month Navigator -->
         <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-2">
           <div class="flex justify-between items-center">
-            <button onclick="changePickerMonth(-1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center">◀</button>
+            <button onclick="changePickerMonth(-1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center"><svg class="hdsfd-icon"><use href="#i-chevron-left"></use></svg></button>
             <span id="picker-month-label" class="text-xs font-black text-white">August 2026</span>
-            <button onclick="changePickerMonth(1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center">▶</button>
+            <button onclick="changePickerMonth(1)" class="w-6 h-6 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold flex items-center justify-center"><svg class="hdsfd-icon"><use href="#i-chevron-right"></use></svg></button>
           </div>
 
           <div class="grid grid-cols-7 gap-1 text-center text-[9px] font-bold text-white/40 uppercase">
@@ -579,7 +1189,7 @@
         <!-- Custom Time Picker Steppers -->
         <div class="bg-white/5 p-3 rounded-2xl border border-white/10 space-y-2">
           <div class="flex justify-between items-center">
-            <span class="text-[10px] font-bold text-white/60 uppercase tracking-wider">🕒 Time:</span>
+            <span class="text-[10px] font-bold text-white/60 uppercase tracking-wider"><svg class="hdsfd-icon"><use href="#i-clock"></use></svg> Time:</span>
             <label class="flex items-center gap-1.5 text-[10px] text-purple-300 font-bold cursor-pointer">
               <input type="checkbox" id="picker-has-time" onchange="togglePickerHasTime()" class="accent-purple-400">
               <span>Include Time</span>
@@ -614,23 +1224,23 @@
       <div class="glass-modal p-6 max-w-md w-full space-y-4 text-left border border-cyan-500/30 shadow-2xl animate-fade-in">
         <div class="flex justify-between items-center border-b border-white/10 pb-2">
           <div class="flex items-center gap-2">
-            <span class="text-base">📁</span>
+            <span class="text-base"><svg class="hdsfd-icon"><use href="#i-folder"></use></svg></span>
             <h3 class="text-xs font-black uppercase tracking-wider text-cyan-300">Add Google Drive Attachment</h3>
           </div>
-          <button onclick="closeGDriveAttachModal()" class="text-white/50 hover:text-white text-xs font-bold px-1">✕</button>
+          <button onclick="closeGDriveAttachModal()" class="text-white/50 hover:text-white text-xs font-bold px-1"><svg class="hdsfd-icon"><use href="#i-x"></use></svg></button>
         </div>
 
         <!-- Browse Google Drive Direct Action Box -->
         <div class="p-3 bg-cyan-500/10 border border-cyan-500/30 rounded-2xl flex items-center justify-between gap-3">
           <div class="flex items-center gap-2.5">
-            <span class="text-2xl">🔍</span>
+            <span class="text-2xl"><svg class="hdsfd-icon"><use href="#i-search"></use></svg></span>
             <div>
               <span class="text-xs font-black text-cyan-200 block">Browse Google Drive</span>
               <span class="text-[10px] text-cyan-300/70">Pick any file from your connected Drive</span>
             </div>
           </div>
           <button type="button" onclick="openGoogleDriveWebBrowser()" class="bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1 shadow-md transition-all">
-            <span>Browse</span> <span>↗</span>
+            <span>Browse</span> <span><svg class="hdsfd-icon"><use href="#i-arrow-up-right"></use></svg></span>
           </button>
         </div>
 
@@ -639,11 +1249,11 @@
           <label class="text-[10px] font-bold text-white/60 uppercase block">Recent Sanctuary Backups & Files</label>
           <div class="space-y-1.5 max-h-36 overflow-y-auto pr-1">
             <div onclick="selectPresetDriveFile('journal_notes_backup.json')" class="glass p-2 rounded-xl border border-white/10 hover:border-cyan-400 cursor-pointer flex items-center justify-between transition-all">
-              <span class="text-xs text-white">📄 journal_notes_backup.json</span>
+              <span class="text-xs text-white"><svg class="hdsfd-icon"><use href="#i-file-text"></use></svg> journal_notes_backup.json</span>
               <span class="text-[9px] bg-purple-500/20 text-purple-200 px-1.5 py-0.5 rounded">HDSFD Backups</span>
             </div>
             <div onclick="selectPresetDriveFile('hdsfd_database_backup.db')" class="glass p-2 rounded-xl border border-white/10 hover:border-cyan-400 cursor-pointer flex items-center justify-between transition-all">
-              <span class="text-xs text-white">💾 hdsfd_database_backup.db</span>
+              <span class="text-xs text-white"><svg class="hdsfd-icon"><use href="#i-save"></use></svg> hdsfd_database_backup.db</span>
               <span class="text-[9px] bg-amber-500/20 text-amber-200 px-1.5 py-0.5 rounded">HDSFD Backups</span>
             </div>
           </div>
@@ -668,10 +1278,10 @@
       <div class="glass-modal p-6 max-w-lg w-full space-y-4 text-left border border-purple-500/30 shadow-2xl animate-fade-in">
         <div class="flex justify-between items-center border-b border-white/10 pb-2">
           <div class="flex items-center gap-2">
-            <span class="text-lg">📅</span>
+            <span class="text-lg"><svg class="hdsfd-icon"><use href="#i-calendar"></use></svg></span>
             <h3 id="cal-day-modal-title" class="text-sm font-black text-white">August 10, 2026</h3>
           </div>
-          <button onclick="closeCalendarDayModal()" class="text-white/50 hover:text-white text-xs font-bold px-1">✕</button>
+          <button onclick="closeCalendarDayModal()" class="text-white/50 hover:text-white text-xs font-bold px-1"><svg class="hdsfd-icon"><use href="#i-x"></use></svg></button>
         </div>
 
         <!-- Section 1: Day Items (Events, Tasks, Deadlines) -->
@@ -692,19 +1302,19 @@
             <!-- Type Selector Dropdown -->
             <div class="relative">
               <button type="button" id="cal-day-type-btn" onclick="toggleCalDayTypeDropdown(event)" class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5 transition-all">
-                <span id="cal-day-type-label">📋 Task</span> <span class="text-[8px] text-white/40">▾</span>
+                <span id="cal-day-type-label"><svg class="hdsfd-icon"><use href="#i-clipboard-list"></use></svg> Task</span> <span class="text-[8px] text-white/40"><svg class="hdsfd-icon"><use href="#i-chevron-down"></use></svg></span>
               </button>
               <div id="cal-day-type-menu" class="hidden absolute left-0 mt-1 z-50 glass-card p-1.5 w-32 space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95" onclick="event.stopPropagation()">
-                <button type="button" onclick="selectCalDayType('task', '📋 Task')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-white font-medium">📋 Task</button>
-                <button type="button" onclick="selectCalDayType('event', '🔵 Event')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-sky-300 font-medium">🔵 Event</button>
-                <button type="button" onclick="selectCalDayType('deadline', '🎯 Deadline')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-amber-300 font-medium">🎯 Deadline</button>
+                <button type="button" onclick="selectCalDayType('task', 'Task')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-white font-medium"><svg class="hdsfd-icon"><use href="#i-clipboard-list"></use></svg> Task</button>
+                <button type="button" onclick="selectCalDayType('event', 'Event')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-sky-300 font-medium"><svg class="hdsfd-icon"><use href="#i-circle"></use></svg> Event</button>
+                <button type="button" onclick="selectCalDayType('deadline', 'Deadline')" class="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-xs text-amber-300 font-medium"><svg class="hdsfd-icon"><use href="#i-target"></use></svg> Deadline</button>
               </div>
             </div>
 
             <!-- List / Folder Selector for Calendar Day Add -->
             <div class="relative" id="cal-day-folder-wrap">
               <button type="button" id="cal-day-folder-btn" onclick="toggleCalDayFolderDropdown(event)" class="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl border border-white/20 flex items-center gap-1.5 transition-all">
-                <span class="text-purple-300">📁</span> <span id="cal-day-folder-label" class="max-w-[80px] truncate">My Tasks</span> <span class="text-[8px] text-white/40">▾</span>
+                <span class="text-purple-300"><svg class="hdsfd-icon"><use href="#i-folder"></use></svg></span> <span id="cal-day-folder-label" class="max-w-[80px] truncate">My Tasks</span> <span class="text-[8px] text-white/40"><svg class="hdsfd-icon"><use href="#i-chevron-down"></use></svg></span>
               </button>
               <div id="cal-day-folder-menu" class="hidden absolute right-0 mt-1 z-50 glass-card p-1.5 w-36 space-y-1 shadow-2xl border border-purple-500/30 bg-slate-950/95 max-h-48 overflow-y-auto" onclick="event.stopPropagation()">
                 <!-- Injected Dynamically -->
@@ -714,7 +1324,7 @@
 
           <div class="flex items-center justify-between gap-2">
             <div class="flex items-center gap-1.5 text-[10px] text-white/60">
-              <span>🕒 Time:</span>
+              <span><svg class="hdsfd-icon"><use href="#i-clock"></use></svg> Time:</span>
               <input id="cal-day-add-time" type="time" class="bg-white/10 border border-white/15 rounded-lg px-2 py-1 text-white text-xs outline-none">
             </div>
 
@@ -738,18 +1348,18 @@
 
         <div class="flex items-center gap-1.5 sm:gap-2.5">
           <button onclick="triggerGlobalSync(true)" id="global-sync-badge" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full flex items-center gap-1 text-[10px] sm:text-xs font-bold transition-all hover:bg-purple-500/30 shrink-0" title="Click to sync Google Tasks, Calendar & Drive">
-            <span id="sync-spin-icon">🔄</span>
+            <span id="sync-spin-icon"><svg class="hdsfd-icon"><use href="#i-refresh-cw"></use></svg></span>
             <span id="global-sync-text" class="hidden sm:inline">Synced</span>
           </button>
 
           <button onclick="connectGoogleAccount()" id="google-status-badge" class="bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full flex items-center gap-1 text-[10px] sm:text-xs font-bold transition-all hover:bg-amber-500/30 shrink-0" title="Click to pair Google account">
-            <span>⚠️</span>
+            <span><svg class="hdsfd-icon"><use href="#i-triangle-alert"></use></svg></span>
             <span id="google-badge-text"><span class="hidden sm:inline">Guest Mode (Pair Google)</span><span class="sm:hidden">Pair</span></span>
           </button>
 
           <!-- Coins Balance Display (Requirement: 🪙 0 format) -->
           <div class="flex items-center gap-1 bg-amber-500/20 border border-amber-500/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full shrink-0">
-            <span class="text-[10px] sm:text-xs">🪙</span>
+            <span class="text-[10px] sm:text-xs"><svg class="hdsfd-icon"><use href="#i-coins"></use></svg></span>
             <span id="header-coins" class="text-[10px] sm:text-xs font-bold text-amber-300">0</span>
           </div>
         </div>
@@ -771,7 +1381,7 @@
               <!-- Quote Display Mode -->
               <div id="quote-display-wrap" class="flex items-center justify-center gap-2 group cursor-pointer" onclick="toggleQuoteEditMode(true)">
                 <span id="hourly-quote-text" class="text-xs text-white/70 italic font-medium transition-all group-hover:text-purple-200">"The only way to do great work is to love what you do." — Steve Jobs</span>
-                <span class="text-[11px] text-white/30 group-hover:text-purple-300 transition-all" title="Click to edit quote / set custom text">✏️</span>
+                <span class="text-[11px] text-white/30 group-hover:text-purple-300 transition-all" title="Click to edit quote / set custom text"><svg class="hdsfd-icon"><use href="#i-pencil"></use></svg></span>
               </div>
 
               <!-- Quote Edit / Fill-in Box Preview Mode -->
@@ -792,7 +1402,7 @@
                   <!-- Header -->
                   <div class="flex items-center justify-between border-b border-white/10 pb-2">
                     <div class="flex items-center gap-2">
-                      <span class="text-base">🎧</span>
+                      <span class="text-base"><svg class="hdsfd-icon"><use href="#i-headphones"></use></svg></span>
                       <h3 class="text-white/80 text-xs font-black uppercase tracking-wider">Soundscape</h3>
                     </div>
                     <span id="mixer-status-badge" class="text-[9px] bg-white/10 text-white/50 px-2 py-0.5 rounded-full font-bold">Idle</span>
@@ -808,7 +1418,7 @@
                     <!-- Rain Slider -->
                     <div>
                       <div class="flex justify-between text-[11px] font-bold mb-1">
-                        <span class="text-cyan-300">🌧️ Rain</span>
+                        <span class="text-cyan-300"><svg class="hdsfd-icon"><use href="#i-cloud-rain"></use></svg> Rain</span>
                         <span id="val-rain" class="text-white/60 font-mono">30%</span>
                       </div>
                       <input id="vol-rain" type="range" min="0" max="1" step="0.05" value="0.3" oninput="updateMixerVolume()" class="w-full accent-cyan-400 cursor-pointer">
@@ -816,69 +1426,46 @@
                     <!-- Brown Noise Slider -->
                     <div>
                       <div class="flex justify-between text-[11px] font-bold mb-1">
-                        <span class="text-purple-300">📻 Brown Noise</span>
+                        <span class="text-purple-300"><svg class="hdsfd-icon"><use href="#i-radio"></use></svg> Brown Noise</span>
                         <span id="val-noise" class="text-white/60 font-mono">10%</span>
                       </div>
                       <input id="vol-noise" type="range" min="0" max="1" step="0.05" value="0.1" oninput="updateMixerVolume()" class="w-full accent-purple-400 cursor-pointer">
                     </div>
                   </div>
 
-                  <!-- Expandable YouTube Player Section -->
-                  <div class="pt-2 border-t border-white/10">
-                    <button onclick="toggleYouTubeDrawer()" class="w-full flex items-center justify-between py-1 text-[11px] font-bold text-amber-300 hover:text-amber-200 transition-all">
-                      <div class="flex items-center gap-1.5">
-                        <span>🎵</span>
-                        <!-- YouTube SVG Logo -->
-                        <svg class="w-4 h-4 text-red-500 inline fill-current" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-                        <span>YouTube Song / Playlist</span>
-                      </div>
-                      <span id="yt-drawer-icon" class="text-[10px] text-white/50">▼</span>
+                  <!-- Music Player (search any song, ad-free audio, saved history) -->
+                  <div class="pt-2 border-t border-white/10 space-y-2">
+                    <button type="button" onclick="openMusicPlayer()" class="music-launch-btn w-full">
+                      <span class="music-launch-icon"><svg class="hdsfd-icon"><use href="#i-music"></use></svg></span>
+                      <span class="music-launch-text">
+                        <span class="music-launch-title">Music — search any song</span>
+                        <span class="music-launch-sub">Ad-free audio • queue • saved history</span>
+                      </span>
+                      <span class="music-launch-arrow">›</span>
                     </button>
 
-                    <!-- YouTube Drawer Content -->
-                    <div id="yt-drawer-content" class="hidden space-y-2.5 pt-2">
-                      <!-- Input & Controls (Prev, Play/Stop, Next) -->
-                      <div class="flex gap-1.5 items-center">
-                        <input id="yt-song-input" type="text" placeholder="Paste video or playlist link..." class="flex-1 bg-white/10 border border-white/20 rounded-lg px-2.5 py-1 text-white placeholder-white/30 text-xs outline-none focus:border-amber-400">
-                        <button onclick="playPreviousTrack()" class="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg flex items-center justify-center text-[10px] transition-all" title="Previous Track">⏮</button>
-                        <button id="yt-toggle-btn" onclick="toggleYouTubePlayback()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black w-8 h-7 rounded-lg flex items-center justify-center text-xs shadow transition-all" title="Play / Pause">
-                          <span id="yt-btn-icon">▶</span>
-                        </button>
-                        <button onclick="playNextTrack()" class="bg-white/10 hover:bg-white/20 text-white w-7 h-7 rounded-lg flex items-center justify-center text-[10px] transition-all" title="Next Track">⏭</button>
+                    <div id="music-mini" class="music-mini items-center gap-2 bg-white/5 border border-white/10 rounded-2xl p-2">
+                      <img id="music-mini-thumb" class="w-9 h-9 rounded-lg object-cover bg-white/10" alt="">
+                      <div class="min-w-0 flex-1">
+                        <div id="music-mini-title" class="text-[11px] font-semibold text-white truncate">Nothing playing</div>
+                        <div id="music-mini-artist" class="text-[9px] text-white/45 truncate">—</div>
+                        <div id="yt-time-display" class="text-[9px] text-white/45 font-mono">0:00 / 0:00</div>
                       </div>
-
-                      <div class="flex justify-between items-center text-[10px]">
-                        <span id="yt-track-title" class="text-white/70 truncate max-w-[170px] font-medium">No song loaded</span>
-                        <span id="yt-time-display" class="text-amber-300/80 font-mono">0:00 / 0:00</span>
-                      </div>
-
-                      <!-- YouTube Seek / Scrub Progress Slider -->
-                      <div class="flex items-center gap-1.5">
-                        <button onclick="seekRelative(-10)" class="text-[9px] bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded text-white/70 font-mono" title="Back 10s">-10s</button>
-                        <input id="yt-seek-bar" type="range" min="0" max="100" value="0" step="0.5" oninput="onYouTubeSeek(this.value)" class="flex-1 accent-amber-400 cursor-pointer h-1.5 bg-white/10 rounded-lg">
-                        <button onclick="seekRelative(10)" class="text-[9px] bg-white/10 hover:bg-white/20 px-1.5 py-0.5 rounded text-white/70 font-mono" title="Forward 10s">+10s</button>
-                      </div>
-
-                      <!-- YouTube Volume Slider -->
-                      <div>
-                        <div class="flex justify-between text-[10px] font-bold mb-0.5">
-                          <span class="text-white/60">🔊 YT Volume</span>
-                          <span id="val-yt-vol" class="text-amber-300 font-mono">70%</span>
-                        </div>
-                        <input id="vol-yt" type="range" min="0" max="100" step="1" value="70" oninput="updateYouTubeVolume(this.value)" class="w-full accent-amber-400 cursor-pointer">
-                      </div>
-
-                      <!-- Last 10 Saved Song History (Scrollable with Video Names) -->
-                      <div class="pt-1">
-                        <div class="flex justify-between items-center mb-1">
-                          <span class="text-[9px] uppercase font-bold text-white/40">Recent Tracks (Last 10)</span>
-                          <span id="yt-history-count" class="text-[8px] text-purple-300">0</span>
-                        </div>
-                        <div id="yt-history-list" class="space-y-1 max-h-28 overflow-y-auto pr-1">
-                          <span class="text-[10px] text-white/30 italic">No previous tracks</span>
-                        </div>
-                      </div>
+                      <button id="yt-toggle-btn" onclick="musicToggle()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-black w-8 h-8 rounded-full flex items-center justify-center text-xs shadow transition-all" title="Play / Pause">
+                        <span id="yt-btn-icon"><svg class="hdsfd-icon"><use href="#i-play"></use></svg></span>
+                      </button>
+                      <button onclick="musicNext()" class="text-white/70 hover:text-white text-[11px] w-7 h-7 rounded-full bg-white/10 flex items-center justify-center transition-all" title="Next">⏭</button>
                     </div>
+
+                    <div class="flex justify-between items-center text-[10px]">
+                      <button onclick="openMusicPlayer()" class="text-rose-300 hover:text-rose-200 font-semibold transition-colors">Open full player</button>
+                      <span id="music-mini-engine" class="text-white/35">idle</span>
+                    </div>
+
+                    <!-- Legacy fields kept for the YouTube embed fallback -->
+                    <div id="yt-track-title" class="hidden"></div>
+                    <input id="yt-seek-bar" type="range" min="0" max="100" value="0" step="0.5" class="hidden">
+                    <input id="yt-song-input" type="hidden" value="">
                   </div>
 
                   <!-- Hidden YouTube Player Container (Official IFrame API) -->
@@ -942,7 +1529,7 @@
 
                 <!-- Zen Mode Button -->
                 <button onclick="enterZenMode()" class="mt-3 glass px-4 py-1.5 rounded-xl text-xs font-bold text-white/80 hover:text-white flex items-center gap-2 transition-all">
-                  <span>✨ Enter Zen Mode</span>
+                  <span><svg class="hdsfd-icon"><use href="#i-sparkles"></use></svg> Enter Zen Mode</span>
                 </button>
               </div>
             </div>
@@ -960,7 +1547,7 @@
                     <h3 class="text-white/90 text-[10px] font-black uppercase tracking-wider">Schedule & Status</h3>
                   </div>
                   <button onclick="switchTab('tasks-notes'); switchTab2Subview('schedule')" class="text-[9px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-lg font-bold hover:bg-purple-500/30 transition-all flex items-center gap-1">
-                    <span>🕒 Schedule</span>
+                    <span><svg class="hdsfd-icon"><use href="#i-clock"></use></svg> Schedule</span>
                   </button>
                 </div>
 
@@ -968,7 +1555,7 @@
                 <div id="home-schedule-notifications" class="space-y-2">
                   <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 flex items-center justify-between">
                     <div class="space-y-0.5">
-                      <span class="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block">🟢 Current Status</span>
+                      <span class="text-[9px] font-bold text-emerald-400 uppercase tracking-wider block"><svg class="hdsfd-icon"><use href="#i-circle"></use></svg> Current Status</span>
                       <p id="home-status-class-title" class="text-xs font-bold text-white">No active class right now</p>
                       <p id="home-status-class-time" class="text-[10px] text-white/50">Free study time</p>
                     </div>
@@ -987,7 +1574,7 @@
                 <div class="flex-1 flex flex-col overflow-hidden">
                   <div class="flex justify-between items-center border-b border-white/10 pb-1.5 mb-2">
                     <div class="flex items-center gap-1.5">
-                      <span>⭐</span>
+                      <span><svg class="hdsfd-icon"><use href="#i-star"></use></svg></span>
                       <h3 class="text-white/80 text-[10px] font-black uppercase tracking-wider">Starred Tasks</h3>
                     </div>
                     <!-- + symbol replacing View All -> Redirects to Tab 2 -->
@@ -1019,19 +1606,19 @@
                 <div class="flex items-center gap-1.5">
                   <div class="flex items-center gap-1 bg-black/40 p-0.5 sm:p-1 rounded-xl border border-white/10">
                     <button id="tab2-subtab-cal-btn" onclick="switchTab2Subview('calendar')" class="px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-bold bg-purple-500/30 text-purple-200 border border-purple-500/40 transition-all flex items-center gap-1">
-                      <span>📅</span><span>Calendar</span>
+                      <span><svg class="hdsfd-icon"><use href="#i-calendar"></use></svg></span><span>Calendar</span>
                     </button>
                     <button id="tab2-subtab-sched-btn" onclick="switchTab2Subview('schedule')" class="px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-bold text-white/50 hover:text-white transition-all flex items-center gap-1">
-                      <span>🕒</span><span>Schedule</span>
+                      <span><svg class="hdsfd-icon"><use href="#i-clock"></use></svg></span><span>Schedule</span>
                     </button>
                   </div>
                 </div>
                 <div class="flex items-center gap-1 sm:gap-2">
                   <button id="schedule-add-btn" onclick="openAddScheduleModal()" class="hidden text-[9px] sm:text-[10px] bg-purple-500/30 text-purple-200 border border-purple-500/40 px-2 sm:px-3 py-1 rounded-xl font-bold hover:bg-purple-500/50 transition-all flex items-center gap-1 active:scale-95">
-                    <span>➕</span><span>Add Class</span>
+                    <span><svg class="hdsfd-icon"><use href="#i-plus"></use></svg></span><span>Add Class</span>
                   </button>
                   <button onclick="triggerGlobalSync(true)" class="text-[9px] sm:text-[10px] bg-white/10 text-white border border-white/20 px-2 sm:px-3 py-1 rounded-xl font-bold hover:bg-white/20 transition-all">Sync</button>
-                  <button onclick="window.open('https://calendar.google.com', '_blank')" class="text-[9px] sm:text-[10px] bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2 sm:px-3 py-1 rounded-xl font-bold hover:bg-purple-500/30 transition-all">App ↗</button>
+                  <button onclick="window.open('https://calendar.google.com', '_blank')" class="text-[9px] sm:text-[10px] bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2 sm:px-3 py-1 rounded-xl font-bold hover:bg-purple-500/30 transition-all">App <svg class="hdsfd-icon"><use href="#i-arrow-up-right"></use></svg></button>
                 </div>
               </div>
 
@@ -1040,9 +1627,9 @@
                 <!-- Month Navigator Bar -->
                 <div class="flex flex-wrap justify-between items-center pb-2 border-b border-white/10 gap-1.5">
                   <div class="flex items-center gap-1 sm:gap-2">
-                    <button onclick="changeCalendarMonth(-1)" class="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all">◀</button>
+                    <button onclick="changeCalendarMonth(-1)" class="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all"><svg class="hdsfd-icon"><use href="#i-chevron-left"></use></svg></button>
                     <span id="cal-month-title" class="text-xs sm:text-sm font-black text-white px-1 sm:px-2">August 2026</span>
-                    <button onclick="changeCalendarMonth(1)" class="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all">▶</button>
+                    <button onclick="changeCalendarMonth(1)" class="w-6 h-6 sm:w-7 sm:h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all"><svg class="hdsfd-icon"><use href="#i-chevron-right"></use></svg></button>
                     <button onclick="jumpCalendarToToday()" class="text-[9px] sm:text-[10px] bg-purple-500/30 text-purple-200 border border-purple-500/40 px-2 sm:px-2.5 py-1 rounded-xl font-bold ml-1 hover:bg-purple-500/50 transition-all">Today</button>
                   </div>
 
@@ -1099,7 +1686,7 @@
                   <div class="pt-2 border-t border-white/10 space-y-2">
                     <div class="flex justify-between items-center px-1">
                       <div class="flex items-center gap-1.5">
-                        <span class="text-xs">🎯</span>
+                        <span class="text-xs"><svg class="hdsfd-icon"><use href="#i-target"></use></svg></span>
                         <span class="text-[10px] uppercase tracking-wider font-bold text-rose-300">Exams & Assessments</span>
                       </div>
                       <button onclick="openAddExamModal()" class="text-[9px] bg-rose-500/20 text-rose-200 border border-rose-500/30 px-2 py-0.5 rounded-lg font-bold hover:bg-rose-500/30 transition-all">+ Add Exam</button>
@@ -1123,96 +1710,78 @@
               
               <!-- Header -->
               <div class="flex justify-between items-center border-b border-white/10 pb-2">
-                <div class="flex items-center gap-2">
-                  <span class="text-base">📋</span>
-                  <h3 class="text-sm font-black text-purple-300 uppercase tracking-wider">Tasks</h3>
+                <div class="flex items-baseline gap-2 min-w-0">
+                  <h3 class="text-sm font-black text-white tracking-wide">Tasks</h3>
+                  <span id="tasks-open-count" class="text-[10px] font-bold text-white/40">0 open</span>
                 </div>
-                <div class="flex items-center gap-2">
-                  <button onclick="triggerGlobalSync(true)" class="text-[10px] bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-1 rounded-xl font-bold hover:bg-purple-500/30 transition-all">Sync</button>
-                  <button onclick="window.open('https://tasks.google.com', '_blank')" class="text-[10px] bg-white/10 text-white border border-white/20 px-2.5 py-1 rounded-xl font-bold hover:bg-white/20 transition-all">App ↗</button>
+                <div class="flex items-center gap-1.5">
+                  <button onclick="triggerGlobalSync(true)" class="task-tool-btn" title="Sync with Google Tasks" aria-label="Sync with Google Tasks">
+                    <svg class="hdsfd-icon"><use href="#i-refresh-cw"></use></svg>
+                  </button>
+                  <button onclick="window.open('https://tasks.google.com', '_blank')" class="task-tool-btn" title="Open Google Tasks" aria-label="Open Google Tasks">
+                    <svg class="hdsfd-icon"><use href="#i-arrow-up-right"></use></svg>
+                  </button>
                 </div>
               </div>
 
-              <!-- Google Task Lists Filter Tabs -->
+              <!-- List filter tabs -->
               <div id="gtasks-list-tabs" class="flex items-center gap-1.5 overflow-x-auto pb-1 text-left scrollbar-none">
                 <button onclick="filterGTasksByList('all')" class="gtask-tab-btn active bg-purple-500/30 text-purple-200 border border-purple-500/40 px-2.5 py-0.5 rounded-lg text-[10px] font-bold whitespace-nowrap">All Tasks</button>
               </div>
 
-              <!-- Comprehensive Task Creator Card (High Stacking Context for Dropdown) -->
-              <div class="glass p-3 rounded-2xl border border-purple-500/30 space-y-2.5 text-left relative z-50">
-                <!-- Title -->
+              <!-- Composer: title row, note row, one calm options row -->
+              <div class="task-composer space-y-2 text-left">
                 <div class="flex items-center gap-2">
-                  <span class="w-4 h-4 rounded-full border-2 border-purple-400/60 inline-block"></span>
-                  <input id="gtask-title-input" type="text" placeholder="Title" class="flex-1 bg-transparent text-white placeholder-white/40 text-xs font-semibold outline-none focus:border-b focus:border-purple-400 py-0.5" onkeydown="if(event.key==='Enter') saveComprehensiveTask()">
-                </div>
-
-                <!-- Multiline Details -->
-                <div class="flex items-start gap-2 pt-0.5">
-                  <span class="text-white/40 text-[11px] mt-0.5">☰</span>
-                  <textarea id="gtask-details-input" placeholder="Details" rows="1" class="flex-1 bg-white/5 border border-white/10 rounded-xl px-2.5 py-1 text-white placeholder-white/30 text-[11px] outline-none focus:border-purple-400 resize-none"></textarea>
-                </div>
-
-                <!-- Row 1: Combined Custom Due Date & Time Picker Button + Deadline Button -->
-                <div class="flex flex-wrap items-center gap-2 pt-0.5">
-                  <button type="button" onclick="openCustomDateTimeModal('due')" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white/90 font-medium transition-all">
-                    <span class="text-purple-300">📅</span>
-                    <span id="gtask-due-btn-label">Due Date & Time</span>
-                  </button>
-
-                  <button type="button" onclick="openCustomDateTimeModal('deadline')" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white/90 font-medium transition-all">
-                    <span class="text-amber-300">🎯</span>
-                    <span id="gtask-deadline-btn-label">Deadline</span>
+                  <input id="gtask-title-input" type="text" placeholder="Add a task&hellip;" class="flex-1 min-w-0 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-white placeholder-white/35 text-xs font-semibold outline-none focus:border-purple-400/70 transition-colors" onkeydown="if(event.key==='Enter') saveComprehensiveTask()">
+                  <button onclick="saveComprehensiveTask()" class="task-add-btn" title="Add task">
+                    <svg class="hdsfd-icon"><use href="#i-plus"></use></svg><span>Add</span>
                   </button>
                 </div>
 
-                <!-- Row 2: Repeat Options Button + Folder / List Dropdown + Drive Attach -->
-                <div class="flex flex-wrap items-center gap-2 pt-0.5">
-                  <button type="button" onclick="openRepeatModal()" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white/90 font-medium transition-all">
-                    <span class="text-purple-300">🔁</span>
-                    <span id="gtask-repeat-btn-label">Repeat: None</span>
-                  </button>
+                <textarea id="gtask-details-input" placeholder="Details (optional)" rows="1" class="w-full bg-transparent border-0 border-b border-white/10 px-0.5 py-1 text-white placeholder-white/30 text-[11px] outline-none focus:border-purple-400/60 resize-none transition-colors"></textarea>
 
-                  <!-- Custom Glassmorphic Folder Dropdown with High Z-Index -->
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <button type="button" onclick="openCustomDateTimeModal('due')" class="task-chip" title="Set due date and time">
+                    <svg class="hdsfd-icon"><use href="#i-calendar"></use></svg><span id="gtask-due-btn-label">Due</span>
+                  </button>
+                  <button type="button" onclick="openCustomDateTimeModal('deadline')" class="task-chip" title="Set a deadline">
+                    <svg class="hdsfd-icon"><use href="#i-target"></use></svg><span id="gtask-deadline-btn-label">Deadline</span>
+                  </button>
+                  <button type="button" onclick="openRepeatModal()" class="task-chip" title="Repeat this task">
+                    <svg class="hdsfd-icon"><use href="#i-repeat"></use></svg><span id="gtask-repeat-btn-label">Repeat: None</span>
+                  </button>
                   <div class="relative z-[100]">
-                    <button type="button" id="gtask-folder-btn" onclick="toggleTaskFolderDropdown(event)" class="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-white font-bold transition-all">
-                      <span class="text-purple-300">📁</span>
-                      <span id="gtask-folder-btn-label">My Tasks</span>
-                      <span class="text-white/40 text-[8px]">▾</span>
+                    <button type="button" id="gtask-folder-btn" onclick="toggleTaskFolderDropdown(event)" class="task-chip" title="Choose a list">
+                      <svg class="hdsfd-icon"><use href="#i-folder"></use></svg><span id="gtask-folder-btn-label">My Tasks</span>
+                      <svg class="hdsfd-icon opacity-50"><use href="#i-chevron-down"></use></svg>
                     </button>
-                    <div id="gtask-folder-dropdown-menu" class="hidden absolute left-0 mt-1 z-[999999] glass-card p-1.5 w-44 space-y-1 shadow-2xl border border-purple-500/50 bg-slate-950/98 max-h-56 overflow-y-auto animate-fade-in" onclick="event.stopPropagation()">
-                      <!-- Injected dynamically -->
-                    </div>
+                    <div id="gtask-folder-dropdown-menu" class="hidden absolute left-0 mt-1 z-[999999] glass-card p-1.5 w-44 space-y-1 shadow-2xl border border-purple-500/50 bg-slate-950/98 max-h-56 overflow-y-auto animate-fade-in" onclick="event.stopPropagation()"></div>
                   </div>
-
-                  <button type="button" onclick="openGDriveAttachModal('new-task')" class="flex items-center gap-1 bg-white/5 hover:bg-white/10 px-2.5 py-1 rounded-xl border border-white/15 text-[10px] text-cyan-300 font-bold transition-all">
-                    <span>📎</span> <span>Drive File</span>
+                  <button type="button" onclick="openGDriveAttachModal('new-task')" class="task-chip task-chip-icon" title="Attach a Drive file" aria-label="Attach a Drive file">
+                    <svg class="hdsfd-icon"><use href="#i-paperclip"></use></svg>
+                  </button>
+                  <button type="button" onclick="toggleAddSubtaskField()" class="task-chip task-chip-icon" title="Add a subtask" aria-label="Add a subtask">
+                    <svg class="hdsfd-icon"><use href="#i-corner-down-right"></use></svg>
                   </button>
                 </div>
 
-                <!-- Active Pending Attachment Indicator -->
-                <div id="new-task-attachment-chip" class="hidden flex items-center justify-between bg-cyan-500/20 border border-cyan-500/30 px-2.5 py-1 rounded-xl text-[10px] text-cyan-200">
-                  <span id="new-task-attachment-name" class="truncate">📎 attachment.pdf</span>
-                  <button type="button" onclick="removePendingAttachment()" class="text-cyan-300 hover:text-white font-bold ml-2">✕</button>
+                <div id="new-task-attachment-chip" class="hidden flex items-center justify-between bg-cyan-500/15 border border-cyan-500/25 px-2.5 py-1 rounded-lg text-[10px] text-cyan-200">
+                  <span class="flex items-center gap-1.5 min-w-0">
+                    <svg class="hdsfd-icon"><use href="#i-paperclip"></use></svg>
+                    <span id="new-task-attachment-name" class="truncate">attachment.pdf</span>
+                  </span>
+                  <button type="button" onclick="removePendingAttachment()" class="text-cyan-300 hover:text-white ml-2" aria-label="Remove attachment">
+                    <svg class="hdsfd-icon"><use href="#i-x"></use></svg>
+                  </button>
                 </div>
 
-                <!-- Subtasks Creator Preview (Scrollable container if spammed) -->
-                <div id="subtask-inputs-container" class="space-y-1 pt-1 hidden max-h-36 overflow-y-auto pr-1">
-                  <span class="text-[9px] uppercase font-bold text-white/40">Subtasks:</span>
+                <div id="subtask-inputs-container" class="hidden space-y-1 pt-1 max-h-36 overflow-y-auto pr-1">
+                  <span class="text-[9px] uppercase font-bold text-white/40">Subtasks</span>
                   <div id="subtasks-field-list" class="space-y-1"></div>
-                </div>
-
-                <div class="flex justify-between items-center pt-1 border-t border-white/10">
-                  <button type="button" onclick="toggleAddSubtaskField()" class="text-[10px] text-purple-300 hover:text-purple-200 font-bold flex items-center gap-1">
-                    <span>↳</span> <span>+ Add Subtask</span>
-                  </button>
-
-                  <button onclick="saveComprehensiveTask()" class="bg-purple-500 hover:bg-purple-600 text-white font-black px-4 py-1.5 rounded-xl text-xs shadow-md transition-all">
-                    + Add Task
-                  </button>
                 </div>
               </div>
 
-              <!-- Live Tasks List Items (Scrollable, Subtask Expand/Collapse, Reorder Up/Down, 3-Dots, Completed at Bottom) -->
+<!-- Live Tasks List Items (Scrollable, Subtask Expand/Collapse, Reorder Up/Down, 3-Dots, Completed at Bottom) -->
               <div id="gtasks-live-list" class="flex-1 overflow-y-auto space-y-2 pr-1 text-left relative z-10">
                 <p class="text-white/40 text-xs italic text-center py-10">Loading Tasks...</p>
               </div>
@@ -1235,7 +1804,7 @@
               <div class="flex flex-wrap items-center justify-between border-b border-white/10 pb-2 mb-2 gap-1.5 flex-shrink-0 z-20">
                 <div class="flex items-center gap-1.5 sm:gap-2.5">
                   <span class="text-[11px] sm:text-xs font-black text-white uppercase tracking-wider flex items-center gap-1">
-                    <span>📌</span>
+                    <span><svg class="hdsfd-icon"><use href="#i-pin"></use></svg></span>
                     <span class="hidden xs:inline sm:inline">Notes:</span>
                   </span>
 
@@ -1252,7 +1821,7 @@
                 <!-- Action Buttons: Clear All & Add Note -->
                 <div class="flex items-center gap-1.5">
                   <button onclick="openClearAllNotesModal()" class="px-2 py-1 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-[10px] sm:text-xs font-bold rounded-xl flex items-center gap-1 transition-all active:scale-95" title="Clear All Sticky Notes">
-                    <span>🗑️</span>
+                    <span><svg class="hdsfd-icon"><use href="#i-trash-2"></use></svg></span>
                     <span>Clear</span>
                   </button>
                   <button onclick="addPhysicsPostIt()" class="w-7 h-7 sm:w-8 sm:h-8 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-base sm:text-lg flex items-center justify-center shadow-lg shadow-amber-400/20 transition-all active:scale-95" title="Peel New Sticky Note">+</button>
@@ -1272,7 +1841,7 @@
               <div class="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-white/10 bg-black/40 backdrop-blur-md z-10 shrink-0 gap-2">
                 <div class="flex items-center gap-2 shrink-0">
                   <div class="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-gradient-to-tr from-blue-500 via-indigo-500 to-pink-500 flex items-center justify-center text-white text-xs sm:text-sm font-bold shadow-md shadow-indigo-500/30">
-                    ✦
+                    <svg class="hdsfd-icon"><use href="#i-sparkles"></use></svg>
                   </div>
                   <div>
                     <div class="flex items-center gap-1">
@@ -1283,12 +1852,14 @@
                 </div>
 
                 <div class="flex items-center gap-1 sm:gap-1.5 overflow-x-hidden">
+                  <span id="ai-engine-badge" class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-[10px] font-bold text-emerald-300" title="Active AI engine">Gemini</span>
+                  <span id="ai-context-badge" class="hidden lg:inline-flex items-center px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-semibold text-slate-400" title="Live workspace context"><svg class="hdsfd-icon"><use href="#i-list-todo"></use></svg> Context</span>
                   <div id="gemini-user-badge" class="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full bg-white/5 border border-white/10 text-[10px] sm:text-[11px] text-slate-300">
                     <span class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-400"></span>
                     <span id="gemini-user-email-text" class="max-w-[70px] sm:max-w-[140px] truncate">Connected</span>
                   </div>
                   <button onclick="openClearGeminiModal()" class="px-1.5 py-1 sm:px-2 sm:py-1 rounded-xl bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/30 text-slate-400 hover:text-red-300 text-xs font-semibold transition-all active:scale-95" title="Clear Chat History">
-                    <span>🗑️</span>
+                    <span><svg class="hdsfd-icon"><use href="#i-trash-2"></use></svg></span>
                   </button>
                 </div>
               </div>
@@ -1301,22 +1872,22 @@
               <!-- Quick Action Command Chips Carousel (Prefix Previews) -->
               <div class="flex items-center gap-1.5 px-3 py-1.5 overflow-x-auto no-scrollbar border-t border-white/5 bg-black/20 shrink-0">
                 <button onclick="setAgentPromptPrefix('Add a task: ')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-purple-500/20 border border-white/10 hover:border-purple-500/30 text-slate-300 hover:text-purple-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
-                  <span>➕</span><span>Add Task</span>
+                  <span><svg class="hdsfd-icon"><use href="#i-plus"></use></svg></span><span>Add Task</span>
                 </button>
                 <button onclick="setAgentPromptPrefix('Create a sticky note: ')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-amber-500/20 border border-white/10 hover:border-amber-500/30 text-slate-300 hover:text-amber-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
-                  <span>📌</span><span>Sticky Note</span>
+                  <span><svg class="hdsfd-icon"><use href="#i-pin"></use></svg></span><span>Sticky Note</span>
                 </button>
                 <button onclick="setAgentPromptPrefix('Start a focus timer for: 25m')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-emerald-500/20 border border-white/10 hover:border-emerald-500/30 text-slate-300 hover:text-emerald-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
                   <span>⏱</span><span>Focus Timer</span>
                 </button>
                 <button onclick="setAgentPromptPrefix('Play soundscape: Rain')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-cyan-500/20 border border-white/10 hover:border-cyan-500/30 text-slate-300 hover:text-cyan-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
-                  <span>🎧</span><span>Play Rain</span>
+                  <span><svg class="hdsfd-icon"><use href="#i-headphones"></use></svg></span><span>Play Rain</span>
                 </button>
                 <button onclick="setAgentPromptPrefix('Change theme to: Obsidian')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-indigo-500/20 border border-white/10 hover:border-indigo-500/30 text-slate-300 hover:text-indigo-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
-                  <span>🎨</span><span>Obsidian Theme</span>
+                  <span><svg class="hdsfd-icon"><use href="#i-palette"></use></svg></span><span>Obsidian Theme</span>
                 </button>
                 <button onclick="setAgentPromptPrefix('Explain all HDSFD features and how to use them')" class="px-2.5 py-1 rounded-xl bg-white/5 hover:bg-sky-500/20 border border-white/10 hover:border-sky-500/30 text-slate-300 hover:text-sky-300 text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1 active:scale-95">
-                  <span>❓</span><span>App Guide</span>
+                  <span><svg class="hdsfd-icon"><use href="#i-circle-help"></use></svg></span><span>App Guide</span>
                 </button>
               </div>
 
@@ -1343,7 +1914,7 @@
                     class="w-8 h-8 rounded-xl bg-sky-500 hover:bg-sky-400 active:scale-95 text-slate-950 font-bold flex items-center justify-center transition-all shadow-md shadow-sky-500/20"
                     title="Send to Gemini Agent"
                   >
-                    ➔
+                    <svg class="hdsfd-icon"><use href="#i-arrow-right"></use></svg>
                   </button>
                 </div>
               </div>
@@ -1371,7 +1942,7 @@
             <!-- Stats Overview Card (With Digital Sanctuary Tree Level & Lifetime XP) -->
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
               <div class="flex justify-between items-center border-b border-white/10 pb-1.5">
-                <span class="text-xs font-bold text-white/80 uppercase tracking-wider">📊 Your Study & Growth Stats</span>
+                <span class="text-xs font-bold text-white/80 uppercase tracking-wider"><svg class="hdsfd-icon"><use href="#i-chart-column"></use></svg> Your Study & Growth Stats</span>
                 <span id="stat-tree-multiplier-badge" class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">1.0x Growth</span>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
@@ -1389,7 +1960,7 @@
                 </div>
                 <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
                   <span class="text-[9px] text-white/50 uppercase font-bold block">Current Coins</span>
-                  <span id="stat-coins" class="text-sm font-black text-amber-400">🪙 0</span>
+                  <span id="stat-coins" class="text-sm font-black text-amber-400"><svg class="hdsfd-icon"><use href="#i-coins"></use></svg> 0</span>
                 </div>
               </div>
 
@@ -1397,7 +1968,7 @@
               <div class="bg-black/30 p-3 rounded-xl border border-white/10 space-y-2">
                 <div class="flex items-center justify-between text-xs">
                   <div class="flex items-center gap-2">
-                    <span id="stat-tree-icon" class="text-lg">🌱</span>
+                    <span id="stat-tree-icon" class="text-lg"><svg class="hdsfd-icon"><use href="#i-sprout"></use></svg></span>
                     <div>
                       <span id="stat-tree-stage" class="font-bold text-white block text-xs">Stage 0: Mystical Sprout</span>
                       <span id="stat-tree-xp-label" class="text-[10px] text-white/50">0 / 50 Lifetime Coins XP</span>
@@ -1415,7 +1986,7 @@
             <!-- Shop (8 Upgrades & Perks) -->
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
               <div class="flex justify-between items-center">
-                <h3 class="text-xs font-bold text-white/80 uppercase tracking-wider">🪙 Shop</h3>
+                <h3 class="text-xs font-bold text-white/80 uppercase tracking-wider"><svg class="hdsfd-icon"><use href="#i-coins"></use></svg> Shop</h3>
                 <span class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold">Earn coins from study & tasks</span>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
@@ -1424,66 +1995,66 @@
                 <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-emerald-400/50 transition-all">
                   <div>
                     <div class="flex items-center justify-between">
-                      <span class="text-xs font-bold text-emerald-300">💧 Fertile Spring Dew</span>
+                      <span class="text-xs font-bold text-emerald-300"><svg class="hdsfd-icon"><use href="#i-droplet"></use></svg> Fertile Spring Dew</span>
                       <span id="dew-tier-badge" class="text-[9px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold">Tier 1</span>
                     </div>
                     <p id="dew-desc" class="text-[10px] text-white/50 mt-0.5">+10% Permanent growth multiplier</p>
                   </div>
-                  <button id="buy-dew-btn" onclick="buyFertileDew()" class="mt-2.5 bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 active:scale-95 transition-all">Buy (50 🪙)</button>
+                  <button id="buy-dew-btn" onclick="buyFertileDew()" class="mt-2.5 bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-emerald-500/30 active:scale-95 transition-all">Buy (50 <svg class="hdsfd-icon"><use href="#i-coins"></use></svg>)</button>
                 </div>
 
                 <!-- 2. Sunlight Essence (2x Focus / Zen 1 Session) -->
                 <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-amber-400/50 transition-all">
                   <div>
-                    <span class="text-xs font-bold text-amber-300">⚡ Sunlight Essence</span>
+                    <span class="text-xs font-bold text-amber-300"><svg class="hdsfd-icon"><use href="#i-zap"></use></svg> Sunlight Essence</span>
                     <p class="text-[10px] text-white/50 mt-0.5">2x Coins on Pomodoro & Zen (1 Session)</p>
                   </div>
-                  <button id="buy-sunlight-btn" onclick="buySunlightEssence()" class="mt-2.5 bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-500/30 active:scale-95 transition-all">Buy (100 🪙)</button>
+                  <button id="buy-sunlight-btn" onclick="buySunlightEssence()" class="mt-2.5 bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-500/30 active:scale-95 transition-all">Buy (100 <svg class="hdsfd-icon"><use href="#i-coins"></use></svg>)</button>
                 </div>
 
                 <!-- 3. Glowing Vines (Tiered 1.5x Growth - 1 Day) -->
                 <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-teal-400/50 transition-all">
                   <div>
                     <div class="flex items-center justify-between">
-                      <span class="text-xs font-bold text-teal-300">🌿 Glowing Vines</span>
+                      <span class="text-xs font-bold text-teal-300"><svg class="hdsfd-icon"><use href="#i-leaf"></use></svg> Glowing Vines</span>
                       <span id="vines-tier-badge" class="text-[9px] bg-teal-500/20 text-teal-300 px-1.5 py-0.5 rounded font-bold">1.5x</span>
                     </div>
                     <p id="vines-desc" class="text-[10px] text-white/50 mt-0.5">Enchant tree (x1.5 Growth - 1 Day)</p>
                   </div>
-                  <button id="buy-vines-btn" onclick="buyGlowingVines()" class="mt-2.5 bg-teal-500/20 text-teal-200 border border-teal-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-teal-500/30 active:scale-95 transition-all">Buy (150 🪙)</button>
+                  <button id="buy-vines-btn" onclick="buyGlowingVines()" class="mt-2.5 bg-teal-500/20 text-teal-200 border border-teal-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-teal-500/30 active:scale-95 transition-all">Buy (150 <svg class="hdsfd-icon"><use href="#i-coins"></use></svg>)</button>
                 </div>
 
                 <!-- 4. Blossom Petals (1.5x Coins + 10 🪙/hr passive - 1 Day) -->
                 <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-rose-400/50 transition-all">
                   <div>
-                    <span class="text-xs font-bold text-rose-300">🌸 Blossom Petals</span>
-                    <p class="text-[10px] text-white/50 mt-0.5">Drifting petals (x1.5 Coins + 10🪙/hr - 1 Day)</p>
+                    <span class="text-xs font-bold text-rose-300"><svg class="hdsfd-icon"><use href="#i-flower-2"></use></svg> Blossom Petals</span>
+                    <p class="text-[10px] text-white/50 mt-0.5">Drifting petals (x1.5 Coins + 10<svg class="hdsfd-icon"><use href="#i-coins"></use></svg>/hr - 1 Day)</p>
                   </div>
-                  <button id="buy-petals-btn" onclick="buyBlossomPetals()" class="mt-2.5 bg-rose-500/20 text-rose-200 border border-rose-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-rose-500/30 active:scale-95 transition-all">Buy (200 🪙)</button>
+                  <button id="buy-petals-btn" onclick="buyBlossomPetals()" class="mt-2.5 bg-rose-500/20 text-rose-200 border border-rose-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-rose-500/30 active:scale-95 transition-all">Buy (200 <svg class="hdsfd-icon"><use href="#i-coins"></use></svg>)</button>
                 </div>
 
                 <!-- 5. Starlight Aura (2x Coins & 2x Growth - 1 Week) -->
                 <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-yellow-300/50 transition-all">
                   <div>
-                    <span class="text-xs font-bold text-yellow-300">🌟 Starlight Aura</span>
+                    <span class="text-xs font-bold text-yellow-300"><svg class="hdsfd-icon"><use href="#i-star"></use></svg> Starlight Aura</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Radiant tree halo (2x Coins & Growth - 1 Week)</p>
                   </div>
-                  <button id="buy-starlight-btn" onclick="buyStarlightAura()" class="mt-2.5 bg-yellow-400/20 text-yellow-100 border border-yellow-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-yellow-400/30 active:scale-95 transition-all">Buy (500 🪙)</button>
+                  <button id="buy-starlight-btn" onclick="buyStarlightAura()" class="mt-2.5 bg-yellow-400/20 text-yellow-100 border border-yellow-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-yellow-400/30 active:scale-95 transition-all">Buy (500 <svg class="hdsfd-icon"><use href="#i-coins"></use></svg>)</button>
                 </div>
 
                 <!-- 6. Streak Shield (2 Days Protection) -->
                 <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-cyan-400/50 transition-all">
                   <div>
-                    <span class="text-xs font-bold text-cyan-300">🧊 Streak Shield</span>
+                    <span class="text-xs font-bold text-cyan-300"><svg class="hdsfd-icon"><use href="#i-snowflake"></use></svg> Streak Shield</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Protects streak & tree vitality (2 Days)</p>
                   </div>
-                  <button id="buy-freeze-btn" onclick="buyStreakShield()" class="mt-2.5 bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30 active:scale-95 transition-all">Buy (250 🪙)</button>
+                  <button id="buy-freeze-btn" onclick="buyStreakShield()" class="mt-2.5 bg-cyan-500/20 text-cyan-200 border border-cyan-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-cyan-500/30 active:scale-95 transition-all">Buy (250 <svg class="hdsfd-icon"><use href="#i-coins"></use></svg>)</button>
                 </div>
 
                 <!-- 7. Cosmic Theme Key (Sign in to unlock all + 200 🪙) -->
                 <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-purple-400/50 transition-all">
                   <div>
-                    <span class="text-xs font-bold text-purple-300">🎨 Cosmic Theme Key</span>
+                    <span class="text-xs font-bold text-purple-300"><svg class="hdsfd-icon"><use href="#i-palette"></use></svg> Cosmic Theme Key</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Unlock all premium fluid themes</p>
                   </div>
                   <button id="buy-theme-btn" onclick="handleThemeKeyAction()" class="mt-2.5 bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-purple-500/30 active:scale-95 transition-all">Sign in.</button>
@@ -1492,7 +2063,7 @@
                 <!-- 8. Zen Master Crown (YouTube Sub + 1000 🪙) -->
                 <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-amber-300/50 transition-all">
                   <div>
-                    <span class="text-xs font-bold text-amber-200">👑 Zen Master Crown</span>
+                    <span class="text-xs font-bold text-amber-200"><svg class="hdsfd-icon"><use href="#i-crown"></use></svg> Zen Master Crown</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Royal crown badge (+1000 coins)</p>
                   </div>
                   <button id="buy-crown-btn" onclick="openYouTubeSubFlow()" class="mt-2.5 bg-amber-400/20 text-amber-100 border border-amber-400/30 px-2.5 py-1.5 rounded-lg text-[10px] font-bold hover:bg-amber-400/30 active:scale-95 transition-all">Subscribe to HyperHrishi HD</button>
@@ -1547,7 +2118,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <span class="text-xs font-bold text-white">Google Drive Backup</span>
-                  <p class="text-[10px] text-white/50">📁 Target Folder: <b>HDSFD Backup</b></p>
+                  <p class="text-[10px] text-white/50"><svg class="hdsfd-icon"><use href="#i-folder"></use></svg> Target Folder: <b>HDSFD Backup</b></p>
                 </div>
                 <span id="settings-gdrive-badge" class="text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold">Guest Mode</span>
               </div>
@@ -1566,15 +2137,15 @@
                 </div>
                 <div id="drive-files-list" class="space-y-1">
                   <div class="flex justify-between items-center text-[11px] text-purple-300">
-                    <span>📄 Notes.json</span>
+                    <span><svg class="hdsfd-icon"><use href="#i-file-text"></use></svg> Notes.json</span>
                     <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Backup</span>
                   </div>
                   <div class="flex justify-between items-center text-[11px] text-purple-300">
-                    <span>🗄️ data.db</span>
+                    <span><svg class="hdsfd-icon"><use href="#i-database"></use></svg> data.db</span>
                     <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Backup</span>
                   </div>
                   <div class="flex justify-between items-center text-[11px] text-purple-300">
-                    <span>🤖 ai.json</span>
+                    <span><svg class="hdsfd-icon"><use href="#i-bot"></use></svg> ai.json</span>
                     <span class="text-[9px] bg-purple-500/20 px-1.5 py-0.5 rounded border border-purple-500/30">HDSFD Backup</span>
                   </div>
                 </div>
@@ -1587,7 +2158,7 @@
               <div class="flex items-center justify-between">
                 <div>
                   <span class="text-xs font-bold text-white">HDSFD Account &amp; School Connect</span>
-                  <p class="text-[10px] text-white/50">🏫 Sync tasks and calendar without Google — import school calendars and assignments</p>
+                  <p class="text-[10px] text-white/50"><svg class="hdsfd-icon"><use href="#i-graduation-cap"></use></svg> Sync tasks and calendar without Google — import school calendars and assignments</p>
                 </div>
                 <span id="school-status-badge" class="text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold">Guest Mode</span>
               </div>
@@ -1673,28 +2244,28 @@
       
       <!-- Snapping iOS Assistive Touch Ball (Only in Zen Mode) -->
       <div id="zen-assistive-ball" class="assistive-touch-btn" style="top: 24px; right: 24px;" onclick="toggleZenAssistiveMenu(event)">
-        <span class="text-lg">✨</span>
+        <span class="text-lg"><svg class="hdsfd-icon"><use href="#i-sparkles"></use></svg></span>
       </div>
 
       <!-- Quick Controls Popover (Positioned relative to Assistive Ball) -->
       <div id="zen-assistive-popover" class="hidden fixed z-70 glass-modal p-4 w-72 text-left space-y-3 border border-purple-500/30 shadow-2xl animate-fade-in" onclick="event.stopPropagation()">
         <div class="flex justify-between items-center border-b border-white/10 pb-1.5">
           <span class="text-xs font-black text-purple-300 uppercase tracking-wider">Quick Controls</span>
-          <button onclick="toggleZenAssistiveMenu(event)" class="text-white/40 hover:text-white text-xs font-bold px-1">✕</button>
+          <button onclick="toggleZenAssistiveMenu(event)" class="text-white/40 hover:text-white text-xs font-bold px-1"><svg class="hdsfd-icon"><use href="#i-x"></use></svg></button>
         </div>
 
         <!-- Quick Audio Volume Controls -->
         <div class="space-y-2 text-[10px]">
           <div>
             <div class="flex justify-between font-bold mb-0.5">
-              <span class="text-cyan-300">🌧️ Rain</span>
+              <span class="text-cyan-300"><svg class="hdsfd-icon"><use href="#i-cloud-rain"></use></svg> Rain</span>
               <span id="zen-val-rain" class="text-white/60">30%</span>
             </div>
             <input type="range" min="0" max="1" step="0.05" value="0.3" oninput="document.getElementById('vol-rain').value = this.value; updateMixerVolume(); document.getElementById('zen-val-rain').textContent = Math.round(this.value*100)+'%';" class="w-full accent-cyan-400 cursor-pointer">
           </div>
           <div>
             <div class="flex justify-between font-bold mb-0.5">
-              <span class="text-purple-300">📻 Brown Noise</span>
+              <span class="text-purple-300"><svg class="hdsfd-icon"><use href="#i-radio"></use></svg> Brown Noise</span>
               <span id="zen-val-noise" class="text-white/60">10%</span>
             </div>
             <input type="range" min="0" max="1" step="0.05" value="0.1" oninput="document.getElementById('vol-noise').value = this.value; updateMixerVolume(); document.getElementById('zen-val-noise').textContent = Math.round(this.value*100)+'%';" class="w-full accent-purple-400 cursor-pointer">
@@ -1703,7 +2274,7 @@
 
         <!-- YouTube Quick Controls (ALL Side-by-Side: [-10s] [⏮] [⏯] [⏭] [+10s]) -->
         <div class="pt-2 border-t border-white/10 space-y-1 text-center">
-          <span class="text-[9px] font-bold text-amber-300 uppercase tracking-wider block">🎵 YouTube Music</span>
+          <span class="text-[9px] font-bold text-amber-300 uppercase tracking-wider block"><svg class="hdsfd-icon"><use href="#i-music"></use></svg> YouTube Music</span>
           <div class="flex justify-center items-center gap-1.5 pt-0.5">
             <button onclick="seekRelative(-10)" class="text-[9px] bg-white/10 hover:bg-white/20 px-2 py-1.5 rounded-lg text-white/80 font-mono transition-all">-10s</button>
             <button onclick="playPreviousTrack()" class="w-8 h-8 bg-white/10 hover:bg-white/20 rounded-lg text-white text-xs flex items-center justify-center transition-all">⏮</button>
@@ -1715,7 +2286,7 @@
 
         <!-- Quick Starred Tasks View -->
         <div class="pt-2 border-t border-white/10">
-          <span class="text-[10px] font-bold text-amber-300 uppercase tracking-wider block mb-1">⭐ Starred Tasks</span>
+          <span class="text-[10px] font-bold text-amber-300 uppercase tracking-wider block mb-1"><svg class="hdsfd-icon"><use href="#i-star"></use></svg> Starred Tasks</span>
           <div id="zen-quick-tasks-list" class="space-y-1 max-h-28 overflow-y-auto pr-1">
             <span class="text-[10px] text-white/40 italic">Loading tasks...</span>
           </div>
@@ -1752,7 +2323,7 @@
     <!-- Custom Glassmorphic Sticky Note Delete Modal (Zero Native Browser Alerts) -->
     <div id="custom-delete-note-modal" class="fixed inset-0 z-[9999999] bg-black/70 backdrop-blur-md flex items-center justify-center p-4 hidden">
       <div class="glass-card max-w-sm w-full p-6 text-center space-y-4 border border-white/20 shadow-2xl rounded-2xl animate-scale-in">
-        <div class="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner">🗑️</div>
+        <div class="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner"><svg class="hdsfd-icon"><use href="#i-trash-2"></use></svg></div>
         <div>
           <h3 class="text-base font-black text-white">Delete Sticky Note?</h3>
           <p class="text-xs text-white/60 mt-1.5 leading-relaxed">This note will be permanently removed from your workspace and cloud backup.</p>
@@ -1767,7 +2338,7 @@
     <!-- Custom Clear All Sticky Notes Modal with 3-Second Live Countdown -->
     <div id="clear-all-notes-modal" class="fixed inset-0 z-[9999999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
       <div class="glass-card max-w-sm w-full p-6 text-center space-y-4 border border-red-500/30 shadow-2xl rounded-2xl animate-scale-in">
-        <div class="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner">⚠️</div>
+        <div class="w-12 h-12 rounded-2xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner"><svg class="hdsfd-icon"><use href="#i-triangle-alert"></use></svg></div>
         <div>
           <h3 class="text-base font-black text-white">Clear All Sticky Notes?</h3>
           <p class="text-xs text-white/60 mt-1.5 leading-relaxed">This will permanently delete <b>all sticky notes</b> from all tabs and your Google Drive backup.</p>
@@ -1784,7 +2355,7 @@
     <!-- Custom Clear Gemini AI History Modal (Zero Native Browser Alerts) -->
     <div id="clear-gemini-history-modal" class="fixed inset-0 z-[9999999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 hidden">
       <div class="glass-card max-w-sm w-full p-6 text-center space-y-4 border border-white/20 shadow-2xl rounded-2xl animate-scale-in">
-        <div class="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner">✦</div>
+        <div class="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl mx-auto shadow-inner"><svg class="hdsfd-icon"><use href="#i-sparkles"></use></svg></div>
         <div>
           <h3 class="text-base font-black text-white">Clear Gemini AI History?</h3>
           <p class="text-xs text-white/60 mt-1.5 leading-relaxed">This will permanently clear your conversation memory and action logs with Gemini.</p>
@@ -1802,10 +2373,10 @@
       <div class="glass-card max-w-md w-full p-6 text-left space-y-4 border border-purple-500/30 shadow-2xl rounded-2xl animate-scale-in">
         <div class="flex items-center justify-between border-b border-white/10 pb-2.5">
           <div class="flex items-center gap-2">
-            <span class="text-xl">🕒</span>
+            <span class="text-xl"><svg class="hdsfd-icon"><use href="#i-clock"></use></svg></span>
             <h3 id="schedule-modal-title" class="text-base font-black text-white">Add Class / Schedule Period</h3>
           </div>
-          <button onclick="closeAddScheduleModal()" class="w-7 h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all">✕</button>
+          <button onclick="closeAddScheduleModal()" class="w-7 h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all"><svg class="hdsfd-icon"><use href="#i-x"></use></svg></button>
         </div>
 
         <input type="hidden" id="sched-edit-id" value="">
@@ -1874,10 +2445,10 @@
       <div class="glass-modal p-6 max-w-md w-full text-left space-y-4 border border-rose-500/40 shadow-2xl animate-fade-in">
         <div class="flex justify-between items-center border-b border-white/10 pb-2">
           <div class="flex items-center gap-2">
-            <span class="text-xl">🎯</span>
+            <span class="text-xl"><svg class="hdsfd-icon"><use href="#i-target"></use></svg></span>
             <h3 id="exam-modal-title" class="text-base font-black text-white">Add Exam / Major Assessment</h3>
           </div>
-          <button onclick="closeAddExamModal()" class="w-7 h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all">✕</button>
+          <button onclick="closeAddExamModal()" class="w-7 h-7 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-xs transition-all"><svg class="hdsfd-icon"><use href="#i-x"></use></svg></button>
         </div>
 
         <input type="hidden" id="exam-edit-id" value="">
@@ -1909,9 +2480,9 @@
           <div class="space-y-1">
             <label class="text-[10px] font-bold text-rose-300 uppercase tracking-wider">Completion Reward</label>
             <select id="exam-reward-select" class="w-full bg-slate-900 border border-white/20 rounded-xl px-3 py-1.5 text-amber-300 text-xs font-bold outline-none focus:border-amber-400">
-              <option value="100">100 🪙 (Standard Quiz)</option>
-              <option value="250" selected>250 🪙 (Major Exam / Midterm)</option>
-              <option value="500">500 🪙 (Final / SAT / AP Exam)</option>
+              <option value="100">100 coins (Standard Quiz)</option>
+              <option value="250" selected>250 coins (Major Exam / Midterm)</option>
+              <option value="500">500 coins (Final / SAT / AP Exam)</option>
             </select>
           </div>
         </div>
@@ -1927,7 +2498,7 @@
     <!-- YouTube Subscription Verification Modal -->
     <div id="yt-sub-modal" class="hidden fixed inset-0 z-[9999999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
       <div class="glass-modal p-6 max-w-sm w-full text-center space-y-4 border border-amber-500/40 shadow-2xl animate-fade-in">
-        <div class="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-300 flex items-center justify-center mx-auto text-3xl shadow-lg border border-amber-500/30">👑</div>
+        <div class="w-14 h-14 rounded-2xl bg-amber-500/20 text-amber-300 flex items-center justify-center mx-auto text-3xl shadow-lg border border-amber-500/30"><svg class="hdsfd-icon"><use href="#i-crown"></use></svg></div>
         <div>
           <h3 class="text-base font-black text-white">Unlock Zen Master Crown</h3>
           <p class="text-xs text-white/60 mt-1">Subscribe to <b>HyperHrishi HD</b> on YouTube to claim your royal crown badge and <b>+1,000 Free Coins</b>!</p>
@@ -1949,11 +2520,11 @@
         <div class="space-y-2 pt-1">
           <a id="yt-open-channel-btn" href="https://www.youtube.com/@HyperHrishiHD?sub_confirmation=1" target="_blank" rel="noopener" onclick="onYouTubeSubChannelClicked()" class="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all active:scale-95">
             <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
-            <span>Subscribe on YouTube ↗</span>
+            <span>Subscribe on YouTube <svg class="hdsfd-icon"><use href="#i-arrow-up-right"></use></svg></span>
           </a>
 
           <button id="yt-verify-btn" onclick="verifyYouTubeSubscription()" disabled class="w-full bg-white/10 text-white/40 border border-white/10 font-bold py-2 px-4 rounded-xl text-xs transition-all cursor-not-allowed">
-            Verify & Claim Reward (+1000 🪙)
+            Verify & Claim Reward (+1000 <svg class="hdsfd-icon"><use href="#i-coins"></use></svg>)
           </button>
         </div>
 
@@ -1961,7 +2532,91 @@
       </div>
     </div>
 
+    <!-- ===== HDSFD MUSIC PLAYER MODAL ===== -->
+    <div id="music-modal" class="hidden fixed inset-0 z-[999998] bg-black/75 backdrop-blur-2xl items-stretch sm:items-center justify-center p-0 sm:p-6" onclick="if(event.target === this) closeMusicPlayer()">
+      <div class="music-shell w-full sm:max-w-3xl h-full sm:h-[86vh]" onkeydown="if(event.key === 'Escape') closeMusicPlayer()">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-b border-white/10 shrink-0">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-rose-500 via-fuchsia-500 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/30"><svg class="hdsfd-icon"><use href="#i-music"></use></svg></div>
+            <div class="min-w-0">
+              <div class="text-sm font-black text-white leading-tight">Music</div>
+              <div class="text-[10px] text-white/45">Search anything • ad-free audio • saved</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="music-engine-badge" class="text-[9px] font-bold px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">idle</span>
+            <button type="button" onclick="closeMusicPlayer()" class="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 text-white/70 hover:text-white transition-all" title="Close"><svg class="hdsfd-icon"><use href="#i-x"></use></svg></button>
+          </div>
+        </div>
+
+        <!-- Search -->
+        <div class="px-4 sm:px-6 pt-3 shrink-0">
+          <div class="flex items-center gap-2 bg-white/5 border border-white/12 rounded-2xl px-3 py-1.5 focus-within:border-rose-400/60 focus-within:ring-1 focus-within:ring-rose-400/30 transition-all">
+            <span class="text-white/40 text-sm"><svg class="hdsfd-icon"><use href="#i-search"></use></svg></span>
+            <input id="music-search-input" type="text" autocomplete="off" spellcheck="false"
+              placeholder="Song, artist, album or genre…"
+              class="flex-1 bg-transparent border-0 outline-none text-white text-sm placeholder:text-white/30 py-1.5"
+              oninput="musicOnSearchInput(this.value)" onkeydown="musicOnSearchKey(event)">
+            <button type="button" onclick="musicSearch(document.getElementById('music-search-input').value, false)" class="bg-rose-500 hover:bg-rose-400 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition-all active:scale-95">Search</button>
+          </div>
+          <div class="flex items-center gap-1.5 pt-2 overflow-x-auto no-scrollbar">
+            <button onclick="musicSearch('lofi study beats', true)" class="music-chip">Lo-fi</button>
+            <button onclick="musicSearch('study music playlist', true)" class="music-chip">Study</button>
+            <button onclick="musicSearch('hip hop hits', true)" class="music-chip">Hip hop</button>
+            <button onclick="musicSearch('classical piano', true)" class="music-chip">Classical</button>
+            <button onclick="musicSearch('jazz', true)" class="music-chip">Jazz</button>
+            <button onclick="musicSearch('k-pop', true)" class="music-chip">K-pop</button>
+            <button onclick="musicSearch('phonk', true)" class="music-chip">Phonk</button>
+            <button onclick="musicSearch('nature sounds', true)" class="music-chip">Nature</button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex items-center gap-1 px-4 sm:px-6 pt-3 shrink-0">
+          <button id="music-tab-results" type="button" class="music-tab is-active" onclick="musicSetView('results')">Results</button>
+          <button id="music-tab-queue" type="button" class="music-tab" onclick="musicSetView('queue')">Queue <span id="music-queue-count" class="opacity-60">0</span></button>
+          <button id="music-tab-recent" type="button" class="music-tab" onclick="musicSetView('recent')">Recent</button>
+        </div>
+
+        <!-- Panels -->
+        <div class="flex-1 min-h-0 px-3 sm:px-4 py-2 overflow-hidden">
+          <div id="music-panel-results" class="music-scroll h-full overflow-y-auto pr-1"><div id="music-results-list"></div></div>
+          <div id="music-panel-queue" class="music-scroll hidden h-full overflow-y-auto pr-1"><div id="music-queue-list"></div></div>
+          <div id="music-panel-recent" class="music-scroll hidden h-full overflow-y-auto pr-1"><div id="music-recent-list"></div></div>
+        </div>
+
+        <!-- Now playing -->
+        <div class="border-t border-white/10 bg-black/40 px-4 sm:px-6 py-3 shrink-0">
+          <div class="flex items-center gap-3">
+            <img id="music-np-thumb" class="w-12 h-12 rounded-xl object-cover bg-white/10" alt="">
+            <div class="min-w-0 flex-1">
+              <div id="music-np-title" class="text-xs font-bold text-white truncate">Nothing playing</div>
+              <div id="music-np-channel" class="text-[10px] text-white/45 truncate">Pick a track to start</div>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button id="music-shuffle-btn" type="button" onclick="musicToggleShuffle()" class="music-ctrl" title="Shuffle"><svg class="hdsfd-icon"><use href="#i-shuffle"></use></svg></button>
+              <button type="button" onclick="musicPrev()" class="music-ctrl" title="Previous"><svg class="hdsfd-icon"><use href="#i-skip-back"></use></svg></button>
+              <button type="button" onclick="musicToggle()" class="music-ctrl-primary" title="Play / Pause"><span id="music-play-icon"><svg class="hdsfd-icon"><use href="#i-play"></use></svg></span></button>
+              <button type="button" onclick="musicNext()" class="music-ctrl" title="Next"><svg class="hdsfd-icon"><use href="#i-skip-forward"></use></svg></button>
+              <button id="music-repeat-btn" type="button" onclick="musicCycleRepeat()" class="music-ctrl" title="Repeat off"><svg class="hdsfd-icon"><use href="#i-repeat"></use></svg></button>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pt-2">
+            <span id="music-cur-time" class="text-[9px] font-mono text-white/45 w-8 text-right">0:00</span>
+            <input id="music-seek" type="range" min="0" max="100" step="0.1" value="0" oninput="musicSeek(this.value)" class="flex-1 accent-rose-400 cursor-pointer h-1.5">
+            <span id="music-dur-time" class="text-[9px] font-mono text-white/45 w-8">0:00</span>
+            <span class="text-white/30 text-[10px] pl-1"><svg class="hdsfd-icon"><use href="#i-volume-2"></use></svg></span>
+            <input type="range" min="0" max="100" step="1" value="70" oninput="musicSetVolume(this.value)" class="w-20 accent-rose-400 cursor-pointer">
+            <span id="music-volume-label" class="text-[9px] font-mono text-white/45 w-7">70%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <audio id="music-audio" preload="none"></audio>
+
     <!-- App Logic Scripts (Cache-Busting Query) -->
-    <script src="app.js?v=3.1"></script>
+    <script src="app.js?v=3.3"></script>
   </body>
 </html>

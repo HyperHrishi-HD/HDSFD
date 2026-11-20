@@ -123,7 +123,8 @@ def add_security_headers(response):
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
     return response
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'database.db')
+# HDSFD_DB_PATH lets the integration suites run against a throwaway copy.
+DB_PATH = os.environ.get('HDSFD_DB_PATH') or os.path.join(os.path.dirname(__file__), 'database.db')
 logger = logging.getLogger(__name__)
 
 def get_db():
@@ -1333,6 +1334,89 @@ def gemini_history_handler():
             })
         return jsonify(history)
 
+def _answer_from_live_context(lower, context):
+    """Context-aware answer built straight from the user's live workspace snapshot.
+    Used by the offline engine so answers stay personal even without a Gemini key."""
+    if not isinstance(context, dict) or not context:
+        return None
+
+    # Never hijack an explicit command — those go to the action engine below.
+    imperative_prefixes = (
+        'add ', 'create ', 'make ', 'schedule ', 'set ', 'put ', 'new ', 'delete ',
+        'remove ', 'complete ', 'mark ', 'start ', 'play ', 'pause ', 'reset ', 'change ',
+    )
+    if lower.startswith(imperative_prefixes):
+        return None
+
+    intents = [
+        'what should i', 'what do i have', 'my tasks', 'my day', 'today', 'due',
+        'priorit', 'focus on', 'next up', 'my schedule', 'my classes', 'my exams',
+        'progress', 'how am i doing', 'what is due', "what's due", 'overview', 'next exam',
+    ]
+    if not any(word in lower for word in intents):
+        return None
+
+    tasks = [item for item in (context.get('tasks') or []) if isinstance(item, dict)]
+    open_tasks = [item for item in tasks if not item.get('completed')]
+    schedule = [item for item in (context.get('schedule') or []) if isinstance(item, dict)]
+    exams = [item for item in (context.get('exams') or []) if isinstance(item, dict)]
+    stats = context.get('stats') if isinstance(context.get('stats'), dict) else {}
+    if not tasks and not schedule and not exams:
+        return None
+
+    import datetime as _dt
+    today = _dt.datetime.now().strftime('%a')
+
+    lines = ["🧭 **Your workspace right now:**", ""]
+    lines.append(f"• **Tasks:** {len(open_tasks)} open of {len(tasks)} total")
+    if schedule:
+        lines.append(f"• **Classes on the timetable:** {len(schedule)}")
+    if exams:
+        lines.append(f"• **Exams scheduled:** {len(exams)}")
+    if stats:
+        bits = []
+        if stats.get('tasks_done') is not None:
+            bits.append(f"{stats.get('tasks_done')} tasks done")
+        if stats.get('focus_mins') is not None:
+            bits.append(f"{stats.get('focus_mins')} focus minutes")
+        if stats.get('coins') is not None:
+            bits.append(f"{stats.get('coins')} coins")
+        if bits:
+            lines.append("• **Progress:** " + " · ".join(bits))
+
+    if open_tasks:
+        ordered = sorted(open_tasks, key=lambda t: (not bool(t.get('due')), str(t.get('due') or '')))
+        lines.append("\n**Start here (nearest deadline first):**")
+        for index, task in enumerate(ordered[:5], start=1):
+            meta = " · ".join(str(x) for x in (task.get('folder'), task.get('due')) if x)
+            lines.append(f"{index}. **{task.get('title')}**" + (f" — {meta}" if meta else ""))
+
+    todays_classes = [item for item in schedule if today in (item.get('days') or [])]
+    if todays_classes:
+        lines.append("\n**On your timetable today:**")
+        for item in todays_classes[:5]:
+            lines.append(
+                f"• **{item.get('title')}** {item.get('start') or ''}"
+                + (f"–{item.get('end')}" if item.get('end') else "")
+            )
+
+    if exams:
+        upcoming = sorted(exams, key=lambda e: str(e.get('date') or ''))[:3]
+        lines.append("\n**Nearest exams:**")
+        for item in upcoming:
+            lines.append(f"• **{item.get('title')}** — {item.get('date') or 'date TBD'} {item.get('time') or ''}".rstrip())
+
+    if open_tasks:
+        lines.append(
+            "\n💡 Want me to start a 25-minute focus session on the first task, "
+            "or create a sticky-note summary for it?"
+        )
+    else:
+        lines.append("\n🎉 Nothing open right now — a good moment to revise notes or get ahead.")
+
+    return "\n".join(lines)
+
+
 @app.route('/api/gemini/generate', methods=['POST'])
 def gemini_generate():
     data = request.json or {}
@@ -1358,9 +1442,9 @@ def gemini_generate():
             if row and row['api_key']:
                 api_key = row['api_key']
 
-        # Fetch recent chat history (last 10 turns)
+        # Fetch recent chat history (last 20 messages for stronger continuity)
         history_rows = conn.execute(
-            "SELECT role, content FROM gemini_chat_history WHERE username = ? ORDER BY id DESC LIMIT 10",
+            "SELECT role, content FROM gemini_chat_history WHERE username = ? ORDER BY id DESC LIMIT 20",
             (username,)
         ).fetchall()
         history_rows = list(reversed(history_rows))
@@ -1414,12 +1498,99 @@ def gemini_generate():
         "    {\"type\": \"pause_timer\"},\n"
         "    {\"type\": \"reset_timer\"},\n"
         "    {\"type\": \"set_soundscape\", \"playing\": true, \"rain\": 0.7, \"brown_noise\": 0.5},\n"
+        "    {\"type\": \"play_song\", \"query\": \"song or artist name\"},\n"
+        "    {\"type\": \"create_schedule_entry\", \"title\": \"Math\", \"days\": [\"Mon\",\"Wed\"], \"start_time\": \"09:00\", \"end_time\": \"10:15\"},\n"
+        "    {\"type\": \"create_exam\", \"title\": \"Physics Final\", \"date\": \"2026-12-10\", \"time\": \"09:00\"},\n"
+        "    {\"type\": \"complete_task\", \"title\": \"existing task title\"},\n"
+        "    {\"type\": \"delete_task\", \"title\": \"existing task title\"},\n"
+        "    {\"type\": \"navigate_tab\", \"tab\": \"focus|tasks-notes|notes|settings\"},\n"
         "    {\"type\": \"change_theme\", \"theme\": \"cyber\"}\n"
         "  ]\n"
         "}\n"
         "```\n"
         "Always provide natural, intelligent, comprehensive, and helpful academic explanations for math, science, SAT, essay planning, coding, and productivity advice."
     )
+
+    # ---- Live workspace context injected by the client on every request ----
+    live_context = data.get('context') or {}
+    if isinstance(live_context, dict) and live_context:
+        import datetime as _context_datetime
+        def _clip_ctx(value, limit=90):
+            text = str(value if value is not None else '').replace('\n', ' ').strip()
+            return text[:limit] + ('…' if len(text) > limit else '')
+
+        ctx_lines = []
+        ctx_lines.append(f"NOW: {_context_datetime.datetime.now().strftime('%A, %B %d, %Y - %I:%M %p')}")
+        ctx_lines.append(f"ACCOUNT: {_clip_ctx(live_context.get('user') or username, 60)}")
+        ctx_lines.append(f"OPEN TAB: {_clip_ctx(live_context.get('tab') or 'focus', 30)}")
+
+        folders = live_context.get('folders') or []
+        if folders:
+            ctx_lines.append("FOLDERS: " + ", ".join(_clip_ctx(f, 34) for f in folders[:10]))
+
+        # Only the slice an answer can actually use: open work first, plus a few
+        # recent items. Keeps the prompt small so replies stay fast.
+        raw_tasks = [t for t in (live_context.get('tasks') or []) if isinstance(t, dict)]
+        open_tasks = [t for t in raw_tasks if not t.get('completed')]
+        done_tasks = [t for t in raw_tasks if t.get('completed')]
+        tasks = open_tasks[:12] + done_tasks[:3]
+        if tasks:
+            ctx_lines.append(f"TASKS ({len(open_tasks)} open, showing {len(tasks)}):")
+            for t in tasks:
+                bits = [_clip_ctx(t.get('title'), 70)]
+                if t.get('folder'):
+                    bits.append(f"folder={_clip_ctx(t.get('folder'), 26)}")
+                if t.get('due'):
+                    bits.append(f"due={_clip_ctx(t.get('due'), 26)}")
+                bits.append('done' if t.get('completed') else 'open')
+                ctx_lines.append("  - " + " | ".join(bits))
+
+        notes = live_context.get('notes') or []
+        if notes:
+            ctx_lines.append(f"NOTES ({len(notes)} shown):")
+            for n in notes[:6]:
+                if isinstance(n, dict):
+                    ctx_lines.append("  - " + _clip_ctx(n.get('title') or n.get('text'), 110))
+
+        schedule = live_context.get('schedule') or []
+        if schedule:
+            ctx_lines.append(f"CLASS SCHEDULE ({len(schedule)} shown):")
+            for s in schedule[:8]:
+                if isinstance(s, dict):
+                    days = ",".join(s.get('days') or []) if isinstance(s.get('days'), list) else _clip_ctx(s.get('days'), 30)
+                    ctx_lines.append(
+                        "  - " + _clip_ctx(s.get('title'), 60)
+                        + f" | {days} | {_clip_ctx(s.get('start'), 10)}-{_clip_ctx(s.get('end'), 10)}"
+                    )
+
+        exams = live_context.get('exams') or []
+        if exams:
+            ctx_lines.append(f"UPCOMING EXAMS ({len(exams)} shown):")
+            for e in exams[:5]:
+                if isinstance(e, dict):
+                    ctx_lines.append(
+                        "  - " + _clip_ctx(e.get('title'), 60)
+                        + f" | {_clip_ctx(e.get('date'), 12)} {_clip_ctx(e.get('time'), 8)}"
+                    )
+
+        stats = live_context.get('stats') or {}
+        if isinstance(stats, dict) and stats:
+            ctx_lines.append(
+                "PROGRESS: " + ", ".join(f"{k}={_clip_ctx(v, 20)}" for k, v in list(stats.items())[:10])
+            )
+
+        playing = live_context.get('music_now_playing')
+        if isinstance(playing, dict) and playing.get('title'):
+            ctx_lines.append("NOW PLAYING: " + _clip_ctx(playing.get('title'), 80))
+
+        system_instruction += (
+            "\n\n===== USER LIVE WORKSPACE CONTEXT (AUTHORITATIVE & CURRENT) =====\n"
+            "This is the user's real workspace data, synced from the app right now. Use it directly when answering "
+            "questions about their tasks, folders, notes, classes, exams, progress or what they should do next. "
+            "Reference real titles and dates from it. Never invent tasks, notes, classes or exams that are not listed. "
+            "If the user asks to complete or delete something, match it against the titles shown below.\n"
+            + "\n".join(ctx_lines)
+        )
 
     contents = []
     contents.append({
@@ -1511,8 +1682,13 @@ def gemini_generate():
         lower = prompt.lower().strip()
         actions = []
 
+        # Intent: Questions about the user's own workspace → answer from live context
+        context_answer = _answer_from_live_context(lower, live_context)
+        if context_answer:
+            generated_text = context_answer
+
         # Intent: Create/Add Task
-        if any(w in lower for w in ['task', 'assignment', 'hw', 'homework', 'todo', 'due']) and any(w in lower for w in ['add', 'create', 'schedule', 'set', 'make', 'put', 'need', 'task:']):
+        elif any(w in lower for w in ['task', 'assignment', 'hw', 'homework', 'todo', 'due']) and any(w in lower for w in ['add', 'create', 'schedule', 'set', 'make', 'put', 'need', 'task:']):
             raw_title = prompt
             for remove_word in ['add a task to:', 'add a task to', 'add a task:', 'add a task', 'add task:', 'add task to', 'add task', 'create task:', 'create a task:', 'create task', 'create a task', 'schedule a task:', 'schedule task:', 'schedule a task', 'schedule task', 'task:', 'please add', 'please create']:
                 if raw_title.lower().startswith(remove_word):
@@ -2465,7 +2641,411 @@ def google_calendar_api():
         ])
 
 
-# ===== YOUTUBE SEARCH ENDPOINT =====
+# ===== HDSFD MUSIC ENGINE (search + ad-free audio stream) =====
+# Search is scraped server-side (no API key). Playback resolves the real audio
+# stream with yt-dlp and proxies it through this server, which gives audio-only,
+# ad-free playback with working seeking (HTTP Range). If extraction is blocked
+# (e.g. datacenter IP / SABR experiment), the client falls back to the official
+# YouTube embed automatically.
+import threading as _threading
+import time as _time
+
+_YT_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+          '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
+_MUSIC_SEARCH_CACHE = {}
+_MUSIC_STREAM_CACHE = {}
+_MUSIC_LOCK = _threading.Lock()
+_MUSIC_SEARCH_TTL = 15 * 60
+_MUSIC_STREAM_TTL = 90 * 60
+
+# ---- Abuse protection -------------------------------------------------------
+# /api/music/stream relays real audio bytes, so it must never behave like an
+# open bandwidth proxy. Every stream start is rate limited per client and the
+# number of simultaneous relays is capped per client and server-wide.
+#
+# These are guard rails against runaway loops and abuse, NOT a usage quota: a
+# person can only listen to one song per player, so the per-client ceiling is
+# set far above anything a real session reaches. Each relay holds a Python
+# worker thread for the whole song, which is the resource being protected.
+_MUSIC_MAX_STREAMS_PER_CLIENT = int(os.environ.get(
+    'HDSFD_MUSIC_MAX_STREAMS_PER_CLIENT',
+    os.environ.get('HDSFD_MUSIC_MAX_STREAMS_PER_IP', '6'),
+))
+_MUSIC_MAX_STREAMS_TOTAL = int(os.environ.get('HDSFD_MUSIC_MAX_STREAMS_TOTAL', '80'))
+_MUSIC_STREAM_START_WINDOW = 300  # seconds
+_MUSIC_MAX_STREAM_STARTS = int(os.environ.get('HDSFD_MUSIC_MAX_STARTS', '150'))
+_MUSIC_STREAM_ACTIVE = {}
+_MUSIC_STREAM_HITS = {}
+_MUSIC_STREAM_SLOTS = {'total': 0}
+_UNTRUSTED_MUSIC_CLIENTS = set()
+
+
+def _music_client_id():
+    """Best-effort client identity for throttling (proxy-aware, cheap).
+
+    A signed-in user gets their own bucket keyed on the session token, so a
+    shared campus/office NAT cannot pool a whole class into one small limit.
+    Guests fall back to the proxy-aware peer address.
+    """
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:].strip()
+        if token:
+            return 'user:' + hashlib.sha256(token.encode('utf-8')).hexdigest()[:16]
+    forwarded = request.headers.get('X-Forwarded-For', '')
+    if forwarded:
+        # Proxies append the real peer last, so the final hop is the trustworthy one.
+        candidate = forwarded.split(',')[-1].strip()
+        if candidate:
+            return candidate
+    return request.remote_addr or 'unknown'
+
+
+def _music_stream_acquire(client_id):
+    """Reserve one stream slot. Returns (ok, reason, retry_after_seconds)."""
+    now = _time.time()
+    with _MUSIC_LOCK:
+        hits = [stamp for stamp in _MUSIC_STREAM_HITS.get(client_id, []) if now - stamp < _MUSIC_STREAM_START_WINDOW]
+        _MUSIC_STREAM_HITS[client_id] = hits
+
+        if len(hits) >= _MUSIC_MAX_STREAM_STARTS:
+            retry_after = max(1, int(_MUSIC_STREAM_START_WINDOW - (now - min(hits))))
+            return False, 'rate_limited', retry_after
+
+        if _MUSIC_STREAM_ACTIVE.get(client_id, 0) >= _MUSIC_MAX_STREAMS_PER_CLIENT:
+            return False, 'too_many_concurrent_streams', 0
+
+        if _MUSIC_STREAM_SLOTS['total'] >= _MUSIC_MAX_STREAMS_TOTAL:
+            return False, 'server_stream_capacity_reached', 10
+
+        hits.append(now)
+        _MUSIC_STREAM_ACTIVE[client_id] = _MUSIC_STREAM_ACTIVE.get(client_id, 0) + 1
+        _MUSIC_STREAM_SLOTS['total'] += 1
+
+        # Keep the bookkeeping tables bounded on long-running processes.
+        if len(_MUSIC_STREAM_HITS) > 4000:
+            for stale in [key for key, stamps in _MUSIC_STREAM_HITS.items() if not stamps]:
+                _MUSIC_STREAM_HITS.pop(stale, None)
+            for stale in [key for key, count in _MUSIC_STREAM_ACTIVE.items() if count <= 0]:
+                _MUSIC_STREAM_ACTIVE.pop(stale, None)
+    return True, None, 0
+
+
+def _music_stream_release(client_id):
+    with _MUSIC_LOCK:
+        active = _MUSIC_STREAM_ACTIVE.get(client_id, 0) - 1
+        if active > 0:
+            _MUSIC_STREAM_ACTIVE[client_id] = active
+        else:
+            _MUSIC_STREAM_ACTIVE.pop(client_id, None)
+        _MUSIC_STREAM_SLOTS['total'] = max(0, _MUSIC_STREAM_SLOTS['total'] - 1)
+
+
+def _music_throttled_response(reason, retry_after):
+    messages = {
+        'rate_limited': 'Too many tracks started at once. Wait a moment and press play again.',
+        'too_many_concurrent_streams': 'Too many players are streaming at once on this account.',
+        'server_stream_capacity_reached': 'The music server is briefly at capacity. Try again shortly.',
+    }
+    response = jsonify({
+        'status': 'throttled',
+        'reason': reason,
+        'message': messages.get(reason, 'Request throttled.'),
+    })
+    response.status_code = 429
+    if retry_after:
+        response.headers['Retry-After'] = str(int(retry_after))
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+def _music_clean(value):
+    import html as _html
+    if value is None:
+        return ''
+    return _html.unescape(str(value)).strip()
+
+
+def _music_duration_seconds(label):
+    parts = [p.strip() for p in str(label or '').split(':') if p.strip().isdigit()]
+    total = 0
+    for part in parts:
+        total = total * 60 + int(part)
+    return total
+
+
+def _youtube_search_results(query, limit=14):
+    """Scrape youtube.com/results for video metadata (id, title, channel, duration)."""
+    import requests as _requests
+    import re as _re
+    import json as _json
+
+    cache_key = (query or '').strip().lower()
+    now = _time.time()
+    with _MUSIC_LOCK:
+        cached = _MUSIC_SEARCH_CACHE.get(cache_key)
+    if cached and cached.get('expires', 0) > now:
+        return cached['results'][:limit]
+
+    response = _requests.get(
+        'https://www.youtube.com/results',
+        params={'search_query': query, 'sp': 'EgIQAQ%3D%3D'},  # sp = filter: videos only
+        headers={'User-Agent': _YT_UA, 'Accept-Language': 'en-US,en;q=0.9'},
+        timeout=12,
+    )
+    response.raise_for_status()
+    page = response.text
+
+    match = _re.search(r'var ytInitialData = (\{.*?\});</script>', page, _re.S)
+    if not match:
+        match = _re.search(r'ytInitialData = (\{.*?\});</script>', page, _re.S)
+
+    results = []
+    seen = set()
+
+    if match:
+        try:
+            data = _json.loads(match.group(1))
+        except Exception:
+            data = None
+
+        if data is not None:
+            stack = [data]
+            while stack and len(results) < limit * 2:
+                node = stack.pop()
+                if isinstance(node, dict):
+                    renderer = node.get('videoRenderer')
+                    if isinstance(renderer, dict):
+                        vid = renderer.get('videoId')
+                        if vid and vid not in seen:
+                            seen.add(vid)
+                            title = ''.join(
+                                run.get('text', '') for run in (renderer.get('title') or {}).get('runs', [])
+                            )
+                            channel = ''.join(
+                                run.get('text', '') for run in (renderer.get('ownerText') or {}).get('runs', [])
+                            )
+                            length = (renderer.get('lengthText') or {}).get('simpleText', '')
+                            is_live = any(
+                                'LIVE' in json_dump
+                                for json_dump in [
+                                    str((badge or {}).get('metadataBadgeRenderer', {}).get('label', ''))
+                                    for badge in (renderer.get('badges') or [])
+                                ]
+                            )
+                            results.append({
+                                'id': vid,
+                                'title': _music_clean(title) or query,
+                                'channel': _music_clean(channel),
+                                'duration': _music_clean(length),
+                                'seconds': _music_duration_seconds(length),
+                                'live': is_live,
+                                'thumbnail': f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
+                                'url': f'https://www.youtube.com/watch?v={vid}',
+                            })
+                    for value in node.values():
+                        if isinstance(value, (dict, list)):
+                            stack.append(value)
+                elif isinstance(node, list):
+                    stack.extend(value for value in node if isinstance(value, (dict, list)))
+
+    # Regex fallback if the JSON tree shape changed
+    if not results:
+        ids = _re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', page)
+        titles = _re.findall(r'"title":\{"runs":\[\{"text":"([^"]+)"', page)
+        for index, vid in enumerate(ids):
+            if vid in seen:
+                continue
+            seen.add(vid)
+            results.append({
+                'id': vid,
+                'title': _music_clean(titles[index]) if index < len(titles) else query,
+                'channel': '',
+                'duration': '',
+                'seconds': 0,
+                'live': False,
+                'thumbnail': f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
+                'url': f'https://www.youtube.com/watch?v={vid}',
+            })
+            if len(results) >= limit * 2:
+                break
+
+    results = [item for item in results if not item.get('live')][:limit]
+    with _MUSIC_LOCK:
+        _MUSIC_SEARCH_CACHE[cache_key] = {'results': results, 'expires': now + _MUSIC_SEARCH_TTL}
+    return results
+
+
+def _resolve_audio_stream(video_id):
+    """Resolve a direct audio stream URL for a YouTube video using yt-dlp."""
+    now = _time.time()
+    with _MUSIC_LOCK:
+        cached = _MUSIC_STREAM_CACHE.get(video_id)
+    if cached and cached.get('expires', 0) > now:
+        return cached['url'], None
+
+    try:
+        import yt_dlp
+    except Exception:
+        return None, 'extractor_missing'
+
+    import logging as _logging
+    last_error = 'no_stream'
+    client_chain = [['tv_embedded'], ['android_vr'], ['web_embedded'], ['ios'], None]
+
+    for clients in client_chain:
+        options = {
+            'quiet': True,
+            'no_warnings': True,
+            'skip_download': True,
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            'socket_timeout': 12,
+            'format': 'bestaudio/best',
+            'logger': _logging.getLogger('hdsfd_music'),
+        }
+        if clients:
+            options['extractor_args'] = {'youtube': {'player_client': clients}}
+        try:
+            with yt_dlp.YoutubeDL(options) as ydl:
+                info = ydl.extract_info(
+                    f'https://www.youtube.com/watch?v={video_id}', download=False
+                )
+            stream_url = info.get('url')
+            if not stream_url:
+                for fmt in (info.get('formats') or []):
+                    if fmt.get('acodec') not in (None, 'none') and fmt.get('url'):
+                        stream_url = fmt['url']
+                        break
+            if stream_url:
+                with _MUSIC_LOCK:
+                    _MUSIC_STREAM_CACHE[video_id] = {
+                        'url': stream_url,
+                        'expires': now + _MUSIC_STREAM_TTL,
+                    }
+                return stream_url, None
+            last_error = 'no_audio_format'
+        except Exception as exc:
+            last_error = str(exc)[:200]
+            logger.info(f"Music extractor client {clients} failed for {video_id}: {last_error}")
+
+    return None, last_error
+
+
+@app.route('/api/music/search', methods=['GET'])
+def music_search():
+    query = (request.args.get('q') or '').strip()
+    if not query:
+        return jsonify({'status': 'error', 'message': 'No query provided', 'results': []}), 400
+    if len(query) > 160:
+        query = query[:160]
+    try:
+        results = _youtube_search_results(query)
+        return jsonify({'status': 'success', 'query': query, 'results': results})
+    except Exception as exc:
+        logger.warning(f"Music search failed for '{query}': {exc}")
+        return jsonify({'status': 'error', 'message': str(exc)[:200], 'query': query, 'results': []}), 502
+
+
+@app.route('/api/music/stream/<video_id>', methods=['GET', 'HEAD'])
+def music_stream(video_id):
+    import re as _re
+    from flask import Response, stream_with_context
+    import requests as _requests
+
+    if not _re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id or ''):
+        return jsonify({'status': 'error', 'message': 'Invalid video id'}), 400
+
+    client_id = _music_client_id()
+    allowed, reason, retry_after = _music_stream_acquire(client_id)
+    if not allowed:
+        logger.info(f"Music stream throttled client={client_id} reason={reason} video={video_id}")
+        return _music_throttled_response(reason, retry_after)
+
+    slot_released = {'done': False}
+
+    def release_slot():
+        if not slot_released['done']:
+            slot_released['done'] = True
+            _music_stream_release(client_id)
+
+    stream_url, error = _resolve_audio_stream(video_id)
+    if not stream_url:
+        release_slot()
+        return jsonify({
+            'status': 'unavailable',
+            'message': error or 'Audio stream unavailable',
+            'video_id': video_id,
+        }), 503
+
+    headers = {'User-Agent': _YT_UA, 'Accept': '*/*'}
+    range_header = request.headers.get('Range')
+    if range_header:
+        headers['Range'] = range_header
+
+    try:
+        upstream = _requests.get(stream_url, headers=headers, stream=True, timeout=(10, 30))
+    except Exception as exc:
+        logger.warning(f"Music upstream error for {video_id}: {exc}")
+        release_slot()
+        return jsonify({'status': 'unavailable', 'message': 'Upstream fetch failed'}), 502
+
+    if upstream.status_code >= 400:
+        # Cached googlevideo URLs expire — drop it so the next request re-resolves.
+        with _MUSIC_LOCK:
+            _MUSIC_STREAM_CACHE.pop(video_id, None)
+        upstream.close()
+        release_slot()
+        return jsonify({
+            'status': 'unavailable',
+            'message': f'Upstream responded {upstream.status_code}',
+        }), 502
+
+    if request.method == 'HEAD':
+        upstream.close()
+        release_slot()
+
+    def generate():
+        try:
+            for chunk in upstream.iter_content(chunk_size=64 * 1024):
+                if chunk:
+                    yield chunk
+        finally:
+            upstream.close()
+            release_slot()
+
+    proxy = Response(stream_with_context(generate()), status=upstream.status_code)
+    for header in ('Content-Type', 'Content-Length', 'Content-Range', 'Accept-Ranges'):
+        if header in upstream.headers:
+            proxy.headers[header] = upstream.headers[header]
+    proxy.headers.setdefault('Content-Type', 'audio/webm')
+    proxy.headers.setdefault('Accept-Ranges', 'bytes')
+    proxy.headers['Cache-Control'] = 'no-store'
+    proxy.headers['X-HDSFD-Music-Engine'] = 'audio-proxy'
+    proxy.headers['X-HDSFD-Stream-Limit'] = (
+        f"{_MUSIC_MAX_STREAMS_PER_CLIENT} per client, {_MUSIC_MAX_STREAMS_TOTAL} total"
+    )
+    proxy.headers['X-HDSFD-Stream-Starts'] = f"{_MUSIC_MAX_STREAM_STARTS}/{_MUSIC_STREAM_START_WINDOW}s"
+    return proxy
+
+
+@app.route('/api/music/resolve/<video_id>', methods=['GET'])
+def music_resolve(video_id):
+    import re as _re
+    if not _re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id or ''):
+        return jsonify({'status': 'error', 'message': 'Invalid video id'}), 400
+    stream_url, error = _resolve_audio_stream(video_id)
+    if not stream_url:
+        return jsonify({'status': 'unavailable', 'message': error or 'unavailable'}), 503
+    return jsonify({
+        'status': 'success',
+        'video_id': video_id,
+        'thumbnail': f'https://i.ytimg.com/vi/{video_id}/mqdefault.jpg',
+        'url': f'https://www.youtube.com/watch?v={video_id}',
+    })
+
+
+# ===== YOUTUBE SEARCH ENDPOINT (kept for backwards compatibility) =====
 @app.route('/api/youtube/search', methods=['GET'])
 def youtube_search():
     """Search YouTube for a query and return the first video URL and title."""
@@ -2474,35 +3054,17 @@ def youtube_search():
         return jsonify({'error': 'No query provided'}), 400
 
     try:
-        import urllib.request
-        import re as _re
-
-        # Use YouTube's search suggestions / scrape approach without API key
-        search_url = f"https://www.youtube.com/results?search_query={urllib.parse.quote_plus(query)}"
-        headers_req = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
-        }
-        req = urllib.request.Request(search_url, headers=headers_req)
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            html = resp.read().decode('utf-8', errors='ignore')
-
-        # Extract video IDs from YouTube search results page
-        video_ids = _re.findall(r'"videoId":"([a-zA-Z0-9_-]{11})"', html)
-        titles = _re.findall(r'"title":{"runs":\[{"text":"([^"]+)"', html)
-
-        if video_ids:
-            vid = video_ids[0]
-            title = titles[0] if titles else query
+        results = _youtube_search_results(query, limit=1)
+        if results:
+            first = results[0]
             return jsonify({
-                'video_id': vid,
-                'video_url': f'https://www.youtube.com/watch?v={vid}',
-                'title': title,
-                'query': query
+                'video_id': first['id'],
+                'video_url': first['url'],
+                'title': first['title'],
+                'channel': first.get('channel', ''),
+                'query': query,
             })
-        else:
-            return jsonify({'error': 'No results found', 'query': query}), 404
-
+        return jsonify({'error': 'No results found', 'query': query}), 404
     except Exception as e:
         logger.warning(f"YouTube search error for '{query}': {e}")
         return jsonify({'error': str(e), 'query': query}), 500

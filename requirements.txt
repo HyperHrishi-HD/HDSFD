@@ -5,3 +5,5 @@ google-auth-oauthlib>=1.2.0
 google-api-python-client>=2.125.0
 cryptography>=42.0.0
 requests
+# Music engine: resolves the real audio stream for ad-free playback (server-side, no ads).
+yt-dlp>=2024.12.13
