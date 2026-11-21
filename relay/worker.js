@@ -8,6 +8,10 @@
  *     Range-aware audio proxy: forwards Range and returns 206 / Content-Range so
  *     seeking works. googlevideo URLs are bound to the IP that minted them, so the
  *     bytes have to leave from this Worker.
+ *   GET|POST /api/search?q=<query>&limit=14
+ *     YouTube video search (title, channel, duration, views) from the Worker's own
+ *     egress. Hosts that cannot reach youtube.com use this for search, trending and
+ *     radio; results are cached in KV for 15 minutes.
  *   GET /api/health
  *
  * The browser talks to this Worker directly, so playback never depends on the app
@@ -28,6 +32,11 @@ const PLAYER_URL = 'https://www.youtube.com/youtubei/v1/player?key=' + INNERTUBE
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const MAX_STREAM_URL = 4096;
 const RESOLVE_ROUNDS = 3;
+const SEARCH_URL = 'https://www.youtube.com/results';
+const SEARCH_TTL_MS = 10 * 60 * 1000;
+const SEARCH_TTL_SECONDS = 15 * 60;
+const SEARCH_MEMORY_MAX = 80;
+const SEARCH_CACHE = new Map();
 
 const SAFARI_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15';
 
@@ -246,6 +255,192 @@ function json(body, status, extra) {
 
 function preflight() {
   return new Response(null, { status: 204, headers: corsHeaders() });
+}
+
+// ---- Search ----------------------------------------------------------------
+// The app server used to scrape youtube.com itself. On hosts whose egress is
+// blocked (PythonAnywhere) that meant an external reader proxy and 10–45 s waits,
+// which also made radio and the home feed unusable. This Worker can reach YouTube,
+// so search runs here and the server keeps its old path only as a fallback.
+
+function hashString(value) {
+  let hash = 5381;
+  const text = String(value);
+  for (let index = 0; index < text.length; index += 1) {
+    hash = ((hash << 5) + hash + text.charCodeAt(index)) | 0;
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function extractInitialData(html) {
+  for (const marker of ['ytInitialData = {', 'ytInitialData ={']) {
+    let start = html.indexOf(marker);
+    if (start < 0) continue;
+    start = html.indexOf('{', start);
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let pos = start; pos < html.length; pos += 1) {
+      const char = html[pos];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === '\\') escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') inString = true;
+      else if (char === '{') depth += 1;
+      else if (char === '}') {
+        depth -= 1;
+        if (depth === 0) {
+          try {
+            return JSON.parse(html.slice(start, pos + 1));
+          } catch (e) {
+            return null;
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function durationSeconds(label) {
+  const parts = String(label || '').split(':').filter(part => /^\d+$/.test(part.trim()));
+  return parts.reduce((total, part) => total * 60 + Number(part), 0);
+}
+
+function readVideoRenderer(renderer) {
+  if (!renderer || typeof renderer !== 'object') return null;
+  const id = renderer.videoId;
+  if (!VIDEO_ID.test(String(id || ''))) return null;
+  const runs = value => ((value && value.runs) || []).map(run => run.text || '').join('').trim();
+  const duration = (renderer.lengthText || {}).simpleText || '';
+  const badges = Array.isArray(renderer.badges) ? renderer.badges : [];
+  const live = badges.some(badge => /live/i.test(String(((badge || {}).metadataBadgeRenderer || {}).label || '')));
+  const thumbs = ((renderer.thumbnail || {}).thumbnails || []);
+  const thumb = thumbs.length ? thumbs[thumbs.length - 1].url : 'https://i.ytimg.com/vi/' + id + '/mqdefault.jpg';
+  return {
+    id: id,
+    title: runs(renderer.title) || 'Untitled',
+    channel: runs(renderer.ownerText) || runs(renderer.longBylineText),
+    duration: duration,
+    seconds: durationSeconds(duration),
+    views: (renderer.viewCountText || {}).simpleText || runs(renderer.viewCountText),
+    live: live,
+    thumbnail: thumb,
+    url: 'https://www.youtube.com/watch?v=' + id,
+  };
+}
+
+function collectSearchVideos(data, limit) {
+  const results = [];
+  const seen = new Set();
+  if (!data) return results;
+  // Breadth-first: the result renderers live near the top of ytInitialData, while
+  // depth-first sinks into menus and continuation blobs until its budget runs out
+  // (that used to cap searches at four or five videos).
+  const queue = [data];
+  let head = 0;
+  let visited = 0;
+  while (head < queue.length && results.length < limit && visited < 60000) {
+    const node = queue[head];
+    head += 1;
+    visited += 1;
+    if (Array.isArray(node)) {
+      for (const value of node) if (value && typeof value === 'object') queue.push(value);
+      continue;
+    }
+    if (!node || typeof node !== 'object') continue;
+    const renderer = node.videoRenderer || node.compactVideoRenderer;
+    if (renderer) {
+      const video = readVideoRenderer(renderer);
+      if (video && !video.live && !seen.has(video.id)) {
+        seen.add(video.id);
+        results.push(video);
+      }
+    }
+    for (const key of Object.keys(node)) {
+      const value = node[key];
+      if (value && typeof value === 'object') queue.push(value);
+    }
+  }
+  return results;
+}
+
+async function searchYouTube(query, limit) {
+  const target = SEARCH_URL + '?' + new URLSearchParams({ search_query: query, sp: 'EgIQAQ%3D%3D' }).toString();
+  const response = await fetch(target, {
+    headers: {
+      'User-Agent': SAFARI_UA,
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept': 'text/html,application/xhtml+xml',
+    },
+    signal: timeoutSignal(6500),
+  });
+  if (!response.ok) throw new Error('search_http_' + response.status);
+  const html = await response.text();
+  if (html.indexOf('videoId') < 0) throw new Error('search_no_video_data');
+  const videos = collectSearchVideos(extractInitialData(html), limit);
+  if (!videos.length) throw new Error('search_empty');
+  return videos;
+}
+
+async function handleSearch(request, env, ctx) {
+  const url = new URL(request.url);
+  let query = url.searchParams.get('q') || '';
+  let limit = parseInt(url.searchParams.get('limit') || '14', 10);
+  if (request.method === 'POST') {
+    try {
+      const payload = await request.json();
+      if (payload && payload.q) query = String(payload.q);
+      if (payload && payload.limit) limit = parseInt(payload.limit, 10);
+    } catch (e) { /* query parameters still work */ }
+  }
+  query = query.trim().slice(0, 120);
+  if (!query) return json({ status: 'error', message: 'A search query is required' }, 400);
+  if (!Number.isFinite(limit) || limit < 1) limit = 14;
+  limit = Math.min(24, Math.max(1, limit));
+
+  const normalized = query.toLowerCase();
+  const memoryKey = normalized + ':' + limit;
+  const memory = SEARCH_CACHE.get(memoryKey);
+  if (memory && memory.expires > Date.now()) {
+    return json({ status: 'success', query: query, cached: 'isolate', results: memory.results });
+  }
+
+  const kv = sharedCache(env);
+  const kvKey = 'search:v1:' + hashString(memoryKey);
+  if (kv) {
+    const shared = await readSharedWithBudget(kv, kvKey);
+    if (shared && Array.isArray(shared.results) && Number(shared.expires) > Date.now()) {
+      rememberSearch(memoryKey, shared.results);
+      return json({ status: 'success', query: query, cached: 'kv', results: shared.results });
+    }
+  }
+
+  try {
+    const results = await searchYouTube(query, limit);
+    rememberSearch(memoryKey, results);
+    writeSharedJson(kv, kvKey, { results: results, expires: Date.now() + SEARCH_TTL_SECONDS * 1000 }, SEARCH_TTL_SECONDS, ctx);
+    return json({ status: 'success', query: query, results: results });
+  } catch (error) {
+    return json({
+      status: 'error',
+      query: query,
+      message: 'Search is unavailable right now',
+      detail: String((error && error.message) || error).slice(0, 120),
+      results: [],
+    }, 502);
+  }
+}
+
+function rememberSearch(key, results) {
+  if (SEARCH_CACHE.size >= SEARCH_MEMORY_MAX) {
+    const oldest = SEARCH_CACHE.keys().next();
+    if (!oldest.done) SEARCH_CACHE.delete(oldest.value);
+  }
+  SEARCH_CACHE.set(key, { results: results, expires: Date.now() + SEARCH_TTL_MS });
 }
 
 function minifyAudio(formats) {
@@ -598,12 +793,19 @@ export default {
       return streamAudio(request, env, ctx);
     }
 
+    if (path === '/api/search') {
+      if (request.method !== 'GET' && request.method !== 'POST') {
+        return json({ status: 'error', message: 'Use GET or POST' }, 405);
+      }
+      return handleSearch(request, env, ctx);
+    }
+
     if (path === '/api/health' || path === '/') {
       return json({
         status: 'ok',
         service: 'hdsfd-music-relay',
         version: '1.0.0',
-        routes: ['POST /api/player', 'GET /api/stream?url=&id=', 'GET /api/health'],
+        routes: ['POST /api/player', 'GET /api/stream?url=&id=', 'GET|POST /api/search?q=', 'GET /api/health'],
         clients: CLIENTS.map(client => client.name),
       });
     }

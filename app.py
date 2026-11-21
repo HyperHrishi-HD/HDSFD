@@ -2853,6 +2853,7 @@ def _youtube_search_results(query, limit=14):
                             'channel': _music_clean(channel),
                             'duration': _music_clean(length),
                             'seconds': _music_duration_seconds(length),
+                            'views': _music_clean((renderer.get('viewCountText') or {}).get('simpleText', '')),
                             'live': is_live,
                             'thumbnail': f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
                             'url': f'https://www.youtube.com/watch?v={vid}',
@@ -2888,6 +2889,309 @@ def _youtube_search_results(query, limit=14):
     with _MUSIC_LOCK:
         _MUSIC_SEARCH_CACHE[cache_key] = {'results': results, 'expires': now + _MUSIC_SEARCH_TTL}
     return results
+
+
+# ---- Music recommendations -------------------------------------------------
+# Search prefers the Cloudflare relay (fast, and reachable from hosts that block
+# youtube.com). The old scrape stays as a fallback. Feed and radio reuse the same
+# cached search, so a personalised home screen is a handful of cheap lookups.
+
+_MUSIC_RESULT_CACHE = {}
+_MUSIC_FEED_CACHE = {}
+_MUSIC_RADIO_CACHE = {}
+_MUSIC_RESULT_TTL = 10 * 60
+_MUSIC_FEED_TTL = 20 * 60
+_MUSIC_RADIO_TTL = 30 * 60
+
+import re as _music_re
+_MUSIC_VIDEO_ID = _music_re.compile(r'^[A-Za-z0-9_-]{11}$')
+_MUSIC_NOISE_WORDS = {
+    'the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'from',
+    'by', 'at', 'is', 'it', 'this', 'that', 'official', 'video', 'audio', 'lyrics',
+    'lyric', 'music', 'song', 'songs', 'ft', 'feat', 'featuring', 'remix', 'version',
+    'live', 'hd', 'hq', '4k', 'mv', 'visualizer', 'full', 'album', 'radio', 'mix'
+}
+
+# Rotated daily so "Trending" is not one frozen list forever.
+_MUSIC_TRENDING_ROTATION = [
+    ['top hits this week', 'trending songs', 'billboard hot 100', 'viral songs'],
+    ['new music this week', 'popular songs right now', 'top 50 songs', 'trending music videos'],
+    ['best songs this year', 'spotify top hits', 'pop hits playlist', 'hip hop hits'],
+    ['trending music', 'most played songs', 'global top songs', 'charts this week'],
+]
+
+
+def _music_normalize(item):
+    """Return a clean, client-shaped track or None."""
+    if not isinstance(item, dict):
+        return None
+    vid = str(item.get('id') or '').strip()
+    if not _MUSIC_VIDEO_ID.match(vid):
+        return None
+    duration = str(item.get('duration') or '').strip()
+    seconds = item.get('seconds')
+    if not seconds:
+        seconds = _music_duration_seconds(duration)
+    return {
+        'id': vid,
+        'title': _music_clean(item.get('title')) or 'Untitled',
+        'channel': _music_clean(item.get('channel')) or 'YouTube',
+        'duration': duration,
+        'seconds': int(seconds or 0),
+        'views': _music_clean(item.get('views')),
+        'live': bool(item.get('live')),
+        'thumbnail': item.get('thumbnail') or f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
+        'url': item.get('url') or f'https://www.youtube.com/watch?v={vid}',
+    }
+
+
+def _music_tokens(text):
+    import re as _re
+    words = _re.findall(r'[a-z0-9]+', str(text or '').lower())
+    return [word for word in words if len(word) > 1 and word not in _MUSIC_NOISE_WORDS]
+
+
+def _music_title_key(text):
+    return ' '.join(_music_tokens(text))[:90]
+
+
+def _music_channel_key(text):
+    import re as _re
+    value = _re.sub(r'\s*-\s*topic$', '', str(text or '').lower())
+    return _re.sub(r'[^a-z0-9]+', ' ', value).strip()[:80]
+
+
+def _music_views_number(value):
+    import re as _re
+    text = str(value or '')
+    match = _re.search(r'([\d.,]+)\s*([KMB])', text, _re.I)
+    if not match:
+        digits = _re.sub(r'[^\d]', '', text)
+        return int(digits) if digits else 0
+    try:
+        number = float(match.group(1).replace(',', ''))
+    except ValueError:
+        return 0
+    scale = {'k': 1_000, 'm': 1_000_000, 'b': 1_000_000_000}.get(match.group(2).lower(), 1)
+    return int(number * scale)
+
+
+def _music_dedupe(items, limit=None):
+    seen_ids = set()
+    seen_keys = set()
+    output = []
+    for raw in items or []:
+        item = _music_normalize(raw)
+        if not item:
+            continue
+        key = _music_title_key(item['title'])
+        if key:
+            key = key + '|' + _music_channel_key(item['channel'])
+        else:
+            key = item['id']
+        if item['id'] in seen_ids or key in seen_keys:
+            continue
+        seen_ids.add(item['id'])
+        seen_keys.add(key)
+        output.append(item)
+        if limit and len(output) >= limit:
+            break
+    return output
+
+
+def _music_relay_search(query, limit=14):
+    """Search through the relay. Returns None when the relay is not configured."""
+    base = (MUSIC_RELAY_BASE or '').strip()
+    if not base:
+        return None
+    try:
+        import requests as _requests
+        response = _requests.get(
+            base.rstrip('/') + '/api/search',
+            params={'q': query, 'limit': int(limit)},
+            headers={'User-Agent': _YT_UA, 'Accept': 'application/json'},
+            timeout=9,
+        )
+        if response.status_code != 200:
+            return None
+        payload = response.json()
+        results = payload.get('results') if isinstance(payload, dict) else None
+        if not isinstance(results, list) or not results:
+            return None
+        return [item for item in (_music_normalize(entry) for entry in results) if item]
+    except Exception as exc:
+        logger.info(f"Relay search unavailable for '{query}': {exc}")
+        return None
+
+
+def _music_search(query, limit=14):
+    """Cached search: relay first, local scrape second."""
+    query = (query or '').strip()[:160]
+    if not query:
+        return []
+    limit = max(1, min(30, int(limit or 14)))
+    cache_key = (query.lower(), limit)
+    now = _time.time()
+    with _MUSIC_LOCK:
+        cached = _MUSIC_RESULT_CACHE.get(cache_key)
+    if cached and cached.get('expires', 0) > now:
+        return cached['results']
+
+    results = _music_relay_search(query, limit)
+    if not results:
+        try:
+            results = _youtube_search_results(query, limit)
+        except Exception as exc:
+            logger.warning(f"Music search failed for '{query}': {exc}")
+            results = []
+    results = _music_dedupe(results, limit)
+    with _MUSIC_LOCK:
+        if len(_MUSIC_RESULT_CACHE) > 300:
+            _MUSIC_RESULT_CACHE.clear()
+        _MUSIC_RESULT_CACHE[cache_key] = {'results': results, 'expires': now + _MUSIC_RESULT_TTL}
+    return results
+
+
+def _music_safe_search(query, limit=10):
+    try:
+        return _music_search(query, limit)
+    except Exception:
+        return []
+
+
+def _music_parallel_search(queries, per_query=10):
+    unique = [query for query in dict.fromkeys(queries) if query][:5]
+    if not unique:
+        return []
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(3, len(unique))) as pool:
+            lists = list(pool.map(lambda query: _music_safe_search(query, per_query), unique))
+    except Exception:
+        lists = [_music_safe_search(query, per_query) for query in unique]
+    merged = []
+    for group in lists:
+        merged.extend(group)
+    return merged
+
+
+def _music_feed_payload(profile, limit=18):
+    """Trending for a new listener, personalised once taste exists."""
+    profile = profile if isinstance(profile, dict) else {}
+    limit = max(6, min(30, int(limit or 18)))
+    artists = [str(name).strip()[:60] for name in (profile.get('artists') or []) if str(name).strip()][:6]
+    terms = [str(term).strip()[:40] for term in (profile.get('terms') or []) if str(term).strip()][:6]
+    plays = int(profile.get('plays') or 0)
+    disliked = set(str(value) for value in (profile.get('disliked') or [])[:60])
+    personalized = len(artists) >= 2 or plays >= 4
+    day = int(_time.time() // 86400)
+
+    if personalized:
+        queries = [f'{artist} songs' for artist in artists[:3]]
+        queries += [f'{term} mix' for term in terms[:2]]
+        queries.append('new music this week')
+        cache_key = ('p', tuple(artists[:3]), tuple(terms[:2]), day, limit)
+        title = 'Made for you'
+        subtitle = f'Built from {len(artists)} artist{"s" if len(artists) != 1 else ""} you play'
+    else:
+        queries = list(_MUSIC_TRENDING_ROTATION[day % len(_MUSIC_TRENDING_ROTATION)])
+        cache_key = ('t', day, limit)
+        title = 'Trending now'
+        subtitle = 'The biggest tracks everyone is playing'
+
+    now = _time.time()
+    with _MUSIC_LOCK:
+        cached = _MUSIC_FEED_CACHE.get(cache_key)
+    if cached and cached.get('expires', 0) > now:
+        cached_results = [item for item in cached['results'] if item['id'] not in disliked][:limit]
+        if cached_results:
+            return {'mode': 'personalized' if personalized else 'trending', 'title': title,
+                    'subtitle': subtitle, 'results': cached_results}
+
+    items = _music_parallel_search(queries, per_query=10)
+    items = _music_dedupe(items)
+    affinity = {_music_channel_key(name): max(1.0, 7.0 - index * 1.2) for index, name in enumerate(artists)}
+    term_tokens = set()
+    for term in terms:
+        term_tokens.update(_music_tokens(term))
+
+    def score(item):
+        value = min(9.0, _music_views_number(item.get('views')) / 300_000.0)
+        value += affinity.get(_music_channel_key(item.get('channel')), 0)
+        overlap = term_tokens & set(_music_tokens(item.get('title')))
+        value += min(2.4, 0.7 * len(overlap))
+        if item['id'] in disliked:
+            value -= 25
+        return value
+
+    items.sort(key=score, reverse=True)
+    results = [item for item in items if item['id'] not in disliked][:limit]
+    with _MUSIC_LOCK:
+        if len(_MUSIC_FEED_CACHE) > 100:
+            _MUSIC_FEED_CACHE.clear()
+        _MUSIC_FEED_CACHE[cache_key] = {'results': results, 'expires': now + _MUSIC_FEED_TTL}
+    return {'mode': 'personalized' if personalized else 'trending', 'title': title,
+            'subtitle': subtitle, 'results': results}
+
+
+def _music_radio_payload(payload, limit=12):
+    payload = payload if isinstance(payload, dict) else {}
+    limit = max(4, min(24, int(payload.get('limit') or 12)))
+    seed_id = str(payload.get('videoId') or '').strip()
+    title = _music_clean(payload.get('title'))
+    channel = _music_clean(payload.get('channel'))
+    artists = [str(name).strip()[:60] for name in (payload.get('artists') or []) if str(name).strip()][:6]
+    exclude = set(str(value) for value in (payload.get('exclude') or [])[:120])
+    if seed_id:
+        exclude.add(seed_id)
+
+    cache_key = seed_id or _music_title_key(title + ' ' + channel)
+    now = _time.time()
+    with _MUSIC_LOCK:
+        cached = _MUSIC_RADIO_CACHE.get(cache_key)
+    if cached and cached.get('expires', 0) > now:
+        pool = cached['results']
+    else:
+        words = [word for word in _music_tokens(title) if word not in ('topic',)][:3]
+        queries = []
+        if channel:
+            queries.append(f'{channel} radio')
+            queries.append(f'{channel} songs')
+        if words:
+            queries.append((channel + ' ' if channel else '') + ' '.join(words))
+        if channel and words:
+            queries.append(f'{channel} {words[0]}')
+        queries.append('songs like ' + (title or channel or 'this track'))
+        items = _music_parallel_search(queries, per_query=10)
+        items = _music_dedupe(items)
+
+        seed_tokens = set(_music_tokens(title))
+        channel_key = _music_channel_key(channel)
+        affinity = {_music_channel_key(name): max(1.0, 6.0 - index) for index, name in enumerate(artists)}
+
+        def score(item):
+            value = 0.0
+            item_channel = _music_channel_key(item.get('channel'))
+            if channel_key and item_channel == channel_key:
+                value += 8.0
+            elif channel_key and channel_key in item_channel:
+                value += 3.0
+            value += 1.8 * len(seed_tokens & set(_music_tokens(item.get('title'))))
+            value += affinity.get(item_channel, 0)
+            value += min(2.0, _music_views_number(item.get('views')) / 1_000_000.0)
+            if item['id'] in exclude:
+                value -= 20
+            return value
+
+        items.sort(key=score, reverse=True)
+        pool = items[:40]
+        with _MUSIC_LOCK:
+            if len(_MUSIC_RADIO_CACHE) > 120:
+                _MUSIC_RADIO_CACHE.clear()
+            _MUSIC_RADIO_CACHE[cache_key] = {'results': pool, 'expires': now + _MUSIC_RADIO_TTL}
+
+    results = [item for item in pool if item['id'] not in exclude][:limit]
+    return {'mode': 'radio', 'seed': seed_id, 'results': results}
 
 
 # ---- Music relay -----------------------------------------------------------
@@ -2943,12 +3247,65 @@ def music_search():
         return jsonify({'status': 'error', 'message': 'No query provided', 'results': []}), 400
     if len(query) > 160:
         query = query[:160]
+    limit = request.args.get('limit', 14, type=int) or 14
     try:
-        results = _youtube_search_results(query)
-        return jsonify({'status': 'success', 'query': query, 'results': results})
+        results = _music_search(query, limit)
+        response = jsonify({'status': 'success', 'query': query, 'results': results})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
     except Exception as exc:
         logger.warning(f"Music search failed for '{query}': {exc}")
         return jsonify({'status': 'error', 'message': str(exc)[:200], 'query': query, 'results': []}), 502
+
+
+@app.route('/api/music/feed', methods=['GET', 'POST'])
+def music_feed():
+    """Trending for a new listener, personalised once the taste summary has weight."""
+    profile = {}
+    limit = 18
+    if request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        if isinstance(body.get('profile'), dict):
+            profile = body['profile']
+        try:
+            limit = int(body.get('limit') or limit)
+        except (TypeError, ValueError):
+            limit = 18
+    else:
+        limit = request.args.get('limit', 18, type=int) or 18
+    try:
+        payload = _music_feed_payload(profile, limit)
+        response = jsonify({'status': 'success', **payload})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except Exception as exc:
+        logger.warning(f'Music feed failed: {exc}')
+        return jsonify({'status': 'error', 'message': 'Feed unavailable', 'results': []}), 502
+
+
+@app.route('/api/music/radio', methods=['GET', 'POST'])
+def music_radio():
+    """Similar tracks for the current seed, de-duplicated against what was played."""
+    payload = {}
+    if request.method == 'POST':
+        body = request.get_json(silent=True) or {}
+        if isinstance(body, dict):
+            payload = body
+    else:
+        payload = {
+            'videoId': request.args.get('videoId') or request.args.get('id') or '',
+            'title': request.args.get('title') or '',
+            'channel': request.args.get('channel') or '',
+            'limit': request.args.get('limit', 12, type=int) or 12,
+        }
+    try:
+        result = _music_radio_payload(payload)
+        response = jsonify({'status': 'success', **result})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except Exception as exc:
+        logger.warning(f'Music radio failed: {exc}')
+        return jsonify({'status': 'error', 'message': 'Radio unavailable', 'results': []}), 502
 
 
 # ===== YOUTUBE SEARCH ENDPOINT (kept for backwards compatibility) =====
