@@ -3047,6 +3047,81 @@ def _resolve_audio_stream(video_id):
     return None, last_error
 
 
+# ---- Music relay (Cloudflare Worker) ---------------------------------------
+# The browser talks to the relay directly: POST /api/player (Innertube) for the
+# audio formats, then GET /api/stream (Range-aware) for the bytes. That keeps
+# playback independent of this host's outbound network — PythonAnywhere's free
+# tier cannot reach youtube.com or googlevideo.com at all.
+# Set HDSFD_MUSIC_RELAY to override, or to an empty string to disable the relay.
+MUSIC_RELAY_DEFAULT = 'https://relay.example.workers.dev'
+MUSIC_RELAY_BASE = (os.environ.get('HDSFD_MUSIC_RELAY') or MUSIC_RELAY_DEFAULT).strip().rstrip('/')
+
+
+def _relay_player(video_id, timeout=12):
+    """Ask the relay for playable audio formats. Returns (payload, error)."""
+    if not MUSIC_RELAY_BASE:
+        return None, 'relay_not_configured'
+    import requests as _requests
+    try:
+        response = _requests.post(
+            MUSIC_RELAY_BASE + '/api/player',
+            json={'videoId': video_id},
+            headers={'Accept': 'application/json'},
+            timeout=timeout,
+        )
+    except Exception as exc:
+        return None, ('relay_unreachable: ' + str(exc))[:200]
+    if response.status_code != 200:
+        return None, f'relay_http_{response.status_code}'
+    try:
+        payload = response.json()
+    except Exception:
+        return None, 'relay_bad_json'
+    if not payload.get('audio'):
+        return None, payload.get('detail') or 'relay_no_audio'
+    return payload, None
+
+
+def _relay_stream_url(payload):
+    audio = (payload or {}).get('audio') or []
+    if not audio or not audio[0].get('url'):
+        return None
+    return (
+        f"{MUSIC_RELAY_BASE}/api/stream?url={urllib.parse.quote(audio[0]['url'], safe='')}"
+        f"&id={payload.get('video_id', '')}"
+    )
+
+
+def _relay_probe(url, byte_range='bytes=0-1'):
+    """Fetch a couple of bytes through the relay to prove seeking works."""
+    import requests as _requests
+    try:
+        response = _requests.get(url, headers={'Range': byte_range}, timeout=15, stream=True)
+        info = {
+            'status': response.status_code,
+            'content_type': response.headers.get('Content-Type'),
+            'content_range': response.headers.get('Content-Range'),
+            'accept_ranges': response.headers.get('Accept-Ranges'),
+        }
+        response.close()
+        return info
+    except Exception as exc:
+        return {'status': 'error', 'detail': str(exc)[:160]}
+
+
+@app.route('/api/music/config', methods=['GET'])
+def music_config():
+    """Advertise the relay origin so the client can play audio directly."""
+    response = jsonify({
+        'status': 'success',
+        'relay': bool(MUSIC_RELAY_BASE),
+        'relay_base': MUSIC_RELAY_BASE or None,
+        'engine': 'innertube-relay' if MUSIC_RELAY_BASE else 'server-extractor',
+    })
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @app.route('/api/music/search', methods=['GET'])
 def music_search():
     query = (request.args.get('q') or '').strip()
@@ -3086,11 +3161,17 @@ def music_stream(video_id):
 
     stream_url, error = _resolve_audio_stream(video_id)
     if not stream_url:
+        # No local extractor (restricted host): hand the browser the relay instead.
+        relay_payload, relay_error = _relay_player(video_id)
+        if relay_payload:
+            release_slot()
+            return redirect(_relay_stream_url(relay_payload), code=302)
         release_slot()
         return jsonify({
             'status': 'unavailable',
             'message': error or 'Audio stream unavailable',
             'video_id': video_id,
+            'relay_error': relay_error,
         }), 503
 
     headers = {'User-Agent': _YT_UA, 'Accept': '*/*'}
@@ -3146,18 +3227,44 @@ def music_stream(video_id):
 
 @app.route('/api/music/resolve/<video_id>', methods=['GET'])
 def music_resolve(video_id):
+    """Report whether a track is playable, and through which engine.
+
+    ?probe=1 also pulls two bytes through the relay to confirm the Range
+    proxy answers with 206, which is what makes seeking work.
+    """
     import re as _re
     if not _re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id or ''):
         return jsonify({'status': 'error', 'message': 'Invalid video id'}), 400
-    stream_url, error = _resolve_audio_stream(video_id)
-    if not stream_url:
-        return jsonify({'status': 'unavailable', 'message': error or 'unavailable'}), 503
-    return jsonify({
-        'status': 'success',
+
+    result = {
         'video_id': video_id,
         'thumbnail': f'https://i.ytimg.com/vi/{video_id}/mqdefault.jpg',
         'url': f'https://www.youtube.com/watch?v={video_id}',
-    })
+    }
+
+    relay_payload, relay_error = _relay_player(video_id)
+    if relay_payload:
+        result.update({
+            'status': 'success',
+            'engine': relay_payload.get('engine'),
+            'audio_formats': len(relay_payload.get('audio') or []),
+            'length_seconds': relay_payload.get('length_seconds'),
+            'expires_in_seconds': relay_payload.get('expires_in_seconds'),
+        })
+        if request.args.get('probe') == '1':
+            result['probe'] = _relay_probe(_relay_stream_url(relay_payload))
+        return jsonify(result)
+
+    stream_url, error = _resolve_audio_stream(video_id)
+    if not stream_url:
+        result.update({
+            'status': 'unavailable',
+            'message': error or 'unavailable',
+            'relay_error': relay_error,
+        })
+        return jsonify(result), 503
+    result.update({'status': 'success', 'engine': 'server-extractor'})
+    return jsonify(result)
 
 
 # ===== YOUTUBE SEARCH ENDPOINT (kept for backwards compatibility) =====

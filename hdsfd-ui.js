@@ -167,7 +167,9 @@
     if (audio) {
       return {
         current: audio.currentTime || 0,
-        duration: isFinite(audio.duration) ? audio.duration : 0,
+        duration: typeof musicKnownDuration === 'function'
+          ? musicKnownDuration()
+          : (isFinite(audio.duration) ? audio.duration : 0),
         playing: !!audio.src && !audio.paused
       };
     }

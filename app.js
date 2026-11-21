@@ -3909,6 +3909,9 @@ const musicState = {
 };
 let musicSearchTimer = null;
 let musicSearchAbort = null;
+let musicRelayBase = null;
+let musicRelayPromise = null;
+let musicPlayToken = 0;
 
 function musicAudioEl() {
   return document.getElementById('music-audio');
@@ -4148,10 +4151,94 @@ function musicQueueAdd(item) {
   musicRenderQueue();
 }
 
-function musicStartAudio(item) {
+// Playback path: the Cloudflare relay resolves the Innertube player response and
+// proxies the googlevideo bytes, so music works even where youtube.com is blocked.
+async function musicRelayBaseUrl() {
+  if (musicRelayBase !== null) return musicRelayBase;
+  if (!musicRelayPromise) {
+    musicRelayPromise = fetch(`${API_BASE}/music/config`, { cache: 'no-store' })
+      .then(res => res.json())
+      .then(data => {
+        musicRelayBase = (data && data.relay_base) || '';
+        return musicRelayBase;
+      })
+      .catch(() => { musicRelayBase = ''; return ''; });
+  }
+  return musicRelayPromise;
+}
+
+async function musicRelayResolve(item) {
+  const base = await musicRelayBaseUrl();
+  if (!base) return null;
+
+  // YouTube's bot check depends on which relay egress answers the request, and the
+  // same track can be refused once and served on the next try. A fresh request
+  // usually lands on a friendly address, so retry before giving up on audio.
+  let refused = false;
+  let reachable = true;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 9000);
+    try {
+      const res = await fetch(`${base}/api/player?attempt=${attempt}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ videoId: item.id }),
+        signal: controller.signal
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const formats = Array.isArray(data.audio) ? data.audio.filter(entry => entry && entry.url) : [];
+        if (formats.length) {
+          if (data.length_seconds) item.seconds = Number(data.length_seconds);
+          if (data.title && (!item.title || item.title === 'YouTube track')) item.title = data.title;
+          if (data.author && (!item.channel || item.channel === 'YouTube')) item.channel = data.author;
+          return { base, formats };
+        }
+        refused = true;
+      } else {
+        // Relay answered but could not resolve the track (502/503): no point asking
+        // the app server, it has the same YouTube access problems.
+        refused = true;
+      }
+    } catch (err) {
+      if (err && err.name === 'AbortError') return refused ? { base, formats: [], refused } : null;
+      reachable = false;
+    } finally {
+      clearTimeout(timer);
+    }
+    await new Promise(resolve => setTimeout(resolve, 220));
+  }
+  // The relay answered but would not serve this track: the app server cannot either
+  // (it has no YouTube access on restricted hosts), so the caller goes to the embed.
+  if (refused) return { base, formats: [], refused: true };
+  return reachable ? { base, formats: [] } : null;
+}
+
+function musicPickAudioFormat(audio, formats) {
+  const canPlay = audio && typeof audio.canPlayType === 'function' ? audio.canPlayType.bind(audio) : null;
+  for (const format of formats) {
+    const mime = String(format.mime || '').split(';')[0].trim();
+    if (!canPlay || !mime || canPlay(mime)) return format;
+  }
+  return formats[0] || null;
+}
+
+// Opus/WebM streams often report Infinity until fully buffered, so fall back to
+// the length the relay reported for the scrubber and the duration label.
+function musicKnownDuration() {
   const audio = musicAudioEl();
+  if (audio && isFinite(audio.duration) && audio.duration > 0) return audio.duration;
+  const item = musicState.current;
+  return item && Number(item.seconds) > 0 ? Number(item.seconds) : 0;
+}
+
+async function musicStartAudio(item) {
+  const audio = musicAudioEl();
+  const token = ++musicPlayToken;
+  item._triedServer = false;
   musicState.engine = 'audio';
-  musicSetEngineBadge('Ad-free audio', 'audio');
+  musicSetEngineBadge('Connecting…', 'audio');
   musicSetPlayingUI(true);
   updateYTTrackTitle(item.title || 'Loading…');
 
@@ -4167,6 +4254,47 @@ function musicStartAudio(item) {
   } catch (e) { /* noop */ }
 
   audio.volume = musicState.volume;
+  audio.dataset.videoId = item.id;
+
+  const resolved = await musicRelayResolve(item);
+  if (token !== musicPlayToken || musicState.current !== item) return;
+
+  if (resolved) {
+    const format = resolved.formats.length ? musicPickAudioFormat(audio, resolved.formats) : null;
+    if (format) {
+      musicSetEngineBadge('Ad-free audio', 'audio');
+      musicStartStream(
+        audio,
+        `${resolved.base}/api/stream?url=${encodeURIComponent(format.url)}&id=${encodeURIComponent(item.id)}`
+      );
+      musicRenderNowPlaying();
+      return;
+    }
+    if (resolved.refused) {
+      musicFallbackYouTube(item);
+      return;
+    }
+  }
+
+  musicStartServerAudio(item);
+}
+
+function musicStartStream(audio, url) {
+  audio.crossOrigin = 'anonymous';
+  audio.src = url;
+  const promise = audio.play();
+  if (promise && promise.catch) {
+    promise.catch(() => { /* error listener handles fallback */ });
+  }
+}
+
+function musicStartServerAudio(item) {
+  const audio = musicAudioEl();
+  if (!audio) {
+    musicFallbackYouTube(item);
+    return;
+  }
+  musicSetEngineBadge('Ad-free audio', 'audio');
   audio.dataset.videoId = item.id;
   audio.src = `${API_BASE}/music/stream/${item.id}`;
 
@@ -4280,8 +4408,9 @@ function musicSeek(percent) {
     return;
   }
   const audio = musicAudioEl();
-  if (audio && audio.duration) {
-    audio.currentTime = (value / 100) * audio.duration;
+  const duration = musicKnownDuration();
+  if (audio && duration > 0) {
+    audio.currentTime = (value / 100) * duration;
     musicUpdateProgress();
   }
 }
@@ -4300,7 +4429,7 @@ function musicSetVolume(value) {
 function musicUpdateProgress() {
   const audio = musicAudioEl();
   if (!audio) return;
-  const duration = audio.duration || 0;
+  const duration = musicKnownDuration();
   const current = audio.currentTime || 0;
   const percent = duration > 0 ? (current / duration) * 100 : 0;
 
@@ -4509,9 +4638,15 @@ function bindMusicAudio() {
   });
   audio.addEventListener('ended', musicHandleEnded);
   audio.addEventListener('error', () => {
-    if (musicState.current && musicState.engine === 'audio') {
-      musicFallbackYouTube(musicState.current);
+    const current = musicState.current;
+    if (!current || musicState.engine !== 'audio') return;
+    // Relay hiccup: try the app server once, then fall back to the official embed.
+    if (!current._triedServer) {
+      current._triedServer = true;
+      musicStartServerAudio(current);
+      return;
     }
+    musicFallbackYouTube(current);
   });
   if ('mediaSession' in navigator) {
     try {

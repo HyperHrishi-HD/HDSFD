@@ -1,0 +1,7 @@
+name = "hdsfd-music-relay"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+
+# No bindings, no secrets: the relay only forwards to YouTube and googlevideo.
+# Deploy with:  npx wrangler deploy
+# Then set HDSFD_MUSIC_RELAY to the printed workers.dev URL.
