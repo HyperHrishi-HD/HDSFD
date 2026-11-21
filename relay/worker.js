@@ -37,6 +37,7 @@ const INNERTUBE_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 const PLAYER_URL = 'https://www.youtube.com/youtubei/v1/player?key=' + INNERTUBE_KEY + '&prettyPrint=false';
 const VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
 const MAX_STREAM_URL = 4096;
+const RESOLVE_ROUNDS = 3;
 
 const SAFARI_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Safari/605.1.15';
 
@@ -75,19 +76,27 @@ const CLIENTS = [
     },
   },
   {
-    name: 'ANDROID',
-    version: '19.44.38',
-    headerId: '3',
-    userAgent: 'com.google.android.youtube/19.44.38 (Linux; U; Android 14; en_US) gzip',
+    // The embedded TV player is a separate quota; useful when mobile is refused.
+    name: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+    version: '2.0',
+    headerId: '85',
+    userAgent: 'Mozilla/5.0 (PlayStation; PlayStation 4/12.00) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15',
     extra: {
-      deviceMake: 'Google',
-      deviceModel: 'Pixel 8',
-      osName: 'Android',
-      osVersion: '14',
-      androidSdkVersion: 34,
+      clientScreen: 'EMBED',
+      thirdParty: { embedUrl: 'https://www.youtube.com/' },
     },
   },
 ];
+
+// A single hung upstream call used to stall a resolve for 15s, well past the
+// browser's 9s abort. Every player/visitor call gets its own budget instead.
+function timeoutSignal(ms) {
+  try {
+    return typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(ms) : undefined;
+  } catch (e) {
+    return undefined;
+  }
+}
 
 // ---- Visitor identity ------------------------------------------------------
 // The embed page hands out a visitorData value; reusing it across videos keeps
@@ -99,6 +108,7 @@ async function fetchVisitorData(videoId, trace) {
   const target = 'https://www.youtube.com/embed/' + (VIDEO_ID.test(videoId) ? videoId : 'jNQXAC9IVRw');
   const response = await fetch(target, {
     headers: { 'User-Agent': SAFARI_UA, 'Accept-Language': 'en-US,en;q=0.9' },
+    signal: timeoutSignal(4000),
   });
   if (response.ok === false) {
     if (trace) trace.push({ step: 'visitor_page', status: response.status });
@@ -126,8 +136,67 @@ async function getVisitorData(videoId, force, trace) {
 // Per-isolate cache: the same URL is only reused by the same Worker instance, so
 // the googlevideo IP binding still matches the egress that resolved it.
 const PLAYER_CACHE = new Map();
-const PLAYER_CACHE_TTL = 10 * 60 * 1000;
-const PLAYER_CACHE_MAX = 200;
+const PLAYER_CACHE_TTL = 2 * 60 * 60 * 1000;
+const PLAYER_CACHE_MAX = 500;
+
+// A resolved URL is only reusable until it expires, so the entry lifetime is the
+// shorter of the cache policy and the stream's own expires_in_seconds.
+function playerCacheTtl(expiresInSeconds) {
+  const seconds = Number(expiresInSeconds) || 0;
+  if (seconds <= 0) return PLAYER_CACHE_TTL;
+  return Math.min(PLAYER_CACHE_TTL, Math.max(60, seconds - 60) * 1000);
+}
+
+// Resolved entries are also published to the Cache API so a repeat play that
+// lands on a fresh isolate still skips YouTube. They are keyed by colo because a
+// googlevideo URL is minted for the egress address that asked for it; isolates
+// behind other colos must resolve their own.
+const CACHE_ORIGIN = 'https://hdsfd-player-cache.invalid';
+
+function cacheRequest(videoId, colo) {
+  return new Request(CACHE_ORIGIN + '/player/' + (colo || 'xx') + '/' + videoId);
+}
+
+function rememberLocally(videoId, value, ttl) {
+  if (PLAYER_CACHE.size >= PLAYER_CACHE_MAX) {
+    const oldest = PLAYER_CACHE.keys().next();
+    if (!oldest.done) PLAYER_CACHE.delete(oldest.value);
+  }
+  PLAYER_CACHE.set(videoId, { value: value, expires: Date.now() + ttl });
+}
+
+async function readCachedPlayer(videoId, colo) {
+  const local = PLAYER_CACHE.get(videoId);
+  if (local && local.expires > Date.now()) return local.value;
+  try {
+    const hit = await caches.default.match(cacheRequest(videoId, colo));
+    if (!hit) return null;
+    const value = await hit.json();
+    if (!value || !Array.isArray(value.audio) || !value.audio.length) return null;
+    rememberLocally(videoId, value, playerCacheTtl(value.expires_in_seconds));
+    return value;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function writeCachedPlayer(videoId, colo, value) {
+  const ttl = playerCacheTtl(value.expires_in_seconds);
+  rememberLocally(videoId, value, ttl);
+  try {
+    await caches.default.put(cacheRequest(videoId, colo), new Response(JSON.stringify(value), {
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'max-age=' + Math.max(60, Math.floor(ttl / 1000)),
+      },
+    }));
+  } catch (e) { /* the cache is an optimisation, never a requirement */ }
+}
+
+async function dropCachedPlayer(videoId, colo) {
+  PLAYER_CACHE.delete(videoId);
+  try { await caches.default.delete(cacheRequest(videoId, colo)); } catch (e) { /* ignore */ }
+}
 
 function corsHeaders(extra) {
   return Object.assign({}, CORS, extra || {});
@@ -189,11 +258,15 @@ async function callInnertube(videoId, client, visitor) {
     racyCheckOk: true,
   };
 
+  // Only the headers Innertube expects. Anything browser-like that we forward
+  // (Origin/Referer/Cookie/X-Forwarded-For) only helps YouTube fingerprint the
+  // request as a proxy, so the set stays minimal and the UA does the claiming.
   const headers = new Headers();
   headers.set('Content-Type', 'application/json');
   headers.set('X-YouTube-Client-Name', client.headerId);
   headers.set('X-YouTube-Client-Version', client.version);
-  headers.set('Origin', 'https://www.youtube.com');
+  headers.set('Accept', '*/*');
+  headers.set('Accept-Language', 'en-US,en;q=0.9');
   if (visitor) headers.set('X-Goog-Visitor-Id', visitor);
   try {
     headers.set('User-Agent', client.userAgent);
@@ -203,6 +276,7 @@ async function callInnertube(videoId, client, visitor) {
     method: 'POST',
     headers: headers,
     body: JSON.stringify(body),
+    signal: timeoutSignal(4500),
   });
   if (!response.ok) {
     throw new Error('innertube_http_' + response.status);
@@ -210,13 +284,29 @@ async function callInnertube(videoId, client, visitor) {
   return response.json();
 }
 
-async function resolvePlayer(videoId, trace) {
-  const cached = PLAYER_CACHE.get(videoId);
-  if (cached && cached.expires > Date.now()) return cached.value;
+async function resolvePlayer(videoId, trace, colo) {
+  const cached = await readCachedPlayer(videoId, colo);
+  if (cached) return cached;
 
+  const startedAt = Date.now();
   let lastReason = 'no_audio_format';
 
-  for (const client of CLIENTS) {
+  // A refusal is per request, not per video: re-asking with a fresh visitor
+  // identity usually lands on an egress YouTube is happy with. Pass 1 walks every
+  // client; pass 2 only re-tries the two that answer fastest.
+  for (let round = 0; round < RESOLVE_ROUNDS; round += 1) {
+    if (round > 0) {
+      visitorState = { value: '', expires: 0 };
+      await new Promise(resolve => setTimeout(resolve, 300 + Math.floor(Math.random() * 500)));
+    }
+    // A content-level refusal ("this live stream recording is not available") is
+    // not something another request fixes, so stop instead of re-asking, and stay
+    // inside the browser's patience.
+    if (round > 0 && /UNPLAYABLE|is not available/i.test(lastReason)) break;
+    if (round > 0 && Date.now() - startedAt > 3500) break;
+    const clients = round === 0 ? CLIENTS : CLIENTS.slice(0, 2);
+
+    for (const client of clients) {
     let value = null;
 
     // YouTube answers LOGIN_REQUIRED per request from shared datacenter ranges, and
@@ -263,12 +353,9 @@ async function resolvePlayer(videoId, trace) {
 
     if (!value) continue;
 
-    if (PLAYER_CACHE.size >= PLAYER_CACHE_MAX) {
-      const oldest = PLAYER_CACHE.keys().next();
-      if (!oldest.done) PLAYER_CACHE.delete(oldest.value);
-    }
-    PLAYER_CACHE.set(videoId, { value: value, expires: Date.now() + PLAYER_CACHE_TTL });
+    await writeCachedPlayer(videoId, colo, value);
     return value;
+    }
   }
 
   const error = new Error(lastReason);
@@ -353,8 +440,9 @@ async function streamAudio(request) {
   if (upstream && (upstream.status === 403 || upstream.status === 410) && VIDEO_ID.test(videoId)) {
     upstream.body && upstream.body.cancel().catch(() => {});
     try {
-      PLAYER_CACHE.delete(videoId);
-      const fresh = await resolvePlayer(videoId);
+      const colo = (request.cf && request.cf.colo) || 'xx';
+      await dropCachedPlayer(videoId, colo);
+      const fresh = await resolvePlayer(videoId, null, colo);
       if (fresh.audio && fresh.audio.length) {
         const retry = await attempt(fresh.audio[0].url);
         if (retry.status < 400) upstream = retry;
@@ -417,7 +505,7 @@ async function handlePlayer(request) {
   const trace = debug ? [] : null;
 
   try {
-    const result = await resolvePlayer(videoId, trace);
+    const result = await resolvePlayer(videoId, trace, (request.cf && request.cf.colo) || 'xx');
     if (trace) result.trace = trace;
     return json(result);
   } catch (error) {
