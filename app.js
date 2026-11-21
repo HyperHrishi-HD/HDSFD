@@ -4198,8 +4198,9 @@ async function musicRelayResolve(item) {
   if (!base) return null;
 
   // YouTube's bot check depends on which relay egress answers a request, so the
-  // same track can be refused once and served on the next try.
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  // same track can be refused and then served moments later. Five spaced tries
+  // turn a ~1-in-3 refusal into a track that starts without the user noticing.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 9000);
     try {
@@ -4224,7 +4225,7 @@ async function musicRelayResolve(item) {
     } finally {
       clearTimeout(timer);
     }
-    await new Promise(resolve => setTimeout(resolve, 220));
+    await new Promise(resolve => setTimeout(resolve, 200 + attempt * 140));
   }
   return null;
 }
