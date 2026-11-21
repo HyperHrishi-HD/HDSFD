@@ -19,7 +19,7 @@ const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Range, X-Requested-With',
-  'Access-Control-Expose-Headers': 'Accept-Ranges, Content-Length, Content-Range, Content-Type, X-HDSFD-Engine',
+  'Access-Control-Expose-Headers': 'Accept-Ranges, Content-Length, Content-Range, Content-Type, X-HDSFD-Cache, X-HDSFD-Engine',
   'Access-Control-Max-Age': '86400',
 };
 
@@ -111,22 +111,43 @@ async function fetchVisitorData(videoId, trace) {
   return match[1];
 }
 
-async function getVisitorData(videoId, force, trace) {
+async function getVisitorData(videoId, force, trace, env, ctx, prefetched) {
   if (!force && visitorState.value && visitorState.expires > Date.now()) return visitorState.value;
+
+  // One identity for the whole deployment: the embed fetch is paid once per 30
+  // minutes, not once per resolve and not once per isolate. `prefetched` is the
+  // read resolvePlayer already started, so a cold resolve pays one round trip.
+  const kv = sharedCache(env);
+  if (!force && kv) {
+    const readAt = Date.now();
+    const shared = prefetched ? await prefetched : await readSharedWithBudget(kv, SHARED_VISITOR_KEY);
+    if (shared && typeof shared.value === 'string' && shared.value && Number(shared.expires) > Date.now()) {
+      visitorState = { value: shared.value, expires: Number(shared.expires) };
+      if (trace) trace.push({ step: 'visitor_kv', ms: Date.now() - readAt, hit: true });
+      return shared.value;
+    }
+    if (trace) trace.push({ step: 'visitor_kv', ms: Date.now() - readAt, hit: false });
+  }
+
+  const fetchAt = Date.now();
   try {
     const value = await fetchVisitorData(videoId, trace);
-    visitorState = { value: value, expires: Date.now() + VISITOR_TTL };
+    const expires = Date.now() + VISITOR_TTL;
+    visitorState = { value: value, expires: expires };
+    writeSharedJson(kv, SHARED_VISITOR_KEY, { value: value, expires: expires }, VISITOR_TTL / 1000, ctx);
+    if (trace) trace.push({ step: 'visitor_fetch', ms: Date.now() - fetchAt });
     return value;
   } catch (error) {
+    if (trace) trace.push({ step: 'visitor_fetch', ms: Date.now() - fetchAt, error: String((error && error.message) || error).slice(0, 80) });
     if (visitorState.value && visitorState.expires > Date.now()) return visitorState.value;
     return visitorState.value || '';
   }
 }
 
-// Per-isolate cache: the same URL is only reused by the same Worker instance, so
-// the googlevideo IP binding still matches the egress that resolved it. The Cache
-// API would share entries between isolates, but it is a no-op on *.workers.dev
-// (functional cache operations need a custom domain), so it is not used here.
+// First-line cache, per isolate: zero latency, and the googlevideo IP binding
+// still matches the egress that resolved it. The Cache API would share entries
+// between isolates, but it is a no-op on *.workers.dev (functional cache
+// operations need a custom domain), so the shared copy lives in Workers KV.
 const PLAYER_CACHE = new Map();
 const PLAYER_CACHE_TTL = 2 * 60 * 60 * 1000;
 const PLAYER_CACHE_MAX = 500;
@@ -145,6 +166,68 @@ function rememberLocally(videoId, value, ttl) {
     if (!oldest.done) PLAYER_CACHE.delete(oldest.value);
   }
   PLAYER_CACHE.set(videoId, { value: value, expires: Date.now() + ttl });
+}
+
+// ---- Shared cache (Workers KV, binding RELAY_CACHE) ------------------------
+// Player entries are keyed by the colo that resolved them: a googlevideo URL is
+// bound to the egress IP that minted it, so another colo reusing the entry would
+// only get a 403. Each colo keeps its own copy instead, which still removes the
+// embed fetch and the Innertube call from every resolve after the first.
+// Without the binding every helper below is a no-op and nothing else changes.
+const SHARED_VISITOR_KEY = 'visitor:v1';
+
+function sharedCache(env) {
+  const kv = env && env.RELAY_CACHE;
+  return kv && typeof kv.get === 'function' && typeof kv.put === 'function' ? kv : null;
+}
+
+function sharedPlayerKey(videoId, colo) {
+  return 'player:v1:' + colo + ':' + videoId;
+}
+
+// The colo that answered this request. Cloudflare sets it on every edge request;
+// local runs (wrangler dev, the node harness) share one bucket.
+function coloOf(request) {
+  const cf = request && request.cf;
+  return cf && typeof cf.colo === 'string' && cf.colo ? cf.colo : 'local';
+}
+
+async function readSharedJson(kv, key) {
+  try {
+    const raw = await kv.get(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// A slow KV read must never hold up a resolve: past the budget it counts as a
+// miss and the relay does the work itself instead of waiting.
+const SHARED_READ_BUDGET = 300;
+
+function readSharedWithBudget(kv, key) {
+  return Promise.race([
+    readSharedJson(kv, key),
+    new Promise(resolve => setTimeout(() => resolve(null), SHARED_READ_BUDGET)),
+  ]);
+}
+
+// Writes stay off the response path: a repeat seconds later still finds them, and
+// a slow or failing KV write can never delay or break a resolve.
+function writeSharedJson(kv, key, value, ttlSeconds, ctx) {
+  if (!kv) return;
+  const write = kv.put(key, JSON.stringify(value), {
+    expirationTtl: Math.max(60, Math.floor(ttlSeconds)),
+  }).catch(() => {});
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(write);
+}
+
+function forgetSharedJson(kv, key, ctx) {
+  if (!kv) return;
+  const removal = kv.delete(key).catch(() => {});
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(removal);
 }
 
 function corsHeaders(extra) {
@@ -233,9 +316,29 @@ async function callInnertube(videoId, client, visitor) {
   return response.json();
 }
 
-async function resolvePlayer(videoId, trace) {
-  const cached = PLAYER_CACHE.get(videoId);
-  if (cached && cached.expires > Date.now()) return cached.value;
+async function resolvePlayer(videoId, trace, env, ctx, colo, bypassCaches) {
+  const kv = sharedCache(env);
+  let visitorRead = null;
+
+  if (!bypassCaches) {
+    const cached = PLAYER_CACHE.get(videoId);
+    if (cached && cached.expires > Date.now()) return { result: cached.value, source: 'isolate' };
+
+    if (kv) {
+      // Both keys at once: the player entry answers warm resolves, the visitor is
+      // only needed when it misses, and starting both now keeps a cold resolve at
+      // a single KV round trip instead of two.
+      const readAt = Date.now();
+      visitorRead = readSharedWithBudget(kv, SHARED_VISITOR_KEY);
+      const shared = await readSharedWithBudget(kv, sharedPlayerKey(videoId, colo));
+      if (shared && shared.value && Number(shared.expires) > Date.now()) {
+        rememberLocally(videoId, shared.value, Number(shared.expires) - Date.now());
+        if (trace) trace.push({ step: 'player_kv', ms: Date.now() - readAt, hit: true });
+        return { result: shared.value, source: 'kv' };
+      }
+      if (trace) trace.push({ step: 'player_kv', ms: Date.now() - readAt, hit: false });
+    }
+  }
 
   const startedAt = Date.now();
   let lastReason = 'no_audio_format';
@@ -265,7 +368,7 @@ async function resolvePlayer(videoId, trace) {
       for (let pass = 0; pass < attempts && !value; pass += 1) {
         let data;
         try {
-          const visitor = client.needsVisitor ? await getVisitorData(videoId, pass > 0, trace) : '';
+          const visitor = client.needsVisitor ? await getVisitorData(videoId, pass > 0, trace, env, ctx, visitorRead) : '';
           data = await callInnertube(videoId, client, visitor);
         } catch (error) {
           lastReason = String((error && error.message) || error).slice(0, 120);
@@ -302,8 +405,10 @@ async function resolvePlayer(videoId, trace) {
 
       if (!value) continue;
 
-      rememberLocally(videoId, value, playerCacheTtl(value.expires_in_seconds));
-      return value;
+      const ttl = playerCacheTtl(value.expires_in_seconds);
+      rememberLocally(videoId, value, ttl);
+      writeSharedJson(kv, sharedPlayerKey(videoId, colo), { value: value, expires: Date.now() + ttl }, ttl / 1000, ctx);
+      return { result: value, source: 'miss' };
     }
   }
 
@@ -336,10 +441,11 @@ function withoutIpHint(target) {
   }
 }
 
-async function streamAudio(request) {
+async function streamAudio(request, env, ctx) {
   const url = new URL(request.url);
   const target = url.searchParams.get('url') || '';
   const videoId = url.searchParams.get('id') || '';
+  const colo = coloOf(request);
 
   if (!target) {
     return json({ status: 'error', message: 'Missing url parameter' }, 400);
@@ -390,9 +496,11 @@ async function streamAudio(request) {
     upstream.body && upstream.body.cancel().catch(() => {});
     try {
       PLAYER_CACHE.delete(videoId);
-      const fresh = await resolvePlayer(videoId);
-      if (fresh.audio && fresh.audio.length) {
-        const retry = await attempt(fresh.audio[0].url);
+      forgetSharedJson(sharedCache(env), sharedPlayerKey(videoId, colo), ctx);
+      const fresh = await resolvePlayer(videoId, null, env, ctx, colo, true);
+      const freshAudio = fresh && fresh.result && Array.isArray(fresh.result.audio) ? fresh.result.audio : [];
+      if (freshAudio.length) {
+        const retry = await attempt(freshAudio[0].url);
         if (retry.status < 400) upstream = retry;
         else retry.body && retry.body.cancel().catch(() => {});
       }
@@ -430,7 +538,7 @@ async function streamAudio(request) {
   return new Response(body, { status: upstream.status, headers: headers });
 }
 
-async function handlePlayer(request) {
+async function handlePlayer(request, env, ctx) {
   let payload = null;
   if (request.method === 'POST') {
     try {
@@ -453,9 +561,11 @@ async function handlePlayer(request) {
   const trace = debug ? [] : null;
 
   try {
-    const result = await resolvePlayer(videoId, trace);
-    if (trace) result.trace = trace;
-    return json(result);
+    const resolved = await resolvePlayer(videoId, trace, env, ctx, coloOf(request), false);
+    // The cached value is shared with the other callers, so the debug trace is
+    // attached to a copy rather than to the cached object itself.
+    const body = trace ? Object.assign({}, resolved.result, { trace: trace }) : resolved.result;
+    return json(body, 200, { 'X-HDSFD-Cache': resolved.source });
   } catch (error) {
     return json({
       status: 'unavailable',
@@ -468,7 +578,7 @@ async function handlePlayer(request) {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') return preflight();
 
     const url = new URL(request.url);
@@ -478,14 +588,14 @@ export default {
       if (request.method !== 'POST' && request.method !== 'GET') {
         return json({ status: 'error', message: 'Use POST or GET' }, 405);
       }
-      return handlePlayer(request);
+      return handlePlayer(request, env, ctx);
     }
 
     if (path === '/api/stream') {
       if (request.method !== 'GET' && request.method !== 'HEAD') {
         return json({ status: 'error', message: 'Use GET or HEAD' }, 405);
       }
-      return streamAudio(request);
+      return streamAudio(request, env, ctx);
     }
 
     if (path === '/api/health' || path === '/') {

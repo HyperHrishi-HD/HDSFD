@@ -2,6 +2,10 @@ name = "hdsfd-music-relay"
 main = "worker.js"
 compatibility_date = "2026-11-01"
 
-# No bindings, no secrets: the relay only forwards to YouTube and googlevideo.
+# Cross-isolate cache for the visitor identity and resolved audio URLs. Optional:
+# with the binding removed the relay still works, just per isolate.
 # Deploy with:  npx wrangler deploy
 # Then set HDSFD_MUSIC_RELAY to the printed workers.dev URL.
+[[kv_namespaces]]
+binding = "RELAY_CACHE"
+id = "21e3227876b84d90968b0a22d2f5e2c8"
