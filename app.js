@@ -4547,6 +4547,10 @@ function musicEmbedBindMessages() {
     }
     if (!data || data.event !== 'infoDelivery' || !data.info) return;
     const info = data.info;
+    // A replaced embed can still emit one last state for the old video; ignore
+    // it so hitting next quickly never skips the newly selected track.
+    const eventVideoId = info.videoData && info.videoData.video_id;
+    if (eventVideoId && musicState.current && eventVideoId !== musicState.current.id) return;
     if (info.playerState !== undefined) {
       const playing = Number(info.playerState) === 1;
       const changed = isYTPlaying !== playing;
