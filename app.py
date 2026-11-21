@@ -2692,122 +2692,21 @@ def google_calendar_api():
         ])
 
 
-# ===== HDSFD MUSIC ENGINE (search + ad-free audio stream) =====
-# Search is scraped server-side (no API key). Playback resolves the real audio
-# stream with yt-dlp and proxies it through this server, which gives audio-only,
-# ad-free playback with working seeking (HTTP Range). If extraction is blocked
-# (e.g. datacenter IP / SABR experiment), the client falls back to the official
-# YouTube embed automatically.
+# ===== HDSFD MUSIC ENGINE (search here, playback in the browser) =====
+# This host only searches: results are scraped server-side, so no API key is
+# needed. Playback runs entirely in the browser against the music relay (a
+# Cloudflare Worker) which speaks Innertube and proxies the audio with Range
+# support, giving ad-free audio with working seeking. Nothing here relays audio,
+# so a host whose network blocks youtube.com cannot break playback. If the relay
+# cannot serve a track the client falls back to the official YouTube embed.
 import threading as _threading
 import time as _time
 
 _YT_UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
           '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36')
 _MUSIC_SEARCH_CACHE = {}
-_MUSIC_STREAM_CACHE = {}
 _MUSIC_LOCK = _threading.Lock()
 _MUSIC_SEARCH_TTL = 15 * 60
-_MUSIC_STREAM_TTL = 90 * 60
-
-# ---- Abuse protection -------------------------------------------------------
-# /api/music/stream relays real audio bytes, so it must never behave like an
-# open bandwidth proxy. Every stream start is rate limited per client and the
-# number of simultaneous relays is capped per client and server-wide.
-#
-# These are guard rails against runaway loops and abuse, NOT a usage quota: a
-# person can only listen to one song per player, so the per-client ceiling is
-# set far above anything a real session reaches. Each relay holds a Python
-# worker thread for the whole song, which is the resource being protected.
-_MUSIC_MAX_STREAMS_PER_CLIENT = int(os.environ.get(
-    'HDSFD_MUSIC_MAX_STREAMS_PER_CLIENT',
-    os.environ.get('HDSFD_MUSIC_MAX_STREAMS_PER_IP', '6'),
-))
-_MUSIC_MAX_STREAMS_TOTAL = int(os.environ.get('HDSFD_MUSIC_MAX_STREAMS_TOTAL', '80'))
-_MUSIC_STREAM_START_WINDOW = 300  # seconds
-_MUSIC_MAX_STREAM_STARTS = int(os.environ.get('HDSFD_MUSIC_MAX_STARTS', '150'))
-_MUSIC_STREAM_ACTIVE = {}
-_MUSIC_STREAM_HITS = {}
-_MUSIC_STREAM_SLOTS = {'total': 0}
-_UNTRUSTED_MUSIC_CLIENTS = set()
-
-
-def _music_client_id():
-    """Best-effort client identity for throttling (proxy-aware, cheap).
-
-    A signed-in user gets their own bucket keyed on the session token, so a
-    shared campus/office NAT cannot pool a whole class into one small limit.
-    Guests fall back to the proxy-aware peer address.
-    """
-    auth_header = request.headers.get('Authorization', '')
-    if auth_header.startswith('Bearer '):
-        token = auth_header[7:].strip()
-        if token:
-            return 'user:' + hashlib.sha256(token.encode('utf-8')).hexdigest()[:16]
-    forwarded = request.headers.get('X-Forwarded-For', '')
-    if forwarded:
-        # Proxies append the real peer last, so the final hop is the trustworthy one.
-        candidate = forwarded.split(',')[-1].strip()
-        if candidate:
-            return candidate
-    return request.remote_addr or 'unknown'
-
-
-def _music_stream_acquire(client_id):
-    """Reserve one stream slot. Returns (ok, reason, retry_after_seconds)."""
-    now = _time.time()
-    with _MUSIC_LOCK:
-        hits = [stamp for stamp in _MUSIC_STREAM_HITS.get(client_id, []) if now - stamp < _MUSIC_STREAM_START_WINDOW]
-        _MUSIC_STREAM_HITS[client_id] = hits
-
-        if len(hits) >= _MUSIC_MAX_STREAM_STARTS:
-            retry_after = max(1, int(_MUSIC_STREAM_START_WINDOW - (now - min(hits))))
-            return False, 'rate_limited', retry_after
-
-        if _MUSIC_STREAM_ACTIVE.get(client_id, 0) >= _MUSIC_MAX_STREAMS_PER_CLIENT:
-            return False, 'too_many_concurrent_streams', 0
-
-        if _MUSIC_STREAM_SLOTS['total'] >= _MUSIC_MAX_STREAMS_TOTAL:
-            return False, 'server_stream_capacity_reached', 10
-
-        hits.append(now)
-        _MUSIC_STREAM_ACTIVE[client_id] = _MUSIC_STREAM_ACTIVE.get(client_id, 0) + 1
-        _MUSIC_STREAM_SLOTS['total'] += 1
-
-        # Keep the bookkeeping tables bounded on long-running processes.
-        if len(_MUSIC_STREAM_HITS) > 4000:
-            for stale in [key for key, stamps in _MUSIC_STREAM_HITS.items() if not stamps]:
-                _MUSIC_STREAM_HITS.pop(stale, None)
-            for stale in [key for key, count in _MUSIC_STREAM_ACTIVE.items() if count <= 0]:
-                _MUSIC_STREAM_ACTIVE.pop(stale, None)
-    return True, None, 0
-
-
-def _music_stream_release(client_id):
-    with _MUSIC_LOCK:
-        active = _MUSIC_STREAM_ACTIVE.get(client_id, 0) - 1
-        if active > 0:
-            _MUSIC_STREAM_ACTIVE[client_id] = active
-        else:
-            _MUSIC_STREAM_ACTIVE.pop(client_id, None)
-        _MUSIC_STREAM_SLOTS['total'] = max(0, _MUSIC_STREAM_SLOTS['total'] - 1)
-
-
-def _music_throttled_response(reason, retry_after):
-    messages = {
-        'rate_limited': 'Too many tracks started at once. Wait a moment and press play again.',
-        'too_many_concurrent_streams': 'Too many players are streaming at once on this account.',
-        'server_stream_capacity_reached': 'The music server is briefly at capacity. Try again shortly.',
-    }
-    response = jsonify({
-        'status': 'throttled',
-        'reason': reason,
-        'message': messages.get(reason, 'Request throttled.'),
-    })
-    response.status_code = 429
-    if retry_after:
-        response.headers['Retry-After'] = str(int(retry_after))
-    response.headers['Cache-Control'] = 'no-store'
-    return response
 
 
 def _music_clean(value):
@@ -2991,122 +2890,37 @@ def _youtube_search_results(query, limit=14):
     return results
 
 
-def _resolve_audio_stream(video_id):
-    """Resolve a direct audio stream URL for a YouTube video using yt-dlp."""
-    now = _time.time()
-    with _MUSIC_LOCK:
-        cached = _MUSIC_STREAM_CACHE.get(video_id)
-    if cached and cached.get('expires', 0) > now:
-        return cached['url'], None
+# ---- Music relay -----------------------------------------------------------
+# The browser talks to the relay directly (POST /api/player for Innertube formats,
+# GET /api/stream for the bytes). The relay address is deployment configuration,
+# not source: it comes from HDSFD_MUSIC_RELAY or from music_relay.json, which is
+# gitignored so no account details ever reach the public repository.
+MUSIC_RELAY_CONFIG_FILE = 'music_relay.json'
 
-    try:
-        import yt_dlp
-    except Exception:
-        return None, 'extractor_missing'
 
-    import logging as _logging
-    last_error = 'no_stream'
-    client_chain = [['tv_embedded'], ['android_vr'], ['web_embedded'], ['ios'], None]
-
-    for clients in client_chain:
-        options = {
-            'quiet': True,
-            'no_warnings': True,
-            'skip_download': True,
-            'noplaylist': True,
-            'nocheckcertificate': True,
-            'socket_timeout': 12,
-            'format': 'bestaudio/best',
-            'logger': _logging.getLogger('hdsfd_music'),
-        }
-        if clients:
-            options['extractor_args'] = {'youtube': {'player_client': clients}}
+def _load_music_relay_base():
+    configured = (os.environ.get('HDSFD_MUSIC_RELAY') or '').strip()
+    if configured:
+        return configured.rstrip('/')
+    candidates = [
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), MUSIC_RELAY_CONFIG_FILE),
+        os.path.join(os.getcwd(), MUSIC_RELAY_CONFIG_FILE),
+        f'/home/HDSFD/HDSFD/{MUSIC_RELAY_CONFIG_FILE}',
+        f'/home/HDSFD/HDSFD/backend/{MUSIC_RELAY_CONFIG_FILE}',
+    ]
+    for path in candidates:
         try:
-            with yt_dlp.YoutubeDL(options) as ydl:
-                info = ydl.extract_info(
-                    f'https://www.youtube.com/watch?v={video_id}', download=False
-                )
-            stream_url = info.get('url')
-            if not stream_url:
-                for fmt in (info.get('formats') or []):
-                    if fmt.get('acodec') not in (None, 'none') and fmt.get('url'):
-                        stream_url = fmt['url']
-                        break
-            if stream_url:
-                with _MUSIC_LOCK:
-                    _MUSIC_STREAM_CACHE[video_id] = {
-                        'url': stream_url,
-                        'expires': now + _MUSIC_STREAM_TTL,
-                    }
-                return stream_url, None
-            last_error = 'no_audio_format'
-        except Exception as exc:
-            last_error = str(exc)[:200]
-            logger.info(f"Music extractor client {clients} failed for {video_id}: {last_error}")
-
-    return None, last_error
+            with open(path, 'r', encoding='utf-8') as handle:
+                data = json.load(handle)
+        except (OSError, ValueError):
+            continue
+        relay = str(data.get('relay_base') or '').strip()
+        if relay:
+            return relay.rstrip('/')
+    return ''
 
 
-# ---- Music relay (Cloudflare Worker) ---------------------------------------
-# The browser talks to the relay directly: POST /api/player (Innertube) for the
-# audio formats, then GET /api/stream (Range-aware) for the bytes. That keeps
-# playback independent of this host's outbound network — PythonAnywhere's free
-# tier cannot reach youtube.com or googlevideo.com at all.
-# Set HDSFD_MUSIC_RELAY to override, or to an empty string to disable the relay.
-MUSIC_RELAY_DEFAULT = 'https://relay.example.workers.dev'
-MUSIC_RELAY_BASE = (os.environ.get('HDSFD_MUSIC_RELAY') or MUSIC_RELAY_DEFAULT).strip().rstrip('/')
-
-
-def _relay_player(video_id, timeout=12):
-    """Ask the relay for playable audio formats. Returns (payload, error)."""
-    if not MUSIC_RELAY_BASE:
-        return None, 'relay_not_configured'
-    import requests as _requests
-    try:
-        response = _requests.post(
-            MUSIC_RELAY_BASE + '/api/player',
-            json={'videoId': video_id},
-            headers={'Accept': 'application/json'},
-            timeout=timeout,
-        )
-    except Exception as exc:
-        return None, ('relay_unreachable: ' + str(exc))[:200]
-    if response.status_code != 200:
-        return None, f'relay_http_{response.status_code}'
-    try:
-        payload = response.json()
-    except Exception:
-        return None, 'relay_bad_json'
-    if not payload.get('audio'):
-        return None, payload.get('detail') or 'relay_no_audio'
-    return payload, None
-
-
-def _relay_stream_url(payload):
-    audio = (payload or {}).get('audio') or []
-    if not audio or not audio[0].get('url'):
-        return None
-    return (
-        f"{MUSIC_RELAY_BASE}/api/stream?url={urllib.parse.quote(audio[0]['url'], safe='')}"
-        f"&id={payload.get('video_id', '')}"
-    )
-
-
-def _relay_probe(url, byte_range='bytes=0-1'):
-    """Fetch a couple of bytes through the relay to prove seeking works."""
-    import requests as _requests
-    try:
-        response = _requests.get(url, headers={'Range': byte_range}, timeout=15, stream=True)
-        info = {
-            'status': response.status_code,
-            'content_type': response.headers.get('Content-Type'),
-            'content_range': response.headers.get('Content-Range'),
-            'accept_ranges': response.headers.get('Accept-Ranges'),
-        }
-        response.close()
-        return info
-    except Exception as exc:
-        return {'status': 'error', 'detail': str(exc)[:160]}
+MUSIC_RELAY_BASE = _load_music_relay_base()
 
 
 @app.route('/api/music/config', methods=['GET'])
@@ -3116,7 +2930,7 @@ def music_config():
         'status': 'success',
         'relay': bool(MUSIC_RELAY_BASE),
         'relay_base': MUSIC_RELAY_BASE or None,
-        'engine': 'innertube-relay' if MUSIC_RELAY_BASE else 'server-extractor',
+        'engine': 'innertube-relay' if MUSIC_RELAY_BASE else 'unconfigured',
     })
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -3135,136 +2949,6 @@ def music_search():
     except Exception as exc:
         logger.warning(f"Music search failed for '{query}': {exc}")
         return jsonify({'status': 'error', 'message': str(exc)[:200], 'query': query, 'results': []}), 502
-
-
-@app.route('/api/music/stream/<video_id>', methods=['GET', 'HEAD'])
-def music_stream(video_id):
-    import re as _re
-    from flask import Response, stream_with_context
-    import requests as _requests
-
-    if not _re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id or ''):
-        return jsonify({'status': 'error', 'message': 'Invalid video id'}), 400
-
-    client_id = _music_client_id()
-    allowed, reason, retry_after = _music_stream_acquire(client_id)
-    if not allowed:
-        logger.info(f"Music stream throttled client={client_id} reason={reason} video={video_id}")
-        return _music_throttled_response(reason, retry_after)
-
-    slot_released = {'done': False}
-
-    def release_slot():
-        if not slot_released['done']:
-            slot_released['done'] = True
-            _music_stream_release(client_id)
-
-    stream_url, error = _resolve_audio_stream(video_id)
-    if not stream_url:
-        # No local extractor (restricted host): hand the browser the relay instead.
-        relay_payload, relay_error = _relay_player(video_id)
-        if relay_payload:
-            release_slot()
-            return redirect(_relay_stream_url(relay_payload), code=302)
-        release_slot()
-        return jsonify({
-            'status': 'unavailable',
-            'message': error or 'Audio stream unavailable',
-            'video_id': video_id,
-            'relay_error': relay_error,
-        }), 503
-
-    headers = {'User-Agent': _YT_UA, 'Accept': '*/*'}
-    range_header = request.headers.get('Range')
-    if range_header:
-        headers['Range'] = range_header
-
-    try:
-        upstream = _requests.get(stream_url, headers=headers, stream=True, timeout=(10, 30))
-    except Exception as exc:
-        logger.warning(f"Music upstream error for {video_id}: {exc}")
-        release_slot()
-        return jsonify({'status': 'unavailable', 'message': 'Upstream fetch failed'}), 502
-
-    if upstream.status_code >= 400:
-        # Cached googlevideo URLs expire — drop it so the next request re-resolves.
-        with _MUSIC_LOCK:
-            _MUSIC_STREAM_CACHE.pop(video_id, None)
-        upstream.close()
-        release_slot()
-        return jsonify({
-            'status': 'unavailable',
-            'message': f'Upstream responded {upstream.status_code}',
-        }), 502
-
-    if request.method == 'HEAD':
-        upstream.close()
-        release_slot()
-
-    def generate():
-        try:
-            for chunk in upstream.iter_content(chunk_size=64 * 1024):
-                if chunk:
-                    yield chunk
-        finally:
-            upstream.close()
-            release_slot()
-
-    proxy = Response(stream_with_context(generate()), status=upstream.status_code)
-    for header in ('Content-Type', 'Content-Length', 'Content-Range', 'Accept-Ranges'):
-        if header in upstream.headers:
-            proxy.headers[header] = upstream.headers[header]
-    proxy.headers.setdefault('Content-Type', 'audio/webm')
-    proxy.headers.setdefault('Accept-Ranges', 'bytes')
-    proxy.headers['Cache-Control'] = 'no-store'
-    proxy.headers['X-HDSFD-Music-Engine'] = 'audio-proxy'
-    proxy.headers['X-HDSFD-Stream-Limit'] = (
-        f"{_MUSIC_MAX_STREAMS_PER_CLIENT} per client, {_MUSIC_MAX_STREAMS_TOTAL} total"
-    )
-    proxy.headers['X-HDSFD-Stream-Starts'] = f"{_MUSIC_MAX_STREAM_STARTS}/{_MUSIC_STREAM_START_WINDOW}s"
-    return proxy
-
-
-@app.route('/api/music/resolve/<video_id>', methods=['GET'])
-def music_resolve(video_id):
-    """Report whether a track is playable, and through which engine.
-
-    ?probe=1 also pulls two bytes through the relay to confirm the Range
-    proxy answers with 206, which is what makes seeking work.
-    """
-    import re as _re
-    if not _re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id or ''):
-        return jsonify({'status': 'error', 'message': 'Invalid video id'}), 400
-
-    result = {
-        'video_id': video_id,
-        'thumbnail': f'https://i.ytimg.com/vi/{video_id}/mqdefault.jpg',
-        'url': f'https://www.youtube.com/watch?v={video_id}',
-    }
-
-    relay_payload, relay_error = _relay_player(video_id)
-    if relay_payload:
-        result.update({
-            'status': 'success',
-            'engine': relay_payload.get('engine'),
-            'audio_formats': len(relay_payload.get('audio') or []),
-            'length_seconds': relay_payload.get('length_seconds'),
-            'expires_in_seconds': relay_payload.get('expires_in_seconds'),
-        })
-        if request.args.get('probe') == '1':
-            result['probe'] = _relay_probe(_relay_stream_url(relay_payload))
-        return jsonify(result)
-
-    stream_url, error = _resolve_audio_stream(video_id)
-    if not stream_url:
-        result.update({
-            'status': 'unavailable',
-            'message': error or 'unavailable',
-            'relay_error': relay_error,
-        })
-        return jsonify(result), 503
-    result.update({'status': 'success', 'engine': 'server-extractor'})
-    return jsonify(result)
 
 
 # ===== YOUTUBE SEARCH ENDPOINT (kept for backwards compatibility) =====

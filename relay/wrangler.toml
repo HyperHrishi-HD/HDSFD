@@ -5,9 +5,3 @@ compatibility_date = "2026-11-01"
 # No bindings, no secrets: the relay only forwards to YouTube and googlevideo.
 # Deploy with:  npx wrangler deploy
 # Then set HDSFD_MUSIC_RELAY to the printed workers.dev URL.
-
-# Hosted copy used by the app (Freebuff Sites preview environment, already published):
-#   site id: <your-site-id>
-#   relay:   https://relay.example.workers.dev
-# The URL is baked into MUSIC_RELAY_DEFAULT in app.py; set HDSFD_MUSIC_RELAY to
-# point at a different deployment (your own account works the same way).

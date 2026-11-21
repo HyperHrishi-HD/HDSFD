@@ -30,6 +30,7 @@ RUNTIME_FILES = (
     "icon-192.png",
     "icon-512.png",
     "requirements.txt",
+    "music_relay.json",
     "backend/__init__.py",
     "backend/school_connect.py",
     "vendor/quick-liquid/index.mjs",

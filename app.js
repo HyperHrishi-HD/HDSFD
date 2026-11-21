@@ -3884,9 +3884,10 @@ function executeAgentAction(action) {
 }
 
 // ===== HDSFD MUSIC ENGINE (search • ad-free audio • queue • recents) =====
-// Playback strategy: the server resolves the real audio stream (yt-dlp) and proxies it,
-// so we get audio-only ad-free playback with working seek. If extraction is blocked the
-// player silently falls back to the official YouTube embed so music never stops.
+// Playback strategy: the browser asks the music relay (Cloudflare Worker) for Innertube
+// audio formats and streams them through the relay, so playback is audio-only and ad-free
+// with working seek even where the app host cannot reach YouTube. If the relay cannot
+// serve a track the player falls back to the official embed so music never stops.
 const musicState = {
   queue: [],
   index: -1,
@@ -4171,11 +4172,8 @@ async function musicRelayResolve(item) {
   const base = await musicRelayBaseUrl();
   if (!base) return null;
 
-  // YouTube's bot check depends on which relay egress answers the request, and the
-  // same track can be refused once and served on the next try. A fresh request
-  // usually lands on a friendly address, so retry before giving up on audio.
-  let refused = false;
-  let reachable = true;
+  // YouTube's bot check depends on which relay egress answers a request, so the
+  // same track can be refused once and served on the next try.
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 9000);
@@ -4195,33 +4193,27 @@ async function musicRelayResolve(item) {
           if (data.author && (!item.channel || item.channel === 'YouTube')) item.channel = data.author;
           return { base, formats };
         }
-        refused = true;
-      } else {
-        // Relay answered but could not resolve the track (502/503): no point asking
-        // the app server, it has the same YouTube access problems.
-        refused = true;
       }
     } catch (err) {
-      if (err && err.name === 'AbortError') return refused ? { base, formats: [], refused } : null;
-      reachable = false;
+      if (err && err.name === 'AbortError') return null;
     } finally {
       clearTimeout(timer);
     }
     await new Promise(resolve => setTimeout(resolve, 220));
   }
-  // The relay answered but would not serve this track: the app server cannot either
-  // (it has no YouTube access on restricted hosts), so the caller goes to the embed.
-  if (refused) return { base, formats: [], refused: true };
-  return reachable ? { base, formats: [] } : null;
+  return null;
 }
 
+// Prefer AAC in MP4: it decodes everywhere, including Safari and iOS, where
+// Opus-in-WebM is unavailable on older builds.
 function musicPickAudioFormat(audio, formats) {
   const canPlay = audio && typeof audio.canPlayType === 'function' ? audio.canPlayType.bind(audio) : null;
-  for (const format of formats) {
+  const usable = formats.filter(format => {
     const mime = String(format.mime || '').split(';')[0].trim();
-    if (!canPlay || !mime || canPlay(mime)) return format;
-  }
-  return formats[0] || null;
+    return !canPlay || !mime || canPlay(mime);
+  });
+  const pool = usable.length ? usable : formats;
+  return pool.find(format => /^audio\/mp4/i.test(String(format.mime || ''))) || pool[0] || null;
 }
 
 // Opus/WebM streams often report Infinity until fully buffered, so fall back to
@@ -4236,7 +4228,6 @@ function musicKnownDuration() {
 async function musicStartAudio(item) {
   const audio = musicAudioEl();
   const token = ++musicPlayToken;
-  item._triedServer = false;
   musicState.engine = 'audio';
   musicSetEngineBadge('Connecting…', 'audio');
   musicSetPlayingUI(true);
@@ -4259,45 +4250,23 @@ async function musicStartAudio(item) {
   const resolved = await musicRelayResolve(item);
   if (token !== musicPlayToken || musicState.current !== item) return;
 
-  if (resolved) {
-    const format = resolved.formats.length ? musicPickAudioFormat(audio, resolved.formats) : null;
-    if (format) {
-      musicSetEngineBadge('Ad-free audio', 'audio');
-      musicStartStream(
-        audio,
-        `${resolved.base}/api/stream?url=${encodeURIComponent(format.url)}&id=${encodeURIComponent(item.id)}`
-      );
-      musicRenderNowPlaying();
-      return;
-    }
-    if (resolved.refused) {
-      musicFallbackYouTube(item);
-      return;
-    }
+  const format = resolved ? musicPickAudioFormat(audio, resolved.formats) : null;
+  if (!format) {
+    musicFallbackYouTube(item);
+    return;
   }
 
-  musicStartServerAudio(item);
+  musicSetEngineBadge('Ad-free audio', 'audio');
+  musicStartStream(
+    audio,
+    `${resolved.base}/api/stream?url=${encodeURIComponent(format.url)}&id=${encodeURIComponent(item.id)}`
+  );
+  musicRenderNowPlaying();
 }
 
 function musicStartStream(audio, url) {
   audio.crossOrigin = 'anonymous';
   audio.src = url;
-  const promise = audio.play();
-  if (promise && promise.catch) {
-    promise.catch(() => { /* error listener handles fallback */ });
-  }
-}
-
-function musicStartServerAudio(item) {
-  const audio = musicAudioEl();
-  if (!audio) {
-    musicFallbackYouTube(item);
-    return;
-  }
-  musicSetEngineBadge('Ad-free audio', 'audio');
-  audio.dataset.videoId = item.id;
-  audio.src = `${API_BASE}/music/stream/${item.id}`;
-
   const promise = audio.play();
   if (promise && promise.catch) {
     promise.catch(() => { /* error listener handles fallback */ });
@@ -4639,14 +4608,7 @@ function bindMusicAudio() {
   audio.addEventListener('ended', musicHandleEnded);
   audio.addEventListener('error', () => {
     const current = musicState.current;
-    if (!current || musicState.engine !== 'audio') return;
-    // Relay hiccup: try the app server once, then fall back to the official embed.
-    if (!current._triedServer) {
-      current._triedServer = true;
-      musicStartServerAudio(current);
-      return;
-    }
-    musicFallbackYouTube(current);
+    if (current && musicState.engine === 'audio') musicFallbackYouTube(current);
   });
   if ('mediaSession' in navigator) {
     try {

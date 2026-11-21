@@ -23,3 +23,9 @@ backend/.enc_key
 .flask_secret_key*
 .freebuff/
 Other/
+
+# Private deployment config (relay address). Never commit.
+music_relay.json
+
+# Wrangler local state (never commit)
+relay/.wrangler/

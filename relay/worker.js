@@ -162,8 +162,13 @@ function minifyAudio(formats) {
       expires_in_seconds: Number(format.expiresInSeconds) || 0,
     });
   }
-  // Highest bitrate first; the browser picks the first type it can decode.
-  audio.sort((a, b) => b.bitrate - a.bitrate);
+  // MP4/AAC ahead of Opus-in-WebM, then highest bitrate: AAC decodes on Safari
+  // and iOS, where WebM audio is not available.
+  audio.sort((a, b) => {
+    const aMp4 = /^audio\/mp4/i.test(a.mime) ? 1 : 0;
+    const bMp4 = /^audio\/mp4/i.test(b.mime) ? 1 : 0;
+    return (bMp4 - aMp4) || (b.bitrate - a.bitrate);
+  });
   return audio;
 }
 
