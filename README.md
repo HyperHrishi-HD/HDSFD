@@ -73,7 +73,10 @@ The app runs without any credentials; Google Drive/Tasks/Calendar, the shared AI
 
 - `google_credentials.json` — OAuth client for Google sign-in, Drive backup, Tasks and Calendar.
 - `secrets_config.json` — `{"gemini_api_keys": ["..."]}` for the shared AI pool (or `GEMINI_API_KEY`).
-- `yt-dlp` is installed by `requirements.txt` for the server-side music resolver.
+- `music_relay.json` — `{"relay_base": "https://<your-relay>"}` (or `HDSFD_MUSIC_RELAY`). Music
+  playback runs in the browser against the relay in `relay/` (a Cloudflare Worker); see
+  `relay/wrangler.toml` for deploying your own. Without it, search still works and play falls
+  back to the official YouTube embed.
 
 In production set `FLASK_SECRET_KEY` to a long random value; the app refuses to start without it when `FLASK_ENV=production`.
 
