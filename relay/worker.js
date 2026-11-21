@@ -1,28 +1,18 @@
 /**
- * HDSFD Music Relay — a single Cloudflare Worker with two jobs.
+ * HDSFD Music Relay — one Cloudflare Worker with two jobs.
  *
- *   POST /api/player            { "videoId": "dQw4w9WgXcQ" }
- *     -> Innertube /youtubei/v1/player relay. Returns the audio-only formats
- *        (title, length, direct googlevideo URLs) with CORS enabled.
- *
+ *   POST /api/player   { "videoId": "dQw4w9WgXcQ" }
+ *     Innertube /youtubei/v1/player relay: audio-only formats (title, length,
+ *     direct googlevideo URLs) with CORS enabled.
  *   GET|HEAD /api/stream?url=<googlevideo url>&id=<videoId>
- *     -> Range-aware audio proxy. Forwards Range to googlevideo and passes back
- *        206 / Content-Range / Accept-Ranges, so seeking works in the browser.
- *        googlevideo URLs are locked to the IP that asked for them, so the bytes
- *        must leave from this Worker instead of from the visitor or the app host.
- *
+ *     Range-aware audio proxy: forwards Range and returns 206 / Content-Range so
+ *     seeking works. googlevideo URLs are bound to the IP that minted them, so the
+ *     bytes have to leave from this Worker.
  *   GET /api/health
  *
- * Why this exists: hosts such as PythonAnywhere's free tier cannot reach
- * youtube.com/googlevideo.com, and even where they can, proxying audio through a
- * Python worker is slow and short-lived. The browser talks to this Worker
- * directly, so playback never depends on the app server's network.
- *
- * CORS is wide open on purpose: the app origin is configurable per deployment and
- * the responses carry no cookies or user data. The stream route only forwards to
- * *.googlevideo.com, so it cannot be used as a general-purpose open proxy.
- *
- * Deploy: `wrangler deploy` (see wrangler.toml) or any Workers-compatible upload.
+ * The browser talks to this Worker directly, so playback never depends on the app
+ * host's network. CORS is wide open on purpose: responses carry no cookies or user
+ * data, and the stream route only forwards to *.googlevideo.com.
  */
 
 const CORS = {
@@ -134,7 +124,9 @@ async function getVisitorData(videoId, force, trace) {
 }
 
 // Per-isolate cache: the same URL is only reused by the same Worker instance, so
-// the googlevideo IP binding still matches the egress that resolved it.
+// the googlevideo IP binding still matches the egress that resolved it. The Cache
+// API would share entries between isolates, but it is a no-op on *.workers.dev
+// (functional cache operations need a custom domain), so it is not used here.
 const PLAYER_CACHE = new Map();
 const PLAYER_CACHE_TTL = 2 * 60 * 60 * 1000;
 const PLAYER_CACHE_MAX = 500;
@@ -147,55 +139,12 @@ function playerCacheTtl(expiresInSeconds) {
   return Math.min(PLAYER_CACHE_TTL, Math.max(60, seconds - 60) * 1000);
 }
 
-// Resolved entries are also published to the Cache API so a repeat play that
-// lands on a fresh isolate still skips YouTube. They are keyed by colo because a
-// googlevideo URL is minted for the egress address that asked for it; isolates
-// behind other colos must resolve their own.
-const CACHE_ORIGIN = 'https://hdsfd-player-cache.invalid';
-
-function cacheRequest(videoId, colo) {
-  return new Request(CACHE_ORIGIN + '/player/' + (colo || 'xx') + '/' + videoId);
-}
-
 function rememberLocally(videoId, value, ttl) {
   if (PLAYER_CACHE.size >= PLAYER_CACHE_MAX) {
     const oldest = PLAYER_CACHE.keys().next();
     if (!oldest.done) PLAYER_CACHE.delete(oldest.value);
   }
   PLAYER_CACHE.set(videoId, { value: value, expires: Date.now() + ttl });
-}
-
-async function readCachedPlayer(videoId, colo) {
-  const local = PLAYER_CACHE.get(videoId);
-  if (local && local.expires > Date.now()) return local.value;
-  try {
-    const hit = await caches.default.match(cacheRequest(videoId, colo));
-    if (!hit) return null;
-    const value = await hit.json();
-    if (!value || !Array.isArray(value.audio) || !value.audio.length) return null;
-    rememberLocally(videoId, value, playerCacheTtl(value.expires_in_seconds));
-    return value;
-  } catch (e) {
-    return null;
-  }
-}
-
-async function writeCachedPlayer(videoId, colo, value) {
-  const ttl = playerCacheTtl(value.expires_in_seconds);
-  rememberLocally(videoId, value, ttl);
-  try {
-    await caches.default.put(cacheRequest(videoId, colo), new Response(JSON.stringify(value), {
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'max-age=' + Math.max(60, Math.floor(ttl / 1000)),
-      },
-    }));
-  } catch (e) { /* the cache is an optimisation, never a requirement */ }
-}
-
-async function dropCachedPlayer(videoId, colo) {
-  PLAYER_CACHE.delete(videoId);
-  try { await caches.default.delete(cacheRequest(videoId, colo)); } catch (e) { /* ignore */ }
 }
 
 function corsHeaders(extra) {
@@ -284,16 +233,16 @@ async function callInnertube(videoId, client, visitor) {
   return response.json();
 }
 
-async function resolvePlayer(videoId, trace, colo) {
-  const cached = await readCachedPlayer(videoId, colo);
-  if (cached) return cached;
+async function resolvePlayer(videoId, trace) {
+  const cached = PLAYER_CACHE.get(videoId);
+  if (cached && cached.expires > Date.now()) return cached.value;
 
   const startedAt = Date.now();
   let lastReason = 'no_audio_format';
 
   // A refusal is per request, not per video: re-asking with a fresh visitor
   // identity usually lands on an egress YouTube is happy with. Pass 1 walks every
-  // client; pass 2 only re-tries the two that answer fastest.
+  // client; later passes re-try the two that answer fastest.
   for (let round = 0; round < RESOLVE_ROUNDS; round += 1) {
     if (round > 0) {
       visitorState = { value: '', expires: 0 };
@@ -307,54 +256,54 @@ async function resolvePlayer(videoId, trace, colo) {
     const clients = round === 0 ? CLIENTS : CLIENTS.slice(0, 2);
 
     for (const client of clients) {
-    let value = null;
+      let value = null;
 
-    // YouTube answers LOGIN_REQUIRED per request from shared datacenter ranges, and
-    // whether it does depends on the egress address behind the request. Re-asking
-    // with a freshly issued visitor identity usually lands on a good one.
-    const attempts = client.needsVisitor ? 2 : 1;
-    for (let pass = 0; pass < attempts && !value; pass += 1) {
-      let data;
-      try {
-        const visitor = client.needsVisitor ? await getVisitorData(videoId, pass > 0, trace) : '';
-        data = await callInnertube(videoId, client, visitor);
-      } catch (error) {
-        lastReason = String((error && error.message) || error).slice(0, 120);
-        if (trace) trace.push({ client: client.name, pass: pass, error: lastReason });
-        break;
+      // YouTube answers LOGIN_REQUIRED per request from shared datacenter ranges, and
+      // whether it does depends on the egress address behind the request. Re-asking
+      // with a freshly issued visitor identity usually lands on a good one.
+      const attempts = client.needsVisitor ? 2 : 1;
+      for (let pass = 0; pass < attempts && !value; pass += 1) {
+        let data;
+        try {
+          const visitor = client.needsVisitor ? await getVisitorData(videoId, pass > 0, trace) : '';
+          data = await callInnertube(videoId, client, visitor);
+        } catch (error) {
+          lastReason = String((error && error.message) || error).slice(0, 120);
+          if (trace) trace.push({ client: client.name, pass: pass, error: lastReason });
+          break;
+        }
+
+        const status = (data.playabilityStatus || {}).status;
+        const streaming = data.streamingData || {};
+        const audio = minifyAudio((streaming.adaptiveFormats || []).concat(streaming.formats || []));
+        if (trace) trace.push({ client: client.name, pass: pass, status: status, audio: audio.length });
+
+        if (!audio.length) {
+          lastReason = status && status !== 'OK'
+            ? String((data.playabilityStatus || {}).reason || status).slice(0, 160)
+            : 'no_playable_audio';
+          if (status === 'LOGIN_REQUIRED' && client.needsVisitor && pass + 1 < attempts) continue;
+          break;
+        }
+
+        const details = data.videoDetails || {};
+        value = {
+          status: 'success',
+          video_id: videoId,
+          engine: 'innertube-' + client.name.toLowerCase(),
+          title: details.title || '',
+          author: details.author || '',
+          length_seconds: Number(details.lengthSeconds) || 0,
+          is_live: details.isLiveContent === true,
+          audio: audio,
+          expires_in_seconds: Number(streaming.expiresInSeconds) || audio[0].expires_in_seconds || 0,
+        };
       }
 
-      const status = (data.playabilityStatus || {}).status;
-      const streaming = data.streamingData || {};
-      const audio = minifyAudio((streaming.adaptiveFormats || []).concat(streaming.formats || []));
-      if (trace) trace.push({ client: client.name, pass: pass, status: status, audio: audio.length });
+      if (!value) continue;
 
-      if (!audio.length) {
-        lastReason = status && status !== 'OK'
-          ? String((data.playabilityStatus || {}).reason || status).slice(0, 160)
-          : 'no_playable_audio';
-        if (status === 'LOGIN_REQUIRED' && client.needsVisitor && pass + 1 < attempts) continue;
-        break;
-      }
-
-      const details = data.videoDetails || {};
-      value = {
-        status: 'success',
-        video_id: videoId,
-        engine: 'innertube-' + client.name.toLowerCase(),
-        title: details.title || '',
-        author: details.author || '',
-        length_seconds: Number(details.lengthSeconds) || 0,
-        is_live: details.isLiveContent === true,
-        audio: audio,
-        expires_in_seconds: Number(streaming.expiresInSeconds) || audio[0].expires_in_seconds || 0,
-      };
-    }
-
-    if (!value) continue;
-
-    await writeCachedPlayer(videoId, colo, value);
-    return value;
+      rememberLocally(videoId, value, playerCacheTtl(value.expires_in_seconds));
+      return value;
     }
   }
 
@@ -440,9 +389,8 @@ async function streamAudio(request) {
   if (upstream && (upstream.status === 403 || upstream.status === 410) && VIDEO_ID.test(videoId)) {
     upstream.body && upstream.body.cancel().catch(() => {});
     try {
-      const colo = (request.cf && request.cf.colo) || 'xx';
-      await dropCachedPlayer(videoId, colo);
-      const fresh = await resolvePlayer(videoId, null, colo);
+      PLAYER_CACHE.delete(videoId);
+      const fresh = await resolvePlayer(videoId);
       if (fresh.audio && fresh.audio.length) {
         const retry = await attempt(fresh.audio[0].url);
         if (retry.status < 400) upstream = retry;
@@ -505,7 +453,7 @@ async function handlePlayer(request) {
   const trace = debug ? [] : null;
 
   try {
-    const result = await resolvePlayer(videoId, trace, (request.cf && request.cf.colo) || 'xx');
+    const result = await resolvePlayer(videoId, trace);
     if (trace) result.trace = trace;
     return json(result);
   } catch (error) {
