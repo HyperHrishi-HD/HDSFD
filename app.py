@@ -102,7 +102,9 @@ if os.environ.get('FLASK_ENV', '').lower() != 'production':
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
 os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = '1'
 
-app = Flask(__name__, static_folder='.', static_url_path='')
+# No static folder on purpose: every public asset has an explicit route below.
+# A '.' static folder would expose database.db, credentials and config files.
+app = Flask(__name__, static_folder=None)
 configured_secret = os.environ.get('FLASK_SECRET_KEY')
 if not configured_secret and os.environ.get('FLASK_ENV', '').lower() == 'production':
     raise RuntimeError('FLASK_SECRET_KEY must be configured in production')
@@ -3082,8 +3084,11 @@ def hdsfd_not_found(error):
     return error
 
 
+# Create any missing tables on import too: WSGI servers import this module
+# without ever running the __main__ block below.
+init_db()
+
 if __name__ == '__main__':
 
-    init_db()
     print("Starting HD SFD V2 Clean Server on http://localhost:5050...")
     app.run(port=5050, debug=False, use_reloader=False)

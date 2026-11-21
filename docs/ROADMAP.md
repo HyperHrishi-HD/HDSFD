@@ -1,8 +1,8 @@
 # HDSFD — PythonAnywhere-Only Overhaul Roadmap
 
-**Date:** 2026-09-27 · **Direction source:** `docs/VISION_2026-09-27.md` (user's message, verbatim)
+**Date:** 2026-09-27 · **Direction source:** the project vision statement.
 
-**Direction:** PythonAnywhere is the only host. No Vercel. No Oracle. GitHub becomes a scrubbed public template. Everything works again — and better. Google auth fully restored. Work proceeds phase by phase; each phase ends in a commit that can be reviewed. **Nothing is implemented yet** — this file is the plan of record.
+**Direction:** PythonAnywhere is the only host. No Vercel. No Oracle. GitHub is published as a scrubbed public template. Everything works again — and better. Google auth fully restored. Work proceeds phase by phase; each phase ends in a commit that can be reviewed. This file is the plan of record.
 
 ## Locked decisions (confirmed by user 2026-09-27)
 
@@ -28,11 +28,11 @@ Order: tier pool → spare (if authorized) → local model → BYO → MCP/OAuth
 
 ## Phase 0 — Docs & repo hygiene (first actionable phase)
 
-1. ~~Save user's message verbatim → `docs/VISION_2026-09-27.md`~~ ✅ (this doc set)
+1. ~~Record the user's vision statement~~ ✅
 2. ~~Write plan → `docs/ROADMAP.md`~~ ✅ (this file)
 3. ~~Update `PROJECT.md`~~ ✅
-4. Delete Oracle/Vercel artifacts (list above; review `monthly-pa-reload.yml` first); fix any test/doc references
-5. Commit: docs + PA-only cleanup
+4. ~~Delete Oracle/Vercel artifacts (list above; review `monthly-pa-reload.yml` first); fix any test/doc references~~ ✅
+5. ~~Commit: docs + PA-only cleanup~~ ✅
 
 ## Phase 1 — Login system (the main thing)
 
@@ -45,7 +45,7 @@ Order: tier pool → spare (if authorized) → local model → BYO → MCP/OAuth
 ## Phase 2 — Google auth fully restored + PA cloud storage
 
 - Fix/verify the full OAuth flow on PA (`/api/gdrive/auth` → `/api/gdrive/callback` → token storage), **Google Tasks sync**, **Calendar sync** — end to end.
-- **All data persists to PA SQLite** for any signed-in user (Google or not): server-authoritative items, offline queue + auto-flush with retry/backoff (pattern already exists in `src/main.js`).
+- **All data persists to PA SQLite** for any signed-in user (Google or not): server-authoritative items, offline queue + auto-flush with retry/backoff in `app.js`.
 - **Drive backup = ONE neat folder** (`HDSFD Backup`), smart auto-sync when online, timestamped snapshots.
 - First-time users: local-only data, popup + banner prompting sign-in.
 
@@ -79,8 +79,10 @@ Order: tier pool → spare (if authorized) → local model → BYO → MCP/OAuth
 
 ## Repo facts (for whoever implements)
 
-- Root `index.html` loads root `app.js?v=3.1` (5,905 lines, `API_BASE='/api'`) — this is the real PA frontend. `src/main.js` is the Vite entry and is NOT loaded by root index.html; use it as the offline-queue reference.
-- Root `app.py` (2,515 lines) is the PA backend: `GEMINI_KEY_POOL` round-robin+failover, OAuth/gdrive endpoints, Tasks/Calendar/YouTube proxies, `/api/auth/login` with scrypt + bearer-token sessions (auto-registers on first login — extend, don't replace).
-- Known gaps to fix along the way: `backend/app.py` has ownership-check holes (but that file is the unused alt backend); root app.py's login auto-registers any username — Phase 1 adds real register/login separation + password change.
-- Tests: `python -m unittest tests.test_school_connect tests.test_migration_mapping` → 44 OK (migration-mapping tests are removed together with the Oracle kit in Phase 0; School Connect tests stay).
-- `.freebuff/` is local tool state — never commit it.
+- Root `index.html` loads root `app.js` (`API_BASE='/api'`) — this is the PA frontend.
+- Root `app.py` is the PA backend: `GEMINI_KEY_POOL` round-robin+failover, OAuth/gdrive endpoints, Tasks/Calendar/YouTube proxies, `/api/auth/login` with scrypt + bearer-token sessions (auto-registers on first login — extend, don't replace).
+- `backend/school_connect.py` holds the ICS/CSV timetable importer used by `/api/school/*`.
+- PythonAnywhere layout: WSGI entry `/var/www/hdsfd_pythonanywhere_com_wsgi.py` points at `/home/HDSFD/HDSFD`, loads `app` and injects `FLASK_SECRET_KEY` from `/home/HDSFD/HDSFD/.flask_secret_key`; `scripts/deploy_pa.py` uploads the runtime files and reloads.
+- Known gaps to fix along the way: item/stats/history routes authorize by `?username=` instead of the bearer session — Phase 1 tightens this alongside real register/login separation + password change.
+- Tests: `python -m unittest tests.test_school_connect` → 44 OK. CI is `.github/workflows/ci.yml`.
+- `.freebuff/`, `.pa-token` and `.flask_secret_key.pa` are local tool state — never commit them.

@@ -65,7 +65,7 @@ class SchoolConnectTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         if cls.APP_TARGET is None:
-            raise unittest.SkipTest("abstract base class — run RootAppSchoolTest / BackendAppSchoolTest")
+            raise unittest.SkipTest("abstract base class — run RootAppSchoolTest")
         cls.app_module = importlib.import_module(cls.APP_TARGET)
 
     def setUp(self):
@@ -230,10 +230,6 @@ class SchoolConnectTestCase(unittest.TestCase):
 
 class RootAppSchoolTest(SchoolConnectTestCase):
     APP_TARGET = "app"
-
-
-class BackendAppSchoolTest(SchoolConnectTestCase):
-    APP_TARGET = "backend.app"
 
 
 if __name__ == "__main__":

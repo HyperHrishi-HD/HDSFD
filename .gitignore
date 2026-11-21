@@ -20,3 +20,6 @@ backend/.enc_key
 
 
 .pa-token
+.flask_secret_key*
+.freebuff/
+Other/

@@ -60,13 +60,22 @@ git clone https://github.com/HyperHrishi-HD/HDSFD.git
 cd HDSFD
 
 # Install dependencies
-pip install Flask requests
+pip install -r requirements.txt
 
 # Run local development server
-python server.py
+python app.py
 ```
 
 Access the local server at `http://localhost:5050/`.
+
+### Optional integrations (bring your own keys)
+The app runs without any credentials; Google Drive/Tasks/Calendar, the shared AI pool and the music resolver stay disabled until you supply them.
+
+- `google_credentials.json` — OAuth client for Google sign-in, Drive backup, Tasks and Calendar.
+- `secrets_config.json` — `{"gemini_api_keys": ["..."]}` for the shared AI pool (or `GEMINI_API_KEY`).
+- `yt-dlp` is installed by `requirements.txt` for the server-side music resolver.
+
+In production set `FLASK_SECRET_KEY` to a long random value; the app refuses to start without it when `FLASK_ENV=production`.
 
 ---
 
