@@ -4594,6 +4594,11 @@ function musicEmbedShowFallback() {
   const item = musicState.current;
   const link = document.getElementById('music-embed-open');
   if (item && link) link.href = item.url || `https://www.youtube.com/watch?v=${item.id}`;
+  // The embed never reported playback; show the transport as paused so the
+  // retry/open actions match what the user is hearing.
+  isYTPlaying = false;
+  updateYTButtonState(false);
+  musicSetPlayingUI(false);
   box.classList.remove('hidden');
 }
 
