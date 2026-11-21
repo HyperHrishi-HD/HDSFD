@@ -149,9 +149,18 @@ function cancelQuoteEdit() {
 
 // ===== DATA STORAGE SDK WITH PERSISTENCE =====
 async function fetchData() {
-  const currentOwner = googleAccount || userName || 'Guest';
+  const currentOwner = currentOwnerKey();
+  if (!hdsfdSessionUser()) {
+    const cachedLocal = localStorage.getItem(`hdsfd_data_${currentOwner}`);
+    allData = cachedLocal ? JSON.parse(cachedLocal) : [];
+    return allData;
+  }
   try {
-    const res = await fetch(`${API_BASE}/items?username=${encodeURIComponent(currentOwner)}`);
+    const res = await fetch(`${API_BASE}/items?username=${encodeURIComponent(currentOwner)}`, { headers: hdsfdAuthHeaders() });
+    if (res.status === 401) {
+      await hdsfdLogout();
+      return allData;
+    }
     if (res.ok) {
       const serverData = await res.json();
       if (Array.isArray(serverData) && serverData.length > 0) {
@@ -181,18 +190,20 @@ async function fetchData() {
 }
 
 async function createData(item) {
-  const currentOwner = googleAccount || userName || 'Guest';
+  const currentOwner = currentOwnerKey();
   item.username = currentOwner;
   item.id = item.id || 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
 
-  try {
-    await fetch(`${API_BASE}/items`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(item)
-    });
-  } catch (e) {
-    console.warn('API save warning:', e);
+  if (hdsfdSessionUser()) {
+    try {
+      await fetch(`${API_BASE}/items`, {
+        method: 'POST',
+        headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(item)
+      });
+    } catch (e) {
+      console.warn('API save warning:', e);
+    }
   }
 
   const idx = allData.findIndex(d => d.id === item.id);
@@ -204,23 +215,26 @@ async function createData(item) {
 }
 
 async function deleteData(id) {
-  const currentOwner = googleAccount || userName || 'Guest';
+  const currentOwner = currentOwnerKey();
+  const googleOwner = googleAccount || userName || 'Guest';
   const targetItem = allData.find(d => d.id === id);
 
   if (targetItem && targetItem.type === 'task' && !id.startsWith('task_') && !id.startsWith('item_')) {
-    fetch(`${API_BASE}/google/tasks/${encodeURIComponent(id)}?username=${encodeURIComponent(currentOwner)}&tasklist_id=${encodeURIComponent(targetItem.tasklist_id || '@default')}`, {
+    fetch(`${API_BASE}/google/tasks/${encodeURIComponent(id)}?username=${encodeURIComponent(googleOwner)}&tasklist_id=${encodeURIComponent(targetItem.tasklist_id || '@default')}`, {
       method: 'DELETE'
     }).catch(err => console.warn('Google Task delete failed:', err));
   }
 
-  try {
-    await fetch(`${API_BASE}/items`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: id, username: currentOwner })
-    });
-  } catch (e) {
-    console.warn('API delete warning:', e);
+  if (hdsfdSessionUser()) {
+    try {
+      await fetch(`${API_BASE}/items`, {
+        method: 'DELETE',
+        headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ id: id, username: currentOwner })
+      });
+    } catch (e) {
+      console.warn('API delete warning:', e);
+    }
   }
   allData = allData.filter(d => d.id !== id);
   localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
@@ -446,9 +460,14 @@ function initializeUserSession() {
     renderSanctuaryTree();
   }).catch(err => console.warn('Fetch data init warning:', err));
 
-  const statsUser = (googleAccount && googleAccount.includes('@')) ? googleAccount : activeName;
-  fetch(`${API_BASE}/user/stats?username=${encodeURIComponent(statsUser)}`)
-    .then(r => r.json())
+  loadUserStatsFromServer();
+}
+
+function loadUserStatsFromServer() {
+  if (!hdsfdSessionUser()) return;
+  const statsUser = currentOwnerKey();
+  fetch(`${API_BASE}/user/stats?username=${encodeURIComponent(statsUser)}`, { headers: hdsfdAuthHeaders() })
+    .then(r => (r.status === 401 ? null : r.json()))
     .then(stats => {
       if (stats && stats.status === 'success') {
         // Restore bonus XP from server — take max of local and server so coins never go backwards
@@ -483,7 +502,7 @@ function initializeUserSession() {
             localStorage.setItem('hdsfd_has_crown', 'true');
           }
         }
-        updateStatsOverview();
+          updateStatsOverview();
         updateShopCardsUI();
       }
     }).catch(() => {});
@@ -3139,6 +3158,35 @@ function getHdsfdToken() {
   return localStorage.getItem('hdsfd_auth_token') || null;
 }
 
+// Signed-in sessions own the server data; guests stay local-only.
+function hdsfdSessionUser() {
+  const token = getHdsfdToken();
+  const user = localStorage.getItem('hdsfd_auth_user');
+  if (!token || !user) return null;
+  const expires = localStorage.getItem('hdsfd_auth_expires');
+  if (expires) {
+    const expiresAt = Date.parse(expires);
+    if (!isNaN(expiresAt) && expiresAt <= Date.now()) {
+      localStorage.removeItem('hdsfd_auth_token');
+      localStorage.removeItem('hdsfd_auth_user');
+      localStorage.removeItem('hdsfd_auth_expires');
+      return null;
+    }
+  }
+  return user;
+}
+
+function hdsfdAuthHeaders(extra) {
+  const headers = Object.assign({}, extra || {});
+  const token = getHdsfdToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  return headers;
+}
+
+function currentOwnerKey() {
+  return hdsfdSessionUser() || googleAccount || userName || 'Guest';
+}
+
 async function hdsfdLogin() {
   const userEl = document.getElementById('school-login-username');
   const passEl = document.getElementById('school-login-password');
@@ -3171,6 +3219,7 @@ async function hdsfdLogin() {
     localStorage.setItem('hdsfd_auth_user', data.username);
     localStorage.setItem('hdsfd_auth_expires', data.expires_at);
     passEl.value = '';
+    await afterHdsfdSignIn();
     updateSchoolAccountUI();
     refreshSchoolStatus();
   } catch (err) {
@@ -3179,6 +3228,25 @@ async function hdsfdLogin() {
       resultEl.innerHTML = '<span class="text-rose-300">Network error — could not reach the server.</span>';
     }
   }
+}
+
+async function afterHdsfdSignIn() {
+  const signedIn = hdsfdSessionUser();
+  if (!signedIn) return;
+  // Carry the local workspace over on first sign-in with this account.
+  const previousOwner = googleAccount || userName || 'Guest';
+  if (previousOwner && previousOwner !== signedIn) {
+    const previousKey = `hdsfd_data_${previousOwner}`;
+    const signedInKey = `hdsfd_data_${signedIn}`;
+    if (!localStorage.getItem(signedInKey) && localStorage.getItem(previousKey)) {
+      localStorage.setItem(signedInKey, localStorage.getItem(previousKey));
+    }
+  }
+  await fetchData();
+  renderCurrentTab();
+  renderSanctuaryTree();
+  loadUserStatsFromServer();
+  loadGeminiChatHistory();
 }
 
 async function hdsfdLogout() {
@@ -3291,15 +3359,19 @@ async function refreshSchoolStatus() {
 async function loadGeminiChatHistory() {
   const stream = document.getElementById('gemini-agent-chat-stream');
   const userBadge = document.getElementById('gemini-user-email-text');
-  const currentOwner = googleAccount || userName || 'Guest';
+  const currentOwner = currentOwnerKey();
   if (userBadge) {
     const userLabel = googleAccountName || userName || 'Guest (Offline)';
     userBadge.textContent = googleAccount ? userLabel : 'Guest (Offline)';
     userBadge.title = googleAccount ? `Connected: ${googleAccount}` : 'Guest Mode';
   }
 
+  if (!hdsfdSessionUser()) {
+    renderGeminiDefaultGreeting();
+    return;
+  }
   try {
-    const res = await fetch(`/api/gemini/history?username=${encodeURIComponent(currentOwner)}`);
+    const res = await fetch(`${API_BASE}/gemini/history?username=${encodeURIComponent(currentOwner)}`, { headers: hdsfdAuthHeaders() });
     if (res.ok) {
       geminiChatHistory = await res.json();
       renderGeminiChatMessages();
@@ -4462,10 +4534,15 @@ function closeClearGeminiModal() {
 }
 
 async function executeConfirmedClearGeminiHistory() {
-  const currentOwner = googleAccount || userName || 'Guest';
+  const currentOwner = currentOwnerKey();
   closeClearGeminiModal();
+  if (!hdsfdSessionUser()) {
+    geminiChatHistory = [];
+    renderGeminiDefaultGreeting();
+    return;
+  }
   try {
-    await fetch(`/api/gemini/history?username=${encodeURIComponent(currentOwner)}`, { method: 'DELETE' });
+    await fetch(`${API_BASE}/gemini/history?username=${encodeURIComponent(currentOwner)}`, { method: 'DELETE', headers: hdsfdAuthHeaders() });
   } catch (err) {
     console.warn('Clear history error:', err);
   }
@@ -4557,9 +4634,10 @@ function syncUserStatsToServer() {
     const completedTasks = tasks.filter(t => t.completed).length;
     const streak = parseInt(localStorage.getItem('hdsfd_streak_days') || '1', 10);
 
+    if (!hdsfdSessionUser()) return;
     fetch(`${API_BASE}/user/stats`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         username: owner,
         coins: currentCoins,

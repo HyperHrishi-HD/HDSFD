@@ -956,6 +956,48 @@
       box-shadow: 0 8px 18px -8px rgba(225, 29, 72, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.3);
     }
     #yt-toggle-btn:hover { filter: brightness(1.08); }
+
+    /* Auth form: floating-label fields with a blue focus ring. */
+    .hdsfd-field { position: relative; display: block; width: 100%; }
+    .hdsfd-field > input {
+      width: 100%;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 0.75rem;
+      padding: 1.2rem 0.85rem 0.45rem;
+      font-size: 0.78rem;
+      line-height: 1.2;
+      color: #fff;
+      outline: none;
+      transition: border-color 0.16s ease, box-shadow 0.16s ease;
+    }
+    .hdsfd-field > input::placeholder { color: transparent; }
+    .hdsfd-field > span {
+      position: absolute;
+      left: 0.9rem;
+      top: 0.8rem;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.42);
+      pointer-events: none;
+      transition: all 0.16s ease;
+      transform-origin: left top;
+    }
+    .hdsfd-field > input:focus {
+      border-color: rgba(59, 130, 246, 0.75);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.28);
+    }
+    .hdsfd-field > input:-webkit-autofill {
+      -webkit-text-fill-color: #fff;
+      -webkit-box-shadow: 0 0 0 1000px rgba(20, 20, 24, 0.96) inset;
+    }
+    .hdsfd-field > input:focus + span,
+    .hdsfd-field > input:not(:placeholder-shown) + span {
+      top: 0.34rem;
+      font-size: 0.55rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(147, 197, 253, 0.95);
+    }
   </style>
 </head>
 <body class="h-full">
@@ -2163,12 +2205,18 @@
                 <span id="school-status-badge" class="text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold">Guest Mode</span>
               </div>
 
-              <div id="school-login-form" class="space-y-2">
+              <div id="school-login-form" class="space-y-2.5">
                 <p class="text-[10px] text-white/50">Sign in to sync data across devices. New username? An account is created automatically.</p>
-                <div class="flex flex-col sm:flex-row gap-2">
-                  <input id="school-login-username" type="text" placeholder="Username" autocomplete="username" class="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50">
-                  <input id="school-login-password" type="password" placeholder="Password (min 8 chars)" autocomplete="current-password" class="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50">
-                  <button onclick="hdsfdLogin()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-3 py-2 rounded-xl text-xs font-bold hover:bg-purple-500/30 transition-all">Sign In</button>
+                <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <label class="hdsfd-field flex-1">
+                    <input id="school-login-username" type="text" placeholder=" " autocomplete="username" required onkeydown="if(event.key==='Enter'){event.preventDefault();hdsfdLogin();}">
+                    <span>Username</span>
+                  </label>
+                  <label class="hdsfd-field flex-1">
+                    <input id="school-login-password" type="password" placeholder=" " autocomplete="current-password" required onkeydown="if(event.key==='Enter'){event.preventDefault();hdsfdLogin();}">
+                    <span>Password</span>
+                  </label>
+                  <button onclick="hdsfdLogin()" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-purple-500/30 transition-all">Sign In</button>
                 </div>
               </div>
 
@@ -2617,6 +2665,6 @@
     <audio id="music-audio" preload="none"></audio>
 
     <!-- App Logic Scripts (Cache-Busting Query) -->
-    <script src="app.js?v=3.3"></script>
+    <script src="app.js?v=3.4"></script>
   </body>
 </html>

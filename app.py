@@ -263,6 +263,21 @@ def require_owner(username=None):
     return None
 
 
+def _session_owner(requested=None):
+    """Resolve the signed-in owner for personal data endpoints.
+
+    Returns (owner, error_response): the session decides whose rows are touched,
+    and a username that disagrees with the session is rejected rather than obeyed.
+    """
+    owner = current_user()
+    if not owner:
+        return None, (jsonify({'status': 'error', 'message': 'Sign in to sync this data'}), 401)
+    requested = str(requested or '').strip()
+    if requested and requested != owner:
+        return None, (jsonify({'status': 'error', 'message': 'This data belongs to another account'}), 403)
+    return owner, None
+
+
 def save_user_tokens(username, creds, display_name=None):
     if not username or not creds:
         return
@@ -783,9 +798,14 @@ def school_import():
 
 @app.route('/api/user/stats', methods=['GET', 'POST'])
 def handle_user_stats():
+    if request.method == 'GET':
+        username, error = _session_owner(request.args.get('username'))
+    else:
+        username, error = _session_owner((request.get_json(silent=True) or {}).get('username'))
+    if error:
+        return error
     conn = get_db()
     if request.method == 'GET':
-        username = request.args.get('username', 'Guest')
         row = conn.execute("SELECT * FROM user_stats WHERE username = ?", (username,)).fetchone()
         if row:
             upgrades = []
@@ -813,8 +833,7 @@ def handle_user_stats():
             "upgrades": []
         })
     else:
-        data = request.json or {}
-        username = data.get('username', 'Guest')
+        data = request.get_json(silent=True) or {}
         coins = int(data.get('coins', 0))
         lifetime_xp = int(data.get('lifetime_xp', 0))
         focus_mins = int(data.get('focus_mins', 0))
@@ -1305,15 +1324,16 @@ def gemini_api_key_handler():
 
 @app.route('/api/gemini/history', methods=['GET', 'DELETE'])
 def gemini_history_handler():
+    username, error = _session_owner(request.args.get('username'))
+    if error:
+        return error
     conn = get_db()
     if request.method == 'DELETE':
-        username = request.args.get('username') or 'Guest'
         conn.execute("DELETE FROM gemini_chat_history WHERE username = ?", (username,))
         conn.commit()
         conn.close()
         return jsonify({"status": "success", "message": "History cleared"})
     else:
-        username = request.args.get('username') or 'Guest'
         rows = conn.execute(
             "SELECT id, role, content, action_data, created_at FROM gemini_chat_history WHERE username = ? ORDER BY id ASC LIMIT 100",
             (username,)
@@ -1423,7 +1443,8 @@ def _answer_from_live_context(lower, context):
 def gemini_generate():
     data = request.json or {}
     prompt = data.get('prompt', '').strip()
-    username = data.get('username') or 'Guest'
+    # Signed-in sessions own their history; guests keep the local-only bucket.
+    username = current_user() or data.get('username') or 'Guest'
     api_key = data.get('api_key') or os.environ.get('GEMINI_API_KEY')
     
     if not prompt:
@@ -2074,9 +2095,9 @@ def gemini_generate():
 
 @app.route('/api/items', methods=['GET'])
 def get_items():
-    username = request.args.get('username')
-    if not username:
-        return jsonify([])
+    username, error = _session_owner(request.args.get('username'))
+    if error:
+        return error
     conn = get_db()
     rows = conn.execute("SELECT * FROM items WHERE username = ?", (username,)).fetchall()
     conn.close()
@@ -2092,14 +2113,19 @@ def get_items():
 
 @app.route('/api/items', methods=['POST'])
 def save_item():
-    data = request.json
-    if not data or 'username' not in data or 'type' not in data:
+    data = request.get_json(silent=True) or {}
+    if 'type' not in data:
         return jsonify({"status": "error", "message": "Invalid item payload"}), 400
-        
-    username = data['username']
+
+    username, error = _session_owner(data.get('username'))
+    if error:
+        return error
     item_type = data['type']
     item_id = data.get('id') or f"item_{int(os.urandom(4).hex(), 16)}"
-    content_str = json.dumps(data)
+    payload = dict(data)
+    payload['username'] = username
+    payload['id'] = item_id
+    content_str = json.dumps(payload)
 
     conn = get_db()
     conn.execute('''
@@ -2115,11 +2141,14 @@ def save_item():
 
 @app.route('/api/items', methods=['DELETE'])
 def delete_item():
-    data = request.json
+    data = request.get_json(silent=True) or {}
     item_id = data.get('id')
-    username = data.get('username')
-    if not item_id or not username:
+    if not item_id:
         return jsonify({"status": "error", "message": "Missing parameters"}), 400
+
+    username, error = _session_owner(data.get('username'))
+    if error:
+        return error
 
     conn = get_db()
     conn.execute("DELETE FROM items WHERE id = ? AND username = ?", (item_id, username))
@@ -2776,11 +2805,91 @@ def _music_duration_seconds(label):
     return total
 
 
-def _youtube_search_results(query, limit=14):
-    """Scrape youtube.com/results for video metadata (id, title, channel, duration)."""
-    import requests as _requests
-    import re as _re
+_YT_RESULTS_URL = 'https://www.youtube.com/results'
+_YT_READER_PROXY = 'https://r.jina.ai/'
+
+
+def _extract_initial_data(page):
+    """Pull the ytInitialData JSON object out of a YouTube results page."""
     import json as _json
+    for marker in ('ytInitialData = {', 'ytInitialData ={'):
+        start = page.find(marker)
+        if start < 0:
+            continue
+        start = page.find('{', start)
+        depth = 0
+        in_string = False
+        escaped = False
+        for pos in range(start, len(page)):
+            char = page[pos]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return _json.loads(page[start:pos + 1])
+                    except Exception:
+                        return None
+    return None
+
+
+def _fetch_youtube_results_page(query):
+    """Fetch youtube.com search results, with a fallback for restricted hosts.
+
+    PythonAnywhere's free tier proxies outbound traffic and blocks youtube.com,
+    so the public reader proxy is used there. Everywhere else the direct request
+    still wins and nothing about local behaviour changes.
+    """
+    import requests as _requests
+    target = _YT_RESULTS_URL + '?' + urllib.parse.urlencode({
+        'search_query': query,
+        'sp': 'EgIQAQ%3D%3D',  # videos only
+    })
+    direct_error = None
+    try:
+        response = _requests.get(
+            target,
+            headers={'User-Agent': _YT_UA, 'Accept-Language': 'en-US,en;q=0.9'},
+            timeout=12,
+        )
+        response.raise_for_status()
+        if 'videoId' in response.text:
+            return response.text
+    except Exception as exc:
+        direct_error = exc
+    try:
+        response = _requests.get(
+            _YT_READER_PROXY + target,
+            headers={
+                'User-Agent': _YT_UA,
+                'Accept-Language': 'en-US,en;q=0.9',
+                'X-Return-Format': 'html',
+            },
+            timeout=45,
+        )
+        response.raise_for_status()
+        if 'videoId' in response.text:
+            return response.text
+        raise RuntimeError('reader proxy returned no videos')
+    except Exception as exc:
+        logger.warning(f"YouTube search transport failed ({direct_error!r} / {exc!r})")
+        raise RuntimeError('YouTube search is temporarily unavailable') from None
+
+
+def _youtube_search_results(query, limit=14):
+    """Search YouTube for video metadata (id, title, channel, duration)."""
+    import re as _re
 
     cache_key = (query or '').strip().lower()
     now = _time.time()
@@ -2789,67 +2898,51 @@ def _youtube_search_results(query, limit=14):
     if cached and cached.get('expires', 0) > now:
         return cached['results'][:limit]
 
-    response = _requests.get(
-        'https://www.youtube.com/results',
-        params={'search_query': query, 'sp': 'EgIQAQ%3D%3D'},  # sp = filter: videos only
-        headers={'User-Agent': _YT_UA, 'Accept-Language': 'en-US,en;q=0.9'},
-        timeout=12,
-    )
-    response.raise_for_status()
-    page = response.text
-
-    match = _re.search(r'var ytInitialData = (\{.*?\});</script>', page, _re.S)
-    if not match:
-        match = _re.search(r'ytInitialData = (\{.*?\});</script>', page, _re.S)
+    page = _fetch_youtube_results_page(query)
+    data = _extract_initial_data(page)
 
     results = []
     seen = set()
 
-    if match:
-        try:
-            data = _json.loads(match.group(1))
-        except Exception:
-            data = None
-
-        if data is not None:
-            stack = [data]
-            while stack and len(results) < limit * 2:
-                node = stack.pop()
-                if isinstance(node, dict):
-                    renderer = node.get('videoRenderer')
-                    if isinstance(renderer, dict):
-                        vid = renderer.get('videoId')
-                        if vid and vid not in seen:
-                            seen.add(vid)
-                            title = ''.join(
-                                run.get('text', '') for run in (renderer.get('title') or {}).get('runs', [])
-                            )
-                            channel = ''.join(
-                                run.get('text', '') for run in (renderer.get('ownerText') or {}).get('runs', [])
-                            )
-                            length = (renderer.get('lengthText') or {}).get('simpleText', '')
-                            is_live = any(
-                                'LIVE' in json_dump
-                                for json_dump in [
-                                    str((badge or {}).get('metadataBadgeRenderer', {}).get('label', ''))
-                                    for badge in (renderer.get('badges') or [])
-                                ]
-                            )
-                            results.append({
-                                'id': vid,
-                                'title': _music_clean(title) or query,
-                                'channel': _music_clean(channel),
-                                'duration': _music_clean(length),
-                                'seconds': _music_duration_seconds(length),
-                                'live': is_live,
-                                'thumbnail': f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
-                                'url': f'https://www.youtube.com/watch?v={vid}',
-                            })
-                    for value in node.values():
-                        if isinstance(value, (dict, list)):
-                            stack.append(value)
-                elif isinstance(node, list):
-                    stack.extend(value for value in node if isinstance(value, (dict, list)))
+    if data is not None:
+        stack = [data]
+        while stack and len(results) < limit * 2:
+            node = stack.pop()
+            if isinstance(node, dict):
+                renderer = node.get('videoRenderer')
+                if isinstance(renderer, dict):
+                    vid = renderer.get('videoId')
+                    if vid and vid not in seen:
+                        seen.add(vid)
+                        title = ''.join(
+                            run.get('text', '') for run in (renderer.get('title') or {}).get('runs', [])
+                        )
+                        channel = ''.join(
+                            run.get('text', '') for run in (renderer.get('ownerText') or {}).get('runs', [])
+                        )
+                        length = (renderer.get('lengthText') or {}).get('simpleText', '')
+                        is_live = any(
+                            'LIVE' in json_dump
+                            for json_dump in [
+                                str((badge or {}).get('metadataBadgeRenderer', {}).get('label', ''))
+                                for badge in (renderer.get('badges') or [])
+                            ]
+                        )
+                        results.append({
+                            'id': vid,
+                            'title': _music_clean(title) or query,
+                            'channel': _music_clean(channel),
+                            'duration': _music_clean(length),
+                            'seconds': _music_duration_seconds(length),
+                            'live': is_live,
+                            'thumbnail': f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
+                            'url': f'https://www.youtube.com/watch?v={vid}',
+                        })
+                for value in node.values():
+                    if isinstance(value, (dict, list)):
+                        stack.append(value)
+            elif isinstance(node, list):
+                stack.extend(value for value in node if isinstance(value, (dict, list)))
 
     # Regex fallback if the JSON tree shape changed
     if not results:
