@@ -2150,10 +2150,32 @@ function initSplitResizer() {
 
   if (!handle || !container || !calPanel || !tasksPanel) return;
 
-  // Restore saved ratio
-  const savedRatio = parseFloat(localStorage.getItem('hdsfd_split_ratio')) || 56;
-  calPanel.style.width = `${savedRatio}%`;
-  tasksPanel.style.width = `${100 - savedRatio}%`;
+  // Percentage widths only make sense while the panels sit side by side. When
+  // they stack, an inline width would squeeze one pane into a sliver, so drop
+  // the inline width entirely and let the stylesheet's 100% win.
+  // Keep either pane wide enough to use: outside this band the calendar turns
+  // into 30px columns, which is what a stale ratio saved from the stacked
+  // layout used to produce.
+  const MIN_RATIO = 35;
+  const MAX_RATIO = 65;
+  const clampRatio = pct => Math.max(MIN_RATIO, Math.min(MAX_RATIO, pct));
+
+  let ratio = clampRatio(parseFloat(localStorage.getItem('hdsfd_split_ratio')) || 56);
+  localStorage.setItem('hdsfd_split_ratio', ratio);
+  const wideLayout = window.matchMedia('(min-width: 1200px)');
+
+  function applySplitWidths() {
+    if (!wideLayout.matches) {
+      calPanel.style.width = '';
+      tasksPanel.style.width = '';
+      return;
+    }
+    calPanel.style.width = `${ratio}%`;
+    tasksPanel.style.width = `${100 - ratio}%`;
+  }
+  applySplitWidths();
+  wideLayout.addEventListener('change', applySplitWidths);
+  window.addEventListener('resize', applySplitWidths);
 
   let isDragging = false;
 
@@ -2163,10 +2185,10 @@ function initSplitResizer() {
     document.body.style.userSelect = 'none';
 
     function onPointerMove(e) {
-      if (!isDragging) return;
+      if (!isDragging || !wideLayout.matches) return;
       const rect = container.getBoundingClientRect();
       const offset = e.clientX - rect.left;
-      let pct = Math.max(20, Math.min(80, (offset / rect.width) * 100));
+      let pct = clampRatio((offset / rect.width) * 100);
 
       // Magnetic Snapping Points: 33.33% (1/3 Cal, 2/3 Tasks), 50% (1/2 Middle), 66.67% (2/3 Cal, 1/3 Tasks)
       if (pct >= 30 && pct <= 36) {
@@ -2186,7 +2208,8 @@ function initSplitResizer() {
         isDragging = false;
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
-        const curWidth = parseFloat(calPanel.style.width) || 50;
+        const curWidth = parseFloat(calPanel.style.width) || ratio;
+        ratio = curWidth;
         localStorage.setItem('hdsfd_split_ratio', curWidth);
         document.removeEventListener('pointermove', onPointerMove);
         document.removeEventListener('pointerup', onPointerUp);
@@ -2201,11 +2224,13 @@ function initSplitResizer() {
 function setSplitSnap(targetPct) {
   const calPanel = document.getElementById('calendar-panel');
   const tasksPanel = document.getElementById('tasks-panel');
-  if (calPanel && tasksPanel) {
-    calPanel.style.width = `${targetPct}%`;
-    tasksPanel.style.width = `${100 - targetPct}%`;
-    localStorage.setItem('hdsfd_split_ratio', targetPct);
-  }
+  const clamped = Math.max(35, Math.min(65, targetPct));
+  localStorage.setItem('hdsfd_split_ratio', clamped);
+  if (!calPanel || !tasksPanel) return;
+  // Stacked layout ignores the ratio; only a side-by-side split can apply it.
+  if (!window.matchMedia('(min-width: 1200px)').matches) return;
+  calPanel.style.width = `${clamped}%`;
+  tasksPanel.style.width = `${100 - clamped}%`;
 }
 
 // ===== STARRED TASKS VIEW (INSTANT & AUTOMATIC SYNC) =====
