@@ -693,6 +693,7 @@
       background: rgba(244, 63, 94, 0.16); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.32);
     }
     .music-feed-badge[data-mode="trending"] { background: rgba(251, 191, 36, 0.14); color: #fcd34d; border-color: rgba(251, 191, 36, 0.3); }
+    .music-feed-badge[data-mode="guest"] { background: rgba(251, 191, 36, 0.12); color: #fcd34d; border-color: rgba(251, 191, 36, 0.28); }
     .music-feed-sub { font-size: 10px; color: rgba(255, 255, 255, 0.45); margin-top: 2px; }
     .music-feed-refresh {
       display: inline-flex; align-items: center; gap: 5px;
@@ -703,9 +704,36 @@
     }
     .music-feed-refresh:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
     .music-feed-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 9px;
+      display: flex; flex-direction: column; gap: 2px;
       padding: 0 2px 8px;
     }
+    .music-feed-grid .music-row { border-radius: 13px; }
+    .music-results-head {
+      display: flex; align-items: center; gap: 8px;
+      padding: 2px 4px 8px; min-width: 0;
+    }
+    .music-back-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 5px 9px; border-radius: 999px; flex-shrink: 0;
+      font-size: 9.5px; font-weight: 800; color: rgba(255, 255, 255, 0.65);
+      background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.2s ease;
+    }
+    .music-back-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+    .music-back-btn .hdsfd-icon { width: 13px; height: 13px; }
+    .music-results-title {
+      min-width: 0; font-size: 11px; font-weight: 800; color: #fff;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .music-guest-note {
+      display: none; align-items: center; gap: 6px;
+      margin-top: 8px; padding: 6px 9px; border-radius: 10px;
+      font-size: 9px; font-weight: 700; line-height: 1.35; color: #fcd34d;
+      background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.22);
+    }
+    #music-modal.is-guest .music-guest-note { display: flex; }
+    .music-guest-note .hdsfd-icon { width: 13px; height: 13px; flex-shrink: 0; }
+    .music-mini-toggle.is-disabled { opacity: 0.42; cursor: not-allowed; }
     .music-card {
       display: flex; flex-direction: column; gap: 5px;
       padding: 6px; border-radius: 16px;
@@ -915,7 +943,8 @@
       .music-ctrl-primary { width: 42px; height: 42px; }
       .music-volume { display: none; }
       .music-time { width: 27px; }
-      .music-feed-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .music-feed-grid { gap: 1px; }
+      .music-guest-note { margin-top: 6px; }
       .music-pill { width: min(76vw, 226px); height: 56px; }
     }
     @media (max-width: 380px) {
@@ -1747,11 +1776,174 @@
       .theme-select-btn { min-height: 44px; }
     }
 
-    /* --- Floating bottom nav: safe area and content clearance -------------- */
-    nav.fixed.bottom-5 > div { padding-bottom: 0.4rem; }
+    /* --- Floating bottom nav: liquid glass pill ---------------------------- */
+    .liquid-nav {
+      position: relative; isolation: isolate; pointer-events: auto;
+      display: flex; align-items: stretch; gap: 2px;
+      width: 100%; max-width: 24rem; margin: 0 auto; padding: 6px;
+      border-radius: 999px; overflow: hidden;
+      user-select: none; -webkit-tap-highlight-color: transparent;
+    }
+    .liquid-nav-glass {
+      position: absolute; inset: 0; z-index: -2; border-radius: inherit; overflow: hidden;
+      background:
+        radial-gradient(120% 180% at 18% -30%, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 58%),
+        linear-gradient(180deg, rgba(24, 28, 52, 0.64), rgba(9, 12, 26, 0.72));
+      -webkit-backdrop-filter: blur(18px) saturate(1.65) brightness(1.08);
+      backdrop-filter: blur(18px) saturate(1.65) brightness(1.08);
+      box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.34),
+        inset 0 -1px 1px rgba(255, 255, 255, 0.08),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+        0 18px 40px -18px rgba(0, 0, 0, 0.92),
+        0 2px 8px rgba(0, 0, 0, 0.35);
+    }
+    .liquid-nav-glass::after {
+      content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+      background: linear-gradient(105deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 34%, rgba(244, 63, 94, 0.08) 68%, rgba(129, 140, 248, 0.12) 100%);
+      mix-blend-mode: screen; opacity: 0.8;
+    }
+    .liquid-nav-sheen {
+      position: absolute; left: 12px; right: 12px; top: 1px; height: 42%;
+      border-radius: 999px; z-index: -1; pointer-events: none;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0));
+      opacity: 0.7;
+    }
+    .liquid-nav-drop {
+      position: absolute; top: 6px; bottom: 6px; left: 0; width: 0; z-index: -1;
+      border-radius: 999px; pointer-events: none;
+      transform: translate3d(0, 0, 0);
+      transition: transform 0.52s cubic-bezier(0.34, 1.56, 0.64, 1);
+      background:
+        radial-gradient(110% 160% at 28% 0%, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0) 60%),
+        linear-gradient(165deg, rgba(251, 113, 133, 0.34), rgba(168, 85, 247, 0.2) 58%, rgba(99, 102, 241, 0.24));
+      box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.5),
+        inset 0 -2px 6px rgba(244, 63, 94, 0.18),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+        0 6px 18px -6px rgba(244, 63, 94, 0.55);
+    }
+    .liquid-nav-drop::after {
+      content: ""; position: absolute; left: 18%; right: 18%; top: 2px; height: 34%;
+      border-radius: 999px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0));
+    }
+    .nav-btn {
+      position: relative; z-index: 1; flex: 1 1 0; min-width: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+      min-height: 48px; padding: 6px 4px; border: 0; border-radius: 999px;
+      background: none; color: rgba(255, 255, 255, 0.46);
+      font-family: inherit; font-weight: 800; font-size: 9px; line-height: 1;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      transition: color 0.25s ease, transform 0.3s ease;
+      cursor: pointer; -webkit-tap-highlight-color: transparent;
+    }
+    .nav-btn .nav-ico {
+      width: 16px; height: 16px; flex-shrink: 0;
+      transition: transform 0.45s cubic-bezier(0.3, 1.6, 0.5, 1), filter 0.3s ease;
+    }
+    .nav-btn span { font-size: 9px; letter-spacing: 0.06em; }
+    .nav-btn:hover { color: rgba(255, 255, 255, 0.78); }
+    .nav-btn.is-active { color: #fff; }
+    .nav-btn.is-active .nav-ico { transform: translateY(-1px) scale(1.14); filter: drop-shadow(0 2px 6px rgba(244, 63, 94, 0.55)); }
+    .nav-btn:focus-visible { outline: 2px solid rgba(251, 113, 133, 0.8); outline-offset: 2px; }
+    .nav-btn:active .nav-ico { transform: translateY(0) scale(0.92); }
+    .nav-ripple {
+      position: absolute; width: 12px; height: 12px; border-radius: 50%; z-index: 0;
+      background: rgba(255, 255, 255, 0.4); pointer-events: none;
+      transform: translate(-50%, -50%) scale(0);
+      animation: navRipple 0.62s ease-out forwards;
+    }
+    @keyframes navRipple {
+      0% { transform: translate(-50%, -50%) scale(0.4); opacity: 0.55; }
+      100% { transform: translate(-50%, -50%) scale(11); opacity: 0; }
+    }
     @media (max-width: 768px) {
       nav.fixed.bottom-5 { bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); }
       #dashboard main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)); }
+    }
+
+    /* --- Glass toast (replaces the old single-line banner) ----------------- */
+    #hdsfd-toast-region {
+      position: fixed; left: 0; right: 0; top: calc(12px + env(safe-area-inset-top, 0px));
+      z-index: 10000001; display: flex; justify-content: center;
+      padding: 0 12px; pointer-events: none; max-height: 78dvh; overflow-y: auto;
+      scrollbar-width: none;
+    }
+    #hdsfd-toast-region::-webkit-scrollbar { display: none; }
+    #hdsfd-toast-region ol {
+      width: min(26rem, 100%); margin: 0; padding: 0; list-style: none;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .hdsfd-toast {
+      --toast-duration: 4200ms;
+      position: relative; pointer-events: auto; display: flex; align-items: flex-start; gap: 10px;
+      width: 100%; padding: 12px 38px 14px 13px; border-radius: 22px;
+      color: #fff; overflow: hidden;
+      background:
+        radial-gradient(120% 160% at 12% -20%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 56%),
+        linear-gradient(165deg, rgba(23, 27, 50, 0.82), rgba(8, 11, 24, 0.9));
+      -webkit-backdrop-filter: blur(22px) saturate(1.55) brightness(1.06);
+      backdrop-filter: blur(22px) saturate(1.55) brightness(1.06);
+      box-shadow:
+        inset 0 1px 1px rgba(255, 255, 255, 0.28),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.14),
+        0 18px 42px -18px rgba(0, 0, 0, 0.95);
+      animation: hdsfdToastIn 0.46s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+    }
+    .hdsfd-toast[data-variant="success"] { box-shadow: inset 0 1px 1px rgba(255,255,255,.3), inset 0 0 0 1px rgba(52, 211, 153, 0.32), 0 18px 42px -18px rgba(0,0,0,.95); }
+    .hdsfd-toast[data-variant="error"] { box-shadow: inset 0 1px 1px rgba(255,255,255,.3), inset 0 0 0 1px rgba(244, 63, 94, 0.38), 0 18px 42px -18px rgba(0,0,0,.95); }
+    .hdsfd-toast[data-variant="warning"] { box-shadow: inset 0 1px 1px rgba(255,255,255,.3), inset 0 0 0 1px rgba(251, 191, 36, 0.32), 0 18px 42px -18px rgba(0,0,0,.95); }
+    .hdsfd-toast.is-leaving { animation: hdsfdToastOut 0.26s ease-in both; }
+    .hdsfd-toast-icon {
+      width: 24px; height: 24px; flex-shrink: 0; border-radius: 999px;
+      display: flex; align-items: center; justify-content: center; margin-top: 1px;
+      background: rgba(255, 255, 255, 0.09); border: 1px solid rgba(255, 255, 255, 0.14);
+      color: #fff;
+    }
+    .hdsfd-toast-icon .hdsfd-icon { width: 14px; height: 14px; }
+    .hdsfd-toast[data-variant="success"] .hdsfd-toast-icon { color: #6ee7b7; background: rgba(16, 185, 129, 0.14); border-color: rgba(16, 185, 129, 0.28); }
+    .hdsfd-toast[data-variant="error"] .hdsfd-toast-icon { color: #fda4af; background: rgba(244, 63, 94, 0.16); border-color: rgba(244, 63, 94, 0.3); }
+    .hdsfd-toast[data-variant="warning"] .hdsfd-toast-icon { color: #fcd34d; background: rgba(251, 191, 36, 0.12); border-color: rgba(251, 191, 36, 0.28); }
+    .hdsfd-toast-copy { min-width: 0; flex: 1 1 auto; padding-top: 1px; }
+    .hdsfd-toast-title {
+      font-size: 13px; font-weight: 800; line-height: 1.35; letter-spacing: -0.01em;
+      white-space: normal; overflow-wrap: anywhere;
+    }
+    .hdsfd-toast-desc {
+      margin-top: 2px; font-size: 11.5px; line-height: 1.45; color: rgba(255, 255, 255, 0.62);
+      white-space: normal; overflow-wrap: anywhere;
+    }
+    .hdsfd-toast-close {
+      position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 999px;
+      display: flex; align-items: center; justify-content: center; color: rgba(255, 255, 255, 0.55);
+      background: transparent; border: 0; transition: all 0.2s ease;
+    }
+    .hdsfd-toast-close:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
+    .hdsfd-toast-close .hdsfd-icon { width: 13px; height: 13px; }
+    .hdsfd-toast-progress {
+      position: absolute; left: 13px; right: 13px; bottom: 6px; height: 2px; border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12); overflow: hidden;
+    }
+    .hdsfd-toast-progress::after {
+      content: ""; display: block; height: 100%; width: 100%; border-radius: inherit;
+      background: linear-gradient(90deg, rgba(251, 113, 133, 0.9), rgba(168, 85, 247, 0.8));
+      transform-origin: left; animation: hdsfdToastTimer var(--toast-duration) linear forwards;
+    }
+    .hdsfd-toast.is-paused .hdsfd-toast-progress::after { animation-play-state: paused; }
+    @keyframes hdsfdToastIn {
+      from { opacity: 0; transform: translateY(8px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes hdsfdToastOut {
+      from { opacity: 1; transform: translateY(0) scale(1); }
+      to { opacity: 0; transform: translateY(-6px) scale(0.96); }
+    }
+    @keyframes hdsfdToastTimer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+    @media (max-width: 640px) {
+      #hdsfd-toast-region { top: calc(8px + env(safe-area-inset-top, 0px)); padding: 0 10px; }
+      .hdsfd-toast { border-radius: 18px; padding: 11px 34px 13px 11px; }
+      .hdsfd-toast-title { font-size: 12.5px; }
+      .hdsfd-toast-desc { font-size: 11px; }
     }
 
   </style>
@@ -1780,6 +1972,8 @@
   <symbol id="i-sticky-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-sticky-note" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z" /> <path d="M15 3v4a2 2 0 0 0 2 2h4" /></symbol>
   <symbol id="i-clipboard-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-clipboard-list" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="M12 11h4" /> <path d="M12 16h4" /> <path d="M8 11h.01" /> <path d="M8 16h.01" /></symbol>
   <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-check" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M20 6 9 17l-5-5" /></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7" /><path d="M19 12H5" /></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></symbol>
   <symbol id="i-circle-check-big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-circle-check-big" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M21.801 10A10 10 0 1 1 17 3.335" /> <path d="m9 11 3 3L22 4" /></symbol>
   <symbol id="i-star" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-star" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z" /></symbol>
   <symbol id="i-arrow-up-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-arrow-up-right" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M7 7h10v10" /> <path d="M7 17 17 7" /></symbol>
@@ -3018,22 +3212,25 @@
 
       <!-- Bottom Floating Nav Bar (Home, Tasks, Notes, More) -->
       <nav class="fixed bottom-5 left-4 right-4 z-[60] pointer-events-none">
-        <div class="glass rounded-full p-1.5 flex justify-between items-center max-w-sm mx-auto pointer-events-auto shadow-2xl border border-white/20">
-          <button onclick="switchTab('focus')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-purple-300 font-bold transition-all" data-tab="focus">
-            <i data-lucide="home" class="w-4 h-4"></i>
-            <span class="text-[9px] uppercase tracking-wider mt-0.5">Home</span>
+        <div class="liquid-nav" id="hdsfd-liquid-nav" role="navigation" aria-label="Main navigation">
+          <span class="liquid-nav-glass" aria-hidden="true"></span>
+          <span class="liquid-nav-sheen" aria-hidden="true"></span>
+          <span class="liquid-nav-drop" id="hdsfd-nav-drop" aria-hidden="true"></span>
+          <button type="button" onclick="switchTab('focus')" class="nav-btn is-active" data-tab="focus" aria-current="page">
+            <i data-lucide="home" class="nav-ico"></i>
+            <span>Home</span>
           </button>
-          <button onclick="switchTab('tasks-notes')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white transition-all" data-tab="tasks-notes">
-            <i data-lucide="check-square" class="w-4 h-4"></i>
-            <span class="text-[9px] uppercase tracking-wider mt-0.5">Tasks</span>
+          <button type="button" onclick="switchTab('tasks-notes')" class="nav-btn" data-tab="tasks-notes">
+            <i data-lucide="check-square" class="nav-ico"></i>
+            <span>Tasks</span>
           </button>
-          <button onclick="switchTab('notes')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white transition-all" data-tab="notes">
-            <i data-lucide="file-text" class="w-4 h-4"></i>
-            <span class="text-[9px] uppercase tracking-wider mt-0.5">Notes</span>
+          <button type="button" onclick="switchTab('notes')" class="nav-btn" data-tab="notes">
+            <i data-lucide="file-text" class="nav-ico"></i>
+            <span>Notes</span>
           </button>
-          <button onclick="switchTab('settings')" class="nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white transition-all" data-tab="settings">
-            <i data-lucide="more-horizontal" class="w-4 h-4"></i>
-            <span class="text-[9px] uppercase tracking-wider mt-0.5">More</span>
+          <button type="button" onclick="switchTab('settings')" class="nav-btn" data-tab="settings">
+            <i data-lucide="more-horizontal" class="nav-ico"></i>
+            <span>More</span>
           </button>
         </div>
       </nav>
@@ -3377,12 +3574,16 @@
             <button type="button" onclick="musicSearch('phonk', true)" class="music-chip">Phonk</button>
             <button type="button" onclick="musicSearch('nature sounds', true)" class="music-chip">Nature</button>
           </div>
+          <div id="music-guest-note" class="music-guest-note" aria-live="polite">
+            <svg class="hdsfd-icon"><use href="#i-triangle-alert"></use></svg>
+            <span>Guest mode · YouTube player · ads &amp; low quality</span>
+          </div>
         </div>
 
         <!-- Views -->
         <div class="music-tabs">
           <button id="music-tab-home" type="button" class="music-tab is-active" onclick="musicSetView('home')">Home</button>
-          <button id="music-tab-results" type="button" class="music-tab" onclick="musicSetView('results')">Search</button>
+          <button id="music-tab-saved" type="button" class="music-tab" onclick="musicSetView('saved')">Saved <span id="music-saved-count" class="opacity-60">0</span></button>
           <button id="music-tab-queue" type="button" class="music-tab" onclick="musicSetView('queue')">Queue <span id="music-queue-count" class="opacity-60">0</span></button>
           <button id="music-tab-recent" type="button" class="music-tab" onclick="musicSetView('recent')">Recent</button>
           <span class="music-tabs-spacer"></span>
@@ -3406,7 +3607,28 @@
             <div id="music-feed-list" class="music-feed-grid"></div>
           </div>
 
-          <div id="music-panel-results" class="music-panel music-scroll hidden"><div id="music-results-list"></div></div>
+          <div id="music-panel-results" class="music-panel music-scroll hidden">
+            <div class="music-results-head">
+              <button type="button" class="music-back-btn" onclick="musicBackToHome()" aria-label="Back to Home">
+                <svg class="hdsfd-icon"><use href="#i-arrow-left"></use></svg><span>Home</span>
+              </button>
+              <span id="music-results-title" class="music-results-title">Search results</span>
+            </div>
+            <div id="music-results-list"></div>
+          </div>
+
+          <div id="music-panel-saved" class="music-panel music-scroll hidden">
+            <div class="music-feed-head">
+              <div class="min-w-0">
+                <div class="music-feed-title-row">
+                  <span class="music-feed-title">Saved</span>
+                  <span class="music-feed-badge" data-mode="saved">Library</span>
+                </div>
+                <div class="music-feed-sub">Tracks you saved — radio and the feed learn from them</div>
+              </div>
+            </div>
+            <div id="music-saved-list"></div>
+          </div>
 
           <div id="music-panel-queue" class="music-panel music-scroll hidden">
             <div class="music-queue-tools">
@@ -3465,7 +3687,7 @@
     <audio id="music-audio" preload="none"></audio>
 
     <!-- App Logic Scripts (Cache-Busting Query) -->
-    <script src="app.js?v=4.5"></script>
+    <script src="app.js?v=5.0"></script>
   <script src="hdsfd-ui.js?v=2"></script>
   <script type="module" src="liquid-glass.js?v=1"></script>
   </body>

@@ -26,6 +26,10 @@ let isYouTubeDrawerOpen = false;
 let ytPlayer = null;
 let isYTPlayerReady = false;
 let isYTPlaying = false;
+let musicEmbedFrame = null;
+let musicEmbedTime = 0;
+let musicEmbedDuration = 0;
+let musicEmbedBound = false;
 let ytCurrentVideoId = null;
 let ytCurrentPlaylistId = null;
 let ytSavedTime = 0;
@@ -3120,6 +3124,40 @@ function updatePostItColor(id, newColor) {
 }
 
 // ===== TAB NAVIGATION =====
+function moveLiquidNavDrop() {
+  const nav = document.getElementById('hdsfd-liquid-nav');
+  const drop = document.getElementById('hdsfd-nav-drop');
+  if (!nav || !drop) return;
+  const active = nav.querySelector('.nav-btn.is-active');
+  if (!active) return;
+  const navRect = nav.getBoundingClientRect();
+  const rect = active.getBoundingClientRect();
+  if (!rect.width) return;
+  drop.style.width = `${rect.width.toFixed(2)}px`;
+  drop.style.transform = `translate3d(${(rect.left - navRect.left).toFixed(2)}px, 0, 0)`;
+}
+
+function initLiquidNav() {
+  const nav = document.getElementById('hdsfd-liquid-nav');
+  if (!nav || nav.dataset.bound === '1') return;
+  nav.dataset.bound = '1';
+  nav.addEventListener('pointerdown', event => {
+    const button = event.target.closest('.nav-btn');
+    if (!button) return;
+    const navRect = nav.getBoundingClientRect();
+    const ripple = document.createElement('span');
+    ripple.className = 'nav-ripple';
+    ripple.style.left = `${event.clientX - navRect.left}px`;
+    ripple.style.top = `${event.clientY - navRect.top}px`;
+    nav.appendChild(ripple);
+    setTimeout(() => ripple.remove(), 680);
+  }, { passive: true });
+  window.addEventListener('resize', moveLiquidNavDrop, { passive: true });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', moveLiquidNavDrop, { passive: true });
+  requestAnimationFrame(moveLiquidNavDrop);
+  setTimeout(moveLiquidNavDrop, 260);
+}
+
 function switchTab(tab) {
   activeTab = tab;
 
@@ -3130,12 +3168,13 @@ function switchTab(tab) {
   if (target) target.classList.add('active');
 
   document.querySelectorAll('.nav-btn').forEach(btn => {
-    if (btn.dataset.tab === tab) {
-      btn.className = 'nav-btn flex-1 py-1.5 flex flex-col items-center text-purple-300 font-bold transition-all';
-    } else {
-      btn.className = 'nav-btn flex-1 py-1.5 flex flex-col items-center text-white/40 font-bold hover:text-white transition-all';
-    }
+    const selected = btn.dataset.tab === tab;
+    btn.classList.toggle('is-active', selected);
+    if (selected) btn.setAttribute('aria-current', 'page');
+    else btn.removeAttribute('aria-current');
   });
+  moveLiquidNavDrop();
+  requestAnimationFrame(moveLiquidNavDrop);
 
   renderCurrentTab();
 }
@@ -3272,6 +3311,7 @@ async function afterHdsfdSignIn() {
   renderSanctuaryTree();
   loadUserStatsFromServer();
   loadGeminiChatHistory();
+  if (typeof musicRefreshEntitlement === 'function') musicRefreshEntitlement();
 }
 
 async function hdsfdLogout() {
@@ -3288,6 +3328,7 @@ async function hdsfdLogout() {
   localStorage.removeItem('hdsfd_auth_user');
   localStorage.removeItem('hdsfd_auth_expires');
   updateSchoolAccountUI();
+  if (typeof musicRefreshEntitlement === 'function') musicRefreshEntitlement();
 }
 
 function updateSchoolAccountUI() {
@@ -3929,6 +3970,7 @@ const MUSIC_KEYS = {
   radio: 'hdsfd_music_radio',
   autoplay: 'hdsfd_music_autoplay',
   taste: 'hdsfd_music_taste_v1',
+  saved: 'hdsfd_music_saved_v1',
   feed: 'hdsfd_music_feed_v1'
 };
 
@@ -3974,6 +4016,7 @@ const musicState = {
   radio: musicStoreGet(MUSIC_KEYS.radio) !== 'false',
   autoplay: musicStoreGet(MUSIC_KEYS.autoplay) !== 'false',
   recent: musicSafeParse(musicStoreGet(MUSIC_KEYS.recent) || '[]', []),
+  saved: [],
   engine: 'idle',
   loading: false,
   resolving: false,
@@ -3983,6 +4026,7 @@ const musicState = {
   resolvingItem: null,
   lastPlayedId: null,
   countedPlayId: null,
+  entitled: null,
   error: ''
 };
 
@@ -4117,30 +4161,56 @@ function musicTasteListenStart(item) {
 }
 
 function musicIsLiked(id) {
-  return !!(id && musicTaste.likes[id]);
+  return !!(id && (musicTaste.likes[id] || musicState.saved.some(item => item.id === id)));
+}
+
+function musicIsSaved(id) {
+  return !!(id && musicState.saved.some(item => item.id === id));
+}
+
+function musicLoadSaved() {
+  const raw = musicSafeParse(musicStoreGet(MUSIC_KEYS.saved) || '[]', []);
+  const list = Array.isArray(raw) ? raw.map(item => musicNormalizeTrack(item)).filter(Boolean) : [];
+  // Carry old likes over once, so "Saved" starts populated after the update.
+  Object.keys(musicTaste.likes || {}).forEach(id => {
+    if (!musicValidId(id) || list.some(item => item.id === id)) return;
+    const info = musicTaste.likes[id] || {};
+    const migrated = musicNormalizeTrack({ id: id, title: info.title || 'Saved track', channel: info.channel || 'YouTube' });
+    if (migrated) list.push(migrated);
+  });
+  musicState.saved = musicUniqueTracks(list, { limit: 200 });
+  musicPersistSaved();
+}
+
+function musicPersistSaved() {
+  musicStoreSet(MUSIC_KEYS.saved, JSON.stringify(musicState.saved.slice(0, 200)));
 }
 
 function musicToggleLikeById(id) {
   const item = musicFindTrackById(id);
   if (!item) return;
-  if (musicTaste.likes[id]) {
+  if (musicIsLiked(id)) {
     delete musicTaste.likes[id];
+    musicState.saved = musicState.saved.filter(entry => entry.id !== id);
     const artist = musicTasteArtist(item.channel, false);
     if (artist && artist.likes > 0) artist.likes -= 1;
-    showInAppNotification('Removed from your taste');
+    showInAppNotification('', { title: 'Removed from Saved', description: item.title || '', variant: 'info' });
   } else {
     musicTaste.likes[id] = { at: Date.now(), title: item.title || '', channel: item.channel || '' };
     delete musicTaste.dislikes[id];
+    musicState.saved = musicUniqueTracks([item].concat(musicState.saved), { limit: 200 });
     const artist = musicTasteArtist(item.channel, true);
     if (artist) artist.likes = Math.min(999, (Number(artist.likes) || 0) + 1);
     musicTokens(item.title + ' ' + item.channel).slice(0, 8).forEach(token => {
       musicTaste.terms[token] = Math.min(40, (Number(musicTaste.terms[token]) || 0) + 1.1);
     });
-    showInAppNotification('Saved to your taste — radio will use it');
+    showInAppNotification('', { title: 'Saved', description: item.title || '', variant: 'success' });
   }
   musicTasteSave();
+  musicPersistSaved();
   musicRenderResults();
   musicRenderFeed();
+  musicRenderSaved();
   musicRenderQueue();
   musicRenderRecent();
   musicRenderNowPlaying();
@@ -4234,7 +4304,7 @@ function musicQueueIds() {
 function musicFindTrackById(id) {
   if (!id) return null;
   if (musicState.current && musicState.current.id === id) return musicState.current;
-  const pools = [musicState.queue, musicState.results, musicState.feed, musicState.recent];
+  const pools = [musicState.saved, musicState.queue, musicState.results, musicState.feed, musicState.recent];
   for (const pool of pools) {
     if (!Array.isArray(pool)) continue;
     const found = pool.find(item => item && item.id === id);
@@ -4245,8 +4315,11 @@ function musicFindTrackById(id) {
 
 function musicFmt(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
-  const mins = Math.floor(total / 60);
-  return `${mins}:${String(total % 60).padStart(2, '0')}`;
+  const hours = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) return `${hours}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
 }
 
 function musicMetaLine(item) {
@@ -4403,11 +4476,175 @@ function musicSetEngineBadge(text, tone) {
 }
 
 // ---------------------------------------------------------------------------
+// Entitlement: signed-in gets the relay; guests get the old YouTube embed only.
+// ---------------------------------------------------------------------------
+function musicGuestMode() {
+  return !hdsfdSessionUser();
+}
+
+function musicRefreshEntitlement() {
+  const signedIn = !musicGuestMode();
+  const changed = musicState.entitled !== signedIn;
+  musicState.entitled = signedIn;
+  if (changed) {
+    // Never reuse a relay origin across an account switch.
+    musicRelayBase = null;
+    musicRelayPromise = null;
+    musicEmbedStop();
+    isYTPlaying = false;
+    musicSetPlayingUI(false);
+    if (!signedIn) {
+      const audio = musicAudioEl();
+      if (audio) {
+        try { audio.pause(); audio.removeAttribute('src'); audio.load(); } catch (e) { /* noop */ }
+      }
+    }
+  }
+  const modal = document.getElementById('music-modal');
+  if (modal) modal.classList.toggle('is-guest', !signedIn);
+  const note = document.getElementById('music-guest-note');
+  if (note) note.classList.toggle('hidden', signedIn);
+  const sub = document.querySelector('.music-head-sub');
+  if (sub) {
+    sub.textContent = signedIn
+      ? 'Search anything • ad-free audio • smart radio'
+      : 'Guest mode · YouTube player · ads & low quality';
+  }
+  if (!signedIn) {
+    musicState.feed = [];
+    musicState.feedMode = 'guest';
+    musicState.feedTitle = 'Guest mode';
+    musicState.feedSubtitle = 'Search to start — YouTube player, ads and low quality';
+    musicState.feedLoading = false;
+    } else if (musicState.feedMode === 'guest') {
+    musicState.feed = [];
+    musicState.feedMode = 'trending';
+    musicState.feedTitle = 'Trending now';
+    musicState.feedSubtitle = 'What everyone is playing right now';
+    const modal = document.getElementById('music-modal');
+    if (modal && !modal.classList.contains('hidden')) musicLoadFeed(false);
+  }
+
+  musicUpdateToggles();
+  musicRenderFeed();
+}
+
+function musicEmbedPost(func, args) {
+  if (!musicEmbedFrame || !musicEmbedFrame.contentWindow) return;
+  try {
+    musicEmbedFrame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: func, args: args || [] }), '*');
+  } catch (e) { /* the embed may not be ready yet */ }
+}
+
+function musicEmbedBindMessages() {
+  if (musicEmbedBound) return;
+  musicEmbedBound = true;
+  window.addEventListener('message', event => {
+    if (!musicEmbedFrame || event.source !== musicEmbedFrame.contentWindow) return;
+    let data = event.data;
+    if (typeof data === 'string') {
+      try { data = JSON.parse(data); } catch (e) { return; }
+    }
+    if (!data || data.event !== 'infoDelivery' || !data.info) return;
+    const info = data.info;
+    if (info.playerState !== undefined) {
+      const playing = Number(info.playerState) === 1;
+      const changed = isYTPlaying !== playing;
+      isYTPlaying = playing;
+      if (changed) {
+        updateYTButtonState(playing);
+        musicSetPlayingUI(playing);
+      }
+      if (Number(info.playerState) === 0 && musicState.current) musicHandleEnded();
+    }
+    if (info.currentTime != null) {
+      musicEmbedTime = Number(info.currentTime) || 0;
+      ytSavedTime = musicEmbedTime;
+      musicUpdateProgress();
+    }
+    if (info.duration != null) musicEmbedDuration = Number(info.duration) || 0;
+    if (info.videoData && info.videoData.title) updateYTTrackTitle(info.videoData.title);
+  });
+}
+
+function musicEmbedStop() {
+  if (!musicEmbedFrame) {
+    isYTPlaying = false;
+    return;
+  }
+  musicEmbedPost('pauseVideo');
+  try { musicEmbedFrame.remove(); } catch (e) { /* noop */ }
+  musicEmbedFrame = null;
+  isYTPlaying = false;
+  if (musicState.engine === 'youtube') musicState.engine = 'idle';
+}
+
+function musicEmbedPlay(item, label, lowQuality) {
+  if (!item || !item.id) return;
+  musicEmbedBindMessages();
+  const audio = musicAudioEl();
+  if (audio) {
+    try {
+      audio.pause();
+      audio.removeAttribute('src');
+      audio.load();
+    } catch (e) { /* noop */ }
+  }
+
+  if (!musicEmbedFrame) {
+    const frame = document.createElement('iframe');
+    frame.id = 'music-embed-frame';
+    frame.title = 'YouTube player';
+    frame.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
+    frame.setAttribute('allowfullscreen', '');
+    frame.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;height:180px;border:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(frame);
+    musicEmbedFrame = frame;
+  }
+
+  const params = new URLSearchParams({
+    autoplay: '1',
+    controls: '0',
+    disablekb: '1',
+    enablejsapi: '1',
+    fs: '0',
+    modestbranding: '1',
+    playsinline: '1',
+    rel: '0',
+    vq: lowQuality === false ? 'default' : 'tiny',
+    origin: location.origin
+  });
+  musicEmbedTime = 0;
+  musicEmbedDuration = Number(item.seconds) || 0;
+  musicEmbedFrame.src = `https://www.youtube.com/embed/${encodeURIComponent(item.id)}?${params.toString()}`;
+
+  musicState.engine = 'youtube';
+  musicState.resolving = false;
+  musicState.resolvingItem = item;
+  musicPill.hide();
+  musicSetEngineBadge(label || 'Guest · YouTube', 'youtube');
+  updateYTTrackTitle(item.title || 'YouTube track');
+  musicTasteListenStart(item);
+  const input = document.getElementById('yt-song-input');
+  if (input) input.value = item.url || `https://www.youtube.com/watch?v=${item.id}`;
+  ytCurrentVideoId = item.id;
+  ytCurrentPlaylistId = null;
+  isYTPlaying = true;
+  updateYTButtonState(true);
+  musicSetPlayingUI(true);
+  setTimeout(() => musicEmbedPost('playVideo'), 700);
+  setTimeout(() => musicEmbedPost('setVolume', [Math.round(musicState.volume * 100)]), 900);
+  musicUpdateProgress();
+  musicSyncPlayControls();
+}
+
+// ---------------------------------------------------------------------------
 // Modal and views
 // ---------------------------------------------------------------------------
 function musicRenderAll() {
   musicRenderResults();
   musicRenderFeed();
+  musicRenderSaved();
   musicRenderQueue();
   musicRenderRecent();
   musicRenderNowPlaying();
@@ -4418,6 +4655,7 @@ function musicRenderAll() {
 function openMusicPlayer(initialQuery) {
   const modal = document.getElementById('music-modal');
   if (!modal) return;
+  musicRefreshEntitlement();
   modal.classList.remove('hidden');
   modal.classList.add('flex');
   document.body.classList.add('music-open');
@@ -4443,13 +4681,17 @@ function closeMusicPlayer() {
 }
 
 function musicSetView(view, options) {
-  const wanted = ['home', 'results', 'queue', 'recent'].includes(view) ? view : 'home';
+  const wanted = ['home', 'results', 'saved', 'queue', 'recent'].includes(view) ? view : 'home';
   musicState.view = wanted;
-  ['home', 'results', 'queue', 'recent'].forEach(name => {
+  ['home', 'results', 'saved', 'queue', 'recent'].forEach(name => {
     const panel = document.getElementById(`music-panel-${name}`);
-    const tab = document.getElementById(`music-tab-${name}`);
     if (panel) panel.classList.toggle('hidden', name !== wanted);
-    if (tab) tab.classList.toggle('is-active', name === wanted);
+  });
+  // Search results are a sheet over Home, not a fifth tab.
+  const activeTab = wanted === 'results' ? 'home' : wanted;
+  ['home', 'saved', 'queue', 'recent'].forEach(name => {
+    const tab = document.getElementById(`music-tab-${name}`);
+    if (tab) tab.classList.toggle('is-active', name === activeTab);
   });
   const panels = document.getElementById('music-panels');
   if (panels) panels.scrollTop = 0;
@@ -4460,6 +4702,13 @@ function musicSetView(view, options) {
       if (input) input.focus();
     }
   }
+  if (wanted === 'saved') musicRenderSaved();
+}
+
+function musicBackToHome() {
+  musicSetView('home');
+  const input = document.getElementById('music-search-input');
+  if (input) input.focus();
 }
 
 // ---------------------------------------------------------------------------
@@ -4518,8 +4767,13 @@ async function musicSearch(query, autoPlay) {
   let results = [];
   let failed = false;
 
+  const guest = musicGuestMode();
   try {
-    const data = await musicFetchJson(`${API_BASE}/music/search?q=${encodeURIComponent(cleaned)}`, { signal }, 14000);
+    const suffix = guest ? '&guest=1' : '';
+    const data = await musicFetchJson(`${API_BASE}/music/search?q=${encodeURIComponent(cleaned)}${suffix}`, {
+      signal,
+      headers: hdsfdAuthHeaders()
+    }, 14000);
     results = Array.isArray(data.results) ? data.results : [];
   } catch (err) {
     if (err && err.name === 'AbortError') return;
@@ -4528,8 +4782,23 @@ async function musicSearch(query, autoPlay) {
 
   if (token !== musicSearchToken) return;
 
-  // If the app server is unreachable or its proxy is blocked, ask the relay directly.
-  if (!results.length) {
+  // Guests stay on the old YouTube-only path: no relay, no ad-free resolver.
+  if (!results.length && guest) {
+    try {
+      const one = await musicFetchJson(`${API_BASE}/youtube/search?q=${encodeURIComponent(cleaned)}`, { signal }, 12000);
+      if (one && one.video_id) {
+        results = [{
+          id: one.video_id,
+          title: one.title || cleaned,
+          channel: one.channel || 'YouTube',
+          thumbnail: `https://i.ytimg.com/vi/${one.video_id}/mqdefault.jpg`,
+          url: one.video_url || `https://www.youtube.com/watch?v=${one.video_id}`
+        }];
+        failed = false;
+      }
+    } catch (e) { /* keep the friendly guest error */ }
+  } else if (!results.length) {
+    // Signed-in fallback: if the app server is unreachable, ask the relay directly.
     try {
       results = await musicRelaySearch(cleaned, 16);
       if (results.length) failed = false;
@@ -4546,11 +4815,16 @@ async function musicSearch(query, autoPlay) {
   if (autoPlay && musicState.results.length) {
     musicPlayResult(0);
   } else if (!musicState.results.length) {
-    showInAppNotification(`No results for “${cleaned}”`);
+    showInAppNotification('', {
+      title: guest ? 'Guest search came up empty' : 'No results',
+      description: guest ? 'YouTube-only search is limited. Try a shorter or different phrase.' : `Nothing matched “${cleaned}”.`,
+      variant: 'warning'
+    });
   }
 }
 
 async function musicRelaySearch(query, limit) {
+  if (musicGuestMode()) return [];
   const base = await musicRelayBaseUrl();
   if (!base) return [];
   try {
@@ -4573,6 +4847,8 @@ function musicRenderResults() {
   const container = document.getElementById('music-results-list');
   if (!container) return;
   musicRenderSearchButton();
+  const title = document.getElementById('music-results-title');
+  if (title) title.textContent = musicState.query ? `Results for “${musicState.query}”` : 'Search results';
 
   if (musicState.loading && !musicState.results.length) {
     container.innerHTML = Array.from({ length: 6 }).map(() => `
@@ -4591,7 +4867,7 @@ function musicRenderResults() {
       <div class="music-empty">
         <div class="music-empty-icon">${hdsfdIcon('triangle-alert')}</div>
         <div class="music-empty-title">Search failed</div>
-        <div class="music-empty-sub">YouTube may be blocking this network. Check your connection and try again.</div>
+        <div class="music-empty-sub">${musicGuestMode() ? 'Guest mode uses YouTube search only. Try again, or sign in for the full player.' : 'YouTube may be blocking this network. Check your connection and try again.'}</div>
         <button type="button" class="music-retry-btn" onclick="musicSearch(musicState.query, false)">Try again</button>
       </div>`;
     return;
@@ -4602,7 +4878,7 @@ function musicRenderResults() {
       <div class="music-empty">
         <div class="music-empty-icon">${hdsfdIcon('headphones')}</div>
         <div class="music-empty-title">Search any song, artist or genre</div>
-        <div class="music-empty-sub">Ad-free audio, full seek, smart radio and a queue that keeps going.</div>
+        <div class="music-empty-sub">${musicGuestMode() ? 'Guest mode plays through YouTube with ads and low quality.' : 'Ad-free audio, full seek, smart radio and a queue that keeps going.'}</div>
       </div>`;
     return;
   }
@@ -4650,6 +4926,11 @@ function musicFeedCacheSet(signature, payload) {
 
 function musicEnsureFeed() {
   if (musicState.feedLoading) return;
+  if (musicGuestMode()) {
+    if (musicState.feedMode !== 'guest') musicRefreshEntitlement();
+    else musicRenderFeed();
+    return;
+  }
   const signature = musicFeedSignature(musicProfile());
   const cached = musicFeedCacheGet(signature);
   if (cached) {
@@ -4669,6 +4950,15 @@ function musicFeedSignature(profile) {
 
 async function musicLoadFeed(force) {
   if (musicState.feedLoading) return;
+  if (musicGuestMode()) {
+    musicState.feed = [];
+    musicState.feedMode = 'guest';
+    musicState.feedTitle = 'Guest mode';
+    musicState.feedSubtitle = 'Search to start — YouTube player, ads and low quality';
+    musicState.feedLoading = false;
+    musicRenderFeed();
+    return;
+  }
   const profile = musicProfile();
   const signature = musicFeedSignature(profile);
   const cached = !force && musicFeedCacheGet(signature);
@@ -4740,55 +5030,42 @@ function musicRenderFeed() {
   if (title) title.textContent = musicState.feedTitle;
   if (subtitle) subtitle.textContent = musicState.feedSubtitle;
   if (badge) {
-    badge.textContent = musicState.feedMode === 'personalized' ? 'For you' : 'Trending';
+    badge.textContent = musicState.feedMode === 'personalized' ? 'For you' : (musicState.feedMode === 'guest' ? 'Guest' : 'Trending');
     badge.dataset.mode = musicState.feedMode;
   }
   if (!container) return;
 
   if (musicState.feedLoading && !musicState.feed.length) {
-    container.innerHTML = Array.from({ length: 8 }).map(() => `
-      <div class="music-card music-skeleton-card">
-        <div class="music-card-skel-art"></div>
-        <div class="music-skel-line" style="width:82%"></div>
-        <div class="music-skel-line" style="width:48%"></div>
+    container.innerHTML = Array.from({ length: 7 }).map(() => `
+      <div class="music-row music-skeleton">
+        <div class="music-skel-thumb"></div>
+        <div class="music-skel-lines">
+          <div class="music-skel-line" style="width:74%"></div>
+          <div class="music-skel-line" style="width:38%"></div>
+        </div>
       </div>`).join('');
     return;
   }
 
   if (!musicState.feed.length) {
+    const guest = musicGuestMode();
     container.innerHTML = `
       <div class="music-empty">
-        <div class="music-empty-icon">${hdsfdIcon('flame')}</div>
-        <div class="music-empty-title">Nothing here yet</div>
-        <div class="music-empty-sub">Search for a track, or pull the feed again.</div>
-        <button type="button" class="music-retry-btn" onclick="musicLoadFeed(true)">Load the feed</button>
+        <div class="music-empty-icon">${hdsfdIcon(guest ? 'headphones' : 'flame')}</div>
+        <div class="music-empty-title">${guest ? 'Guest mode' : 'Nothing here yet'}</div>
+        <div class="music-empty-sub">${guest
+          ? 'Search above to play through YouTube. Guests get ads and low-quality audio; sign in for the ad-free player.'
+          : 'Search for a track, or pull the feed again.'}</div>
+        <button type="button" class="music-retry-btn" onclick="${guest ? "document.getElementById('music-search-input').focus()" : 'musicLoadFeed(true)'}">${guest ? 'Search now' : 'Load the feed'}</button>
       </div>`;
     return;
   }
 
-  container.innerHTML = musicState.feed.map((item, index) => musicCardHtml(item, index)).join('');
+  container.innerHTML = musicState.feed.map((item, index) => musicRowHtml(item, {
+    play: `musicPlayFeed(${index})`,
+    add: `musicQueueAddFeed(${index})`
+  })).join('');
   musicSyncPlayControls();
-}
-
-function musicCardHtml(item, index) {
-  const active = !!(musicState.current && musicState.current.id === item.id);
-  const iconName = active && musicIsPlaying() ? 'pause' : 'play';
-  const liked = musicIsLiked(item.id);
-  return `
-    <div class="music-card ${active ? 'is-current' : ''}" data-music-row="${item.id}">
-      <button type="button" class="music-card-art" onclick="musicPlayFeed(${index})" aria-label="Play ${escapeHtml(item.title)}">
-        <img src="${escapeHtml(item.thumbnail)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">
-        <span class="music-card-play" data-music-play="${item.id}">${hdsfdIcon(iconName)}</span>
-      </button>
-      <div class="music-card-body">
-        <button type="button" class="music-card-title" onclick="musicPlayFeed(${index})">${escapeHtml(item.title)}</button>
-        <div class="music-card-sub">${escapeHtml(item.channel)}</div>
-      </div>
-      <div class="music-card-tools">
-        <button type="button" class="music-icon-btn music-like-btn ${liked ? 'is-liked' : ''}" data-music-like="${item.id}" onclick="musicToggleLikeById('${item.id}')" title="${liked ? 'Remove from taste' : 'Like'}" aria-label="Like">${hdsfdIcon('star')}</button>
-        <button type="button" class="music-icon-btn" onclick="musicQueueAddFeed(${index})" title="Add to queue" aria-label="Add to queue">${hdsfdIcon('plus')}</button>
-      </div>
-    </div>`;
 }
 
 function musicPlayFeed(index) {
@@ -4800,7 +5077,7 @@ function musicQueueAddFeed(index) {
   const item = musicState.feed[index];
   if (!item) return;
   musicQueueAdd(item);
-  showInAppNotification(`Added to queue: ${item.title}`);
+  showInAppNotification('', { title: 'Added to queue', description: item.title || '', variant: 'success' });
 }
 
 // ---------------------------------------------------------------------------
@@ -4811,6 +5088,7 @@ function musicRowHtml(item, options) {
   const active = !!(musicState.current && musicState.current.id === item.id);
   const iconName = active && musicIsPlaying() ? 'pause' : 'play';
   const liked = musicIsLiked(item.id);
+  const saved = musicIsSaved(item.id);
   const thumb = escapeHtml(item.thumbnail || `https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`);
   return `
     <div class="music-row ${active ? 'is-current' : ''}" data-music-row="${item.id}">
@@ -4821,7 +5099,7 @@ function musicRowHtml(item, options) {
           <span class="music-row-sub">${escapeHtml(musicMetaLine(item))}</span>
         </span>
       </button>
-      <button type="button" class="music-icon-btn music-like-btn ${liked ? 'is-liked' : ''}" data-music-like="${item.id}" onclick="musicToggleLikeById('${item.id}')" title="${liked ? 'Remove from taste' : 'Like'}" aria-label="Like">${hdsfdIcon('star')}</button>
+      <button type="button" class="music-icon-btn music-like-btn ${liked ? 'is-liked' : ''}" data-music-like="${item.id}" onclick="musicToggleLikeById('${item.id}')" title="${saved ? 'Remove from Saved' : 'Save'}" aria-label="${saved ? 'Remove from Saved' : 'Save track'}">${hdsfdIcon('star')}</button>
       ${opts.add ? `<button type="button" class="music-icon-btn" onclick="${opts.add}" title="Add to queue" aria-label="Add to queue">${hdsfdIcon('plus')}</button>` : ''}
       <button type="button" class="music-play-btn" data-music-play="${item.id}" onclick="${opts.play}" title="Play">${hdsfdIcon(iconName)}</button>
     </div>`;
@@ -4856,7 +5134,7 @@ function musicQueueAddResult(index) {
   const item = musicState.results[index];
   if (!item) return;
   musicQueueAdd(item);
-  showInAppNotification(`Added to queue: ${item.title}`);
+  showInAppNotification('', { title: 'Added to queue', description: item.title || '', variant: 'success' });
 }
 
 function musicHandleQuery(queryOrUrl) {
@@ -4943,12 +5221,17 @@ function musicQueueAdd(item) {
 // The relay resolves Innertube formats and proxies the bytes, so the app host
 // never has to reach YouTube and the browser never sees an ad.
 async function musicRelayBaseUrl() {
+  // Guests never learn or touch the relay origin. No Cloudflare request at all.
+  if (musicGuestMode()) {
+    musicRelayBase = '';
+    return '';
+  }
   if (musicRelayBase !== null) return musicRelayBase;
   if (!musicRelayPromise) {
-    musicRelayPromise = fetch(`${API_BASE}/music/config`, { cache: 'no-store' })
+    musicRelayPromise = fetch(`${API_BASE}/music/config`, { cache: 'no-store', headers: hdsfdAuthHeaders() })
       .then(res => res.json())
       .then(data => {
-        musicRelayBase = (data && data.relay_base) || '';
+        musicRelayBase = (!data || data.guest) ? '' : ((data && data.relay_base) || '');
         return musicRelayBase;
       })
       .catch(() => { musicRelayBase = ''; return ''; });
@@ -5005,6 +5288,11 @@ function musicPickAudioFormat(audio, formats) {
 async function musicStartAudio(item) {
   const audio = musicAudioEl();
   const token = ++musicPlayToken;
+  if (musicGuestMode()) {
+    musicEmbedPlay(item);
+    return;
+  }
+  musicEmbedStop();
   musicState.engine = 'audio';
   musicState.resolvingItem = item;
   musicSetEngineBadge('Connecting…', 'audio');
@@ -5080,20 +5368,21 @@ function musicFallbackYouTube(item) {
     } catch (e) { /* noop */ }
   }
   musicState.resolving = false;
-  musicPill.fail('Using YouTube player');
-  musicState.engine = 'youtube';
-  musicSetEngineBadge('YouTube embed', 'youtube');
-  const input = document.getElementById('yt-song-input');
-  if (input) input.value = `https://www.youtube.com/watch?v=${item.id}`;
-  ytCurrentVideoId = null;
-  ytCurrentPlaylistId = null;
-  isYTPlaying = false;
-  toggleYouTubePlayback();
-  musicSyncPlayControls();
+  musicPill.hide();
+  // The hidden YT widget API is unreliable on some networks; the direct embed
+  // gives the same official player (ads included) without needing its methods.
+  musicEmbedPlay(item, 'YouTube embed', false);
 }
 
 function musicToggle() {
   if (musicState.engine === 'youtube') {
+    if (musicEmbedFrame && musicEmbedFrame.isConnected) {
+      isYTPlaying = !isYTPlaying;
+      musicEmbedPost(isYTPlaying ? 'playVideo' : 'pauseVideo');
+      updateYTButtonState(isYTPlaying);
+      musicSetPlayingUI(isYTPlaying);
+      return;
+    }
     toggleYouTubePlayback();
     setTimeout(musicSyncPlayControls, 120);
     return;
@@ -5123,12 +5412,13 @@ function musicNext(source) {
   const fromEnded = source === 'ended';
   if (!fromEnded && musicState.current) musicTasteMaybeSkip(musicState.current);
 
-  if (musicState.engine === 'youtube' && ytPlayer && ytCurrentPlaylistId && ytPlayer.nextVideo) {
+  if (!musicEmbedFrame && musicState.engine === 'youtube' && ytPlayer && ytCurrentPlaylistId && ytPlayer.nextVideo) {
     ytPlayer.nextVideo();
     return;
   }
   if (!musicState.queue.length) {
-    if (musicState.radio && musicState.current) musicStartMoreRadio();
+    if (musicState.radio && musicState.current && !musicGuestMode()) musicStartMoreRadio();
+    else musicSetPlayingUI(false);
     return;
   }
 
@@ -5146,7 +5436,7 @@ function musicNext(source) {
   }
 
   if (nextIndex === null) {
-    if (musicState.radio) {
+    if (musicState.radio && !musicGuestMode()) {
       musicStartMoreRadio(fromEnded);
     } else {
       musicSetPlayingUI(false);
@@ -5168,7 +5458,7 @@ function musicNext(source) {
 }
 
 function musicPrev() {
-  if (musicState.engine === 'youtube' && ytPlayer && ytCurrentPlaylistId && ytPlayer.previousVideo) {
+  if (!musicEmbedFrame && musicState.engine === 'youtube' && ytPlayer && ytCurrentPlaylistId && ytPlayer.previousVideo) {
     ytPlayer.previousVideo();
     return;
   }
@@ -5189,6 +5479,10 @@ function musicPrev() {
 
 function musicHandleEnded() {
   if (musicState.current) musicTasteCountPlay(musicState.current);
+  if (musicState.repeat === 'one' && musicEmbedFrame && musicState.current) {
+    musicEmbedPlay(musicState.current);
+    return;
+  }
   const audio = musicAudioEl();
   if (musicState.repeat === 'one' && audio) {
     audio.currentTime = 0;
@@ -5205,6 +5499,16 @@ function musicHandleEnded() {
 
 function musicSeek(percent) {
   const value = Number(percent) || 0;
+  if (musicState.engine === 'youtube' && musicEmbedFrame) {
+    const duration = musicEmbedDuration || musicKnownDuration();
+    if (duration > 0) {
+      musicEmbedTime = (value / 100) * duration;
+      ytSavedTime = musicEmbedTime;
+      musicEmbedPost('seekTo', [musicEmbedTime, true]);
+      musicUpdateProgress();
+    }
+    return;
+  }
   if (musicState.engine === 'youtube' && ytPlayer && ytPlayer.getDuration && ytPlayer.seekTo) {
     const duration = ytPlayer.getDuration() || 0;
     if (duration > 0) ytPlayer.seekTo((value / 100) * duration, true);
@@ -5223,6 +5527,7 @@ function musicSetVolume(value) {
   musicState.volume = numeric / 100;
   const audio = musicAudioEl();
   if (audio) audio.volume = musicState.volume;
+  if (musicEmbedFrame) musicEmbedPost('setVolume', [Math.round(numeric)]);
   if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(numeric);
   const label = document.getElementById('music-volume-label');
   if (label) label.textContent = `${Math.round(numeric)}%`;
@@ -5234,8 +5539,9 @@ function musicSetVolume(value) {
 function musicUpdateProgress() {
   const audio = musicAudioEl();
   if (!audio) return;
-  const duration = musicKnownDuration();
-  const current = audio.currentTime || 0;
+  const guestFrame = musicState.engine === 'youtube' && musicEmbedFrame;
+  const duration = guestFrame ? (musicEmbedDuration || musicKnownDuration()) : musicKnownDuration();
+  const current = guestFrame ? musicEmbedTime : (audio.currentTime || 0);
   const percent = duration > 0 ? (current / duration) * 100 : 0;
 
   const seek = document.getElementById('music-seek');
@@ -5293,9 +5599,11 @@ function musicSyncPlayControls() {
   });
 
   document.querySelectorAll('[data-music-like]').forEach(button => {
-    const liked = musicIsLiked(button.getAttribute('data-music-like'));
+    const id = button.getAttribute('data-music-like');
+    const liked = musicIsLiked(id);
     button.classList.toggle('is-liked', liked);
-    button.title = liked ? 'Remove from taste' : 'Like';
+    button.title = musicIsSaved(id) ? 'Remove from Saved' : 'Save';
+    button.setAttribute('aria-label', musicIsSaved(id) ? 'Remove from Saved' : 'Save track');
   });
 }
 
@@ -5320,6 +5628,14 @@ function musicCycleRepeat() {
 }
 
 function musicToggleRadio() {
+  if (musicGuestMode()) {
+    showInAppNotification('', {
+      title: 'Sign in for smart radio',
+      description: 'Guest mode keeps the old YouTube player — no smart queue, ads included.',
+      variant: 'warning'
+    });
+    return;
+  }
   musicState.radio = !musicState.radio;
   musicStoreSet(MUSIC_KEYS.radio, String(musicState.radio));
   musicUpdateToggles();
@@ -5341,9 +5657,13 @@ function musicToggleAutoplay() {
 function musicUpdateToggles() {
   const radio = document.getElementById('music-radio-toggle');
   if (radio) {
-    radio.classList.toggle('is-on', musicState.radio);
-    radio.setAttribute('aria-pressed', musicState.radio ? 'true' : 'false');
-    radio.innerHTML = `${hdsfdIcon('radio')}<span>Smart radio ${musicState.radio ? 'on' : 'off'}</span>`;
+    const guest = musicGuestMode();
+    radio.classList.toggle('is-on', musicState.radio && !guest);
+    radio.classList.toggle('is-disabled', guest);
+    radio.setAttribute('aria-pressed', musicState.radio && !guest ? 'true' : 'false');
+    radio.disabled = guest;
+    radio.title = guest ? 'Sign in for smart radio' : 'Smart radio';
+    radio.innerHTML = `${hdsfdIcon('radio')}<span>${guest ? 'Radio · sign in' : `Smart radio ${musicState.radio ? 'on' : 'off'}`}</span>`;
   }
   const autoplay = document.getElementById('music-autoplay-toggle');
   if (autoplay) {
@@ -5365,6 +5685,7 @@ async function musicLoadRadio(options) {
   const opts = options || {};
   const seed = opts.seed || musicState.current;
   if (!seed || !seed.id) return [];
+  if (musicGuestMode()) return [];
   if (musicState.radioLoading && musicRadioPromise) return musicRadioPromise;
 
   musicState.radioLoading = true;
@@ -5432,14 +5753,14 @@ function musicUpdateFeedNote(count) {
 }
 
 function musicMaybeExtendQueue() {
-  if (!musicState.radio || !musicState.current || musicState.radioLoading) return;
+  if (musicGuestMode() || !musicState.radio || !musicState.current || musicState.radioLoading) return;
   const remaining = musicState.queue.length - musicState.index - 1;
   if (remaining > 2) return;
   musicLoadRadio().catch(() => {});
 }
 
 async function musicStartMoreRadio(fromEnded) {
-  if (!musicState.current || musicState.radioLoading) return;
+  if (musicGuestMode() || !musicState.current || musicState.radioLoading) return;
   musicPill.start('Building radio');
   musicState.radioLoading = true;
   try {
@@ -5519,7 +5840,7 @@ function musicRenderQueue() {
   musicUpdateToggles();
   if (!container) return;
   if (!musicState.queue.length) {
-    container.innerHTML = `<div class="music-empty"><div class="music-empty-title">Queue is empty</div><div class="music-empty-sub">Play something, or add tracks from Home and Search. Smart radio fills the rest.</div></div>`;
+    container.innerHTML = `<div class="music-empty"><div class="music-empty-title">Queue is empty</div><div class="music-empty-sub">${musicGuestMode() ? 'Play or add tracks from Home, Saved or search results.' : 'Play something, or add tracks from Home and Saved. Smart radio fills the rest.'}</div></div>`;
     return;
   }
 
@@ -5572,6 +5893,38 @@ function musicAddRecent(item) {
   musicRenderRecent();
 }
 
+function musicRenderSaved() {
+  const container = document.getElementById('music-saved-list');
+  const count = document.getElementById('music-saved-count');
+  if (count) count.textContent = String(musicState.saved.length);
+  if (!container) return;
+  if (!musicState.saved.length) {
+    container.innerHTML = `<div class="music-empty">
+      <div class="music-empty-icon">${hdsfdIcon('star')}</div>
+      <div class="music-empty-title">Nothing saved yet</div>
+      <div class="music-empty-sub">Tap the star on any track. Saved songs stay here and teach radio and your feed.</div>
+    </div>`;
+    return;
+  }
+  container.innerHTML = musicState.saved.map((item, index) => musicRowHtml(item, {
+    play: `musicPlaySaved(${index})`,
+    add: `musicQueueAddSaved(${index})`
+  })).join('');
+  musicSyncPlayControls();
+}
+
+function musicPlaySaved(index) {
+  const item = musicState.saved[index];
+  if (item) musicPlayItem(item, true);
+}
+
+function musicQueueAddSaved(index) {
+  const item = musicState.saved[index];
+  if (!item) return;
+  musicQueueAdd(item);
+  showInAppNotification('', { title: 'Added to queue', description: item.title || '', variant: 'success' });
+}
+
 function musicRenderRecent() {
   const container = document.getElementById('music-recent-list');
   if (!container) return;
@@ -5611,9 +5964,11 @@ function musicRestoreState() {
       musicRenderQueue();
     }
   } catch (e) { /* noop */ }
+  musicLoadSaved();
   musicSetVolume(musicState.volume * 100);
   musicUpdateToggles();
   musicRenderRecent();
+  musicRenderSaved();
   musicSyncPlayControls();
 }
 
@@ -5637,6 +5992,12 @@ function bindMusicAudio() {
   audio.addEventListener('waiting', () => {
     if (musicState.engine === 'audio' && musicState.current && !musicState.resolving) {
       musicSetEngineBadge('Buffering…', 'audio');
+    }
+  });
+  audio.addEventListener('playing', () => {
+    if (musicState.engine === 'audio' && musicState.current) {
+      musicSetEngineBadge('Ad-free audio', 'audio');
+      musicState.error = '';
     }
   });
   audio.addEventListener('error', () => {
@@ -6010,7 +6371,7 @@ function toggleYouTubePlayback() {
   }
 
   if (!url && !ytCurrentVideoId && !ytCurrentPlaylistId) {
-    alert('Please paste a YouTube song or playlist link.');
+    showInAppNotification('Paste a YouTube song or playlist link first.', { variant: 'warning' });
     return;
   }
 
@@ -7725,23 +8086,81 @@ function initFallingPetals() {
   petalsInterval = setInterval(createPetal, 1500);
 }
 
-function showInAppNotification(message) {
-  let toast = document.getElementById('in-app-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'in-app-toast';
-    toast.className = 'fixed top-5 left-1/2 -translate-x-1/2 z-[9999999] glass px-4 py-2.5 rounded-2xl border border-purple-500/40 text-xs font-bold text-white shadow-2xl transition-all duration-300 pointer-events-none transform -translate-y-10 opacity-0';
-    document.body.appendChild(toast);
+// ===== GLASS TOASTS =====
+// One toast system for the whole app. The old banner was a single clipped line;
+// these wrap, stack, pause on hover, and never run past the viewport edge.
+function showInAppNotification(message, options) {
+  const opts = options || {};
+  const text = String(message == null ? '' : message).replace(/^[\s+\-•]+/, '').trim();
+  const title = String(opts.title || text || 'Notice');
+  const description = String(opts.description || '').trim();
+  let variant = opts.variant || '';
+  if (!variant) {
+    if (/^(\+|✓)|\b(earned|saved|added|welcome|on)\b/i.test(title)) variant = 'success';
+    else if (/^(-)|\b(failed|error|could not|unavailable|no results|off)\b/i.test(title)) variant = 'error';
+    else if (/\b(guest|sign in|limit|disconnect)\b/i.test(title)) variant = 'warning';
+    else variant = 'info';
   }
+  const iconName = variant === 'success' ? 'check' : (variant === 'error' || variant === 'warning') ? 'triangle-alert' : 'info';
+  const duration = Math.max(1800, Number(opts.duration) || (variant === 'error' ? 6200 : 4400));
 
-  toast.textContent = message;
-  toast.classList.remove('-translate-y-10', 'opacity-0');
-  toast.classList.add('translate-y-0', 'opacity-100');
+  let region = document.getElementById('hdsfd-toast-region');
+  if (!region) {
+    region = document.createElement('section');
+    region.id = 'hdsfd-toast-region';
+    region.setAttribute('aria-label', 'Notifications');
+    region.innerHTML = '<ol aria-live="polite" aria-relevant="additions"></ol>';
+    document.body.appendChild(region);
+  }
+  const legacy = document.getElementById('in-app-toast');
+  if (legacy) legacy.remove();
+  const list = region.querySelector('ol');
+  if (!list) return;
 
-  setTimeout(() => {
-    toast.classList.remove('translate-y-0', 'opacity-100');
-    toast.classList.add('-translate-y-10', 'opacity-0');
-  }, 4000);
+  const item = document.createElement('div');
+  item.className = 'hdsfd-toast';
+  item.dataset.variant = variant;
+  item.setAttribute('role', variant === 'error' ? 'alert' : 'status');
+  item.style.setProperty('--toast-duration', duration + 'ms');
+  item.innerHTML = `
+    <span class="hdsfd-toast-icon">${hdsfdIcon(iconName)}</span>
+    <div class="hdsfd-toast-copy">
+      <div class="hdsfd-toast-title"></div>
+      ${description ? '<div class="hdsfd-toast-desc"></div>' : ''}
+    </div>
+    <button type="button" class="hdsfd-toast-close" aria-label="Dismiss">${hdsfdIcon('x')}</button>
+    <span class="hdsfd-toast-progress" aria-hidden="true"></span>`;
+  item.querySelector('.hdsfd-toast-title').textContent = title;
+  const desc = item.querySelector('.hdsfd-toast-desc');
+  if (desc) desc.textContent = description;
+
+  while (list.children.length >= 4) list.lastElementChild.remove();
+  list.prepend(item);
+
+  let remaining = duration;
+  let startedAt = Date.now();
+  let timer = null;
+  const remove = () => {
+    clearTimeout(timer);
+    if (!item.isConnected || item.classList.contains('is-leaving')) return;
+    item.classList.add('is-leaving');
+    setTimeout(() => item.remove(), 260);
+  };
+  const start = () => {
+    startedAt = Date.now();
+    timer = setTimeout(remove, Math.max(400, remaining));
+  };
+  item.querySelector('.hdsfd-toast-close').addEventListener('click', remove);
+  item.addEventListener('pointerenter', () => {
+    clearTimeout(timer);
+    remaining = Math.max(400, remaining - (Date.now() - startedAt));
+    item.classList.add('is-paused');
+  });
+  item.addEventListener('pointerleave', () => {
+    item.classList.remove('is-paused');
+    start();
+  });
+  start();
 }
 
 function refreshIcons() {
@@ -7838,8 +8257,10 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshIcons();
 
   // Music engine: bind the audio element and restore the saved session
+  initLiquidNav();
   bindMusicAudio();
   musicRestoreState();
+  musicRefreshEntitlement();
   updateAIContextBadge(buildAIWorkspaceContext());
   initScrollPaintGuard();
 

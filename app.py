@@ -3024,20 +3024,21 @@ def _music_relay_search(query, limit=14):
         return None
 
 
-def _music_search(query, limit=14):
-    """Cached search: relay first, local scrape second."""
+def _music_search(query, limit=14, allow_relay=True):
+    """Cached search: relay first (signed-in only), local scrape second."""
     query = (query or '').strip()[:160]
     if not query:
         return []
     limit = max(1, min(30, int(limit or 14)))
-    cache_key = (query.lower(), limit)
+    allow_relay = bool(allow_relay)
+    cache_key = (query.lower(), limit, allow_relay)
     now = _time.time()
     with _MUSIC_LOCK:
         cached = _MUSIC_RESULT_CACHE.get(cache_key)
     if cached and cached.get('expires', 0) > now:
         return cached['results']
 
-    results = _music_relay_search(query, limit)
+    results = _music_relay_search(query, limit) if allow_relay else None
     if not results:
         try:
             results = _youtube_search_results(query, limit)
@@ -3052,32 +3053,34 @@ def _music_search(query, limit=14):
     return results
 
 
-def _music_safe_search(query, limit=10):
+def _music_safe_search(query, limit=10, allow_relay=True):
     try:
-        return _music_search(query, limit)
+        return _music_search(query, limit, allow_relay=allow_relay)
     except Exception:
         return []
 
 
-def _music_parallel_search(queries, per_query=10):
+def _music_parallel_search(queries, per_query=10, allow_relay=True):
     unique = [query for query in dict.fromkeys(queries) if query][:5]
     if not unique:
         return []
+    allow_relay = bool(allow_relay)
     try:
         from concurrent.futures import ThreadPoolExecutor
         with ThreadPoolExecutor(max_workers=min(3, len(unique))) as pool:
-            lists = list(pool.map(lambda query: _music_safe_search(query, per_query), unique))
+            lists = list(pool.map(lambda query: _music_safe_search(query, per_query, allow_relay), unique))
     except Exception:
-        lists = [_music_safe_search(query, per_query) for query in unique]
+        lists = [_music_safe_search(query, per_query, allow_relay) for query in unique]
     merged = []
     for group in lists:
         merged.extend(group)
     return merged
 
 
-def _music_feed_payload(profile, limit=18):
+def _music_feed_payload(profile, limit=18, allow_relay=True):
     """Trending for a new listener, personalised once taste exists."""
     profile = profile if isinstance(profile, dict) else {}
+    allow_relay = bool(allow_relay)
     limit = max(6, min(30, int(limit or 18)))
     artists = [str(name).strip()[:60] for name in (profile.get('artists') or []) if str(name).strip()][:6]
     terms = [str(term).strip()[:40] for term in (profile.get('terms') or []) if str(term).strip()][:6]
@@ -3090,12 +3093,12 @@ def _music_feed_payload(profile, limit=18):
         queries = [f'{artist} songs' for artist in artists[:3]]
         queries += [f'{term} mix' for term in terms[:2]]
         queries.append('new music this week')
-        cache_key = ('p', tuple(artists[:3]), tuple(terms[:2]), day, limit)
+        cache_key = ('p', tuple(artists[:3]), tuple(terms[:2]), day, limit, allow_relay)
         title = 'Made for you'
         subtitle = f'Built from {len(artists)} artist{"s" if len(artists) != 1 else ""} you play'
     else:
         queries = list(_MUSIC_TRENDING_ROTATION[day % len(_MUSIC_TRENDING_ROTATION)])
-        cache_key = ('t', day, limit)
+        cache_key = ('t', day, limit, allow_relay)
         title = 'Trending now'
         subtitle = 'The biggest tracks everyone is playing'
 
@@ -3108,7 +3111,7 @@ def _music_feed_payload(profile, limit=18):
             return {'mode': 'personalized' if personalized else 'trending', 'title': title,
                     'subtitle': subtitle, 'results': cached_results}
 
-    items = _music_parallel_search(queries, per_query=10)
+    items = _music_parallel_search(queries, per_query=10, allow_relay=allow_relay)
     items = _music_dedupe(items)
     affinity = {_music_channel_key(name): max(1.0, 7.0 - index * 1.2) for index, name in enumerate(artists)}
     term_tokens = set()
@@ -3134,8 +3137,9 @@ def _music_feed_payload(profile, limit=18):
             'subtitle': subtitle, 'results': results}
 
 
-def _music_radio_payload(payload, limit=12):
+def _music_radio_payload(payload, limit=12, allow_relay=True):
     payload = payload if isinstance(payload, dict) else {}
+    allow_relay = bool(allow_relay)
     limit = max(4, min(24, int(payload.get('limit') or 12)))
     seed_id = str(payload.get('videoId') or '').strip()
     title = _music_clean(payload.get('title'))
@@ -3145,7 +3149,7 @@ def _music_radio_payload(payload, limit=12):
     if seed_id:
         exclude.add(seed_id)
 
-    cache_key = seed_id or _music_title_key(title + ' ' + channel)
+    cache_key = (seed_id or _music_title_key(title + ' ' + channel), allow_relay)
     now = _time.time()
     with _MUSIC_LOCK:
         cached = _MUSIC_RADIO_CACHE.get(cache_key)
@@ -3162,7 +3166,7 @@ def _music_radio_payload(payload, limit=12):
         if channel and words:
             queries.append(f'{channel} {words[0]}')
         queries.append('songs like ' + (title or channel or 'this track'))
-        items = _music_parallel_search(queries, per_query=10)
+        items = _music_parallel_search(queries, per_query=10, allow_relay=allow_relay)
         items = _music_dedupe(items)
 
         seed_tokens = set(_music_tokens(title))
@@ -3229,12 +3233,20 @@ MUSIC_RELAY_BASE = _load_music_relay_base()
 
 @app.route('/api/music/config', methods=['GET'])
 def music_config():
-    """Advertise the relay origin so the client can play audio directly."""
+    """Advertise the relay only to a signed-in session.
+
+    Guest mode is deliberately Cloudflare-free: it must play through the old
+    YouTube embed (ads, low quality) and never learn the relay origin.
+    """
+    signed_in = bool(current_user())
+    relay_base = MUSIC_RELAY_BASE if signed_in else ''
     response = jsonify({
         'status': 'success',
-        'relay': bool(MUSIC_RELAY_BASE),
-        'relay_base': MUSIC_RELAY_BASE or None,
-        'engine': 'innertube-relay' if MUSIC_RELAY_BASE else 'unconfigured',
+        'guest': not signed_in,
+        'relay': bool(relay_base),
+        'relay_base': relay_base or None,
+        'engine': 'innertube-relay' if relay_base else ('youtube-embed' if not signed_in else 'unconfigured'),
+        'quality': 'tiny' if not signed_in else 'best',
     })
     response.headers['Cache-Control'] = 'no-store'
     return response
@@ -3249,7 +3261,9 @@ def music_search():
         query = query[:160]
     limit = request.args.get('limit', 14, type=int) or 14
     try:
-        results = _music_search(query, limit)
+        # Guests are forced onto the local YouTube scrape: no relay, ever.
+        allow_relay = bool(current_user())
+        results = _music_search(query, limit, allow_relay=allow_relay)
         response = jsonify({'status': 'success', 'query': query, 'results': results})
         response.headers['Cache-Control'] = 'no-store'
         return response
@@ -3274,7 +3288,7 @@ def music_feed():
     else:
         limit = request.args.get('limit', 18, type=int) or 18
     try:
-        payload = _music_feed_payload(profile, limit)
+        payload = _music_feed_payload(profile, limit, allow_relay=bool(current_user()))
         response = jsonify({'status': 'success', **payload})
         response.headers['Cache-Control'] = 'no-store'
         return response
@@ -3299,7 +3313,7 @@ def music_radio():
             'limit': request.args.get('limit', 12, type=int) or 12,
         }
     try:
-        result = _music_radio_payload(payload)
+        result = _music_radio_payload(payload, allow_relay=bool(current_user()))
         response = jsonify({'status': 'success', **result})
         response.headers['Cache-Control'] = 'no-store'
         return response

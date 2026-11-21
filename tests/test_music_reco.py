@@ -50,7 +50,7 @@ FAKE = {
 }
 
 
-def fake_search(query, limit=14):
+def fake_search(query, limit=14, allow_relay=True):
     return [dict(item) for item in FAKE.get(query, [])][:limit]
 
 
