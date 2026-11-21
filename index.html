@@ -998,6 +998,259 @@
       text-transform: uppercase;
       color: rgba(147, 197, 253, 0.95);
     }
+  
+    /* ===== QUICKLIQUID SURFACES (vendor/quick-liquid, MIT) ===== */
+    /* The engine owns the frost, rim light and refraction; the old CSS glass keeps
+       working as the material underneath and as the fallback on unsupported engines. */
+    .hdsfd-liquid {
+      isolation: auto !important;
+      padding: 0 !important;
+      background-clip: border-box;
+    }
+    .hdsfd-liquid:is(.glass, .glass-card, .glass-panel, .glass-modal, .music-shell) {
+      -webkit-backdrop-filter: none !important;
+      backdrop-filter: none !important;
+    }
+    .hdsfd-liquid::before { display: none; }
+    .hdsfd-liquid > .ql-content { min-width: 0; min-height: 0; }
+    .hdsfd-liquid .ql-lens, .hdsfd-liquid .ql-tint,
+    .hdsfd-liquid .ql-sheen, .hdsfd-liquid .ql-rim { z-index: 1; }
+    .hdsfd-ql-content { z-index: 10; }
+
+    /* ===== HOME MUSIC DECK (scrubber + transport) ===== */
+    .hdsfd-deck {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding: 8px 9px 9px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      transition: opacity 0.35s ease, border-color 0.35s ease;
+    }
+    .hdsfd-deck.is-idle { opacity: 0.62; }
+    .hdsfd-deck.is-idle:hover { opacity: 0.9; }
+    .hdsfd-scrub { display: flex; align-items: center; gap: 7px; }
+    .hdsfd-time {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 9px;
+      color: rgba(255, 255, 255, 0.45);
+      min-width: 26px;
+      font-variant-numeric: tabular-nums;
+    }
+    .hdsfd-time:last-child { text-align: right; }
+    .hdsfd-range {
+      -webkit-appearance: none;
+      appearance: none;
+      flex: 1 1 auto;
+      min-width: 0;
+      height: 14px;
+      background: transparent;
+      cursor: pointer;
+      --p: 0%;
+    }
+    .hdsfd-range::-webkit-slider-runnable-track {
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg,
+        rgba(251, 113, 133, 0.95) 0%, rgba(244, 63, 94, 0.95) var(--p),
+        rgba(255, 255, 255, 0.14) var(--p), rgba(255, 255, 255, 0.14) 100%);
+    }
+    .hdsfd-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 11px;
+      height: 11px;
+      margin-top: -4px;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.4);
+      transition: transform 0.18s cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+    .hdsfd-range:hover::-webkit-slider-thumb { transform: scale(1.2); }
+    .hdsfd-range:active::-webkit-slider-thumb { transform: scale(1.05); }
+    .hdsfd-range::-moz-range-track {
+      height: 3px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .hdsfd-range::-moz-range-progress {
+      height: 3px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, rgba(251, 113, 133, 0.95), rgba(244, 63, 94, 0.95));
+    }
+    .hdsfd-range::-moz-range-thumb {
+      width: 11px;
+      height: 11px;
+      border: 0;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, 0.5);
+    }
+    .hdsfd-range-vol { flex: 0 1 68px; max-width: 68px; }
+    .hdsfd-range-vol::-webkit-slider-runnable-track {
+      background: linear-gradient(90deg,
+        rgba(255, 255, 255, 0.55) 0 var(--p),
+        rgba(255, 255, 255, 0.14) var(--p) 100%);
+    }
+    .hdsfd-range-vol::-moz-range-progress { background: rgba(255, 255, 255, 0.55); }
+    .hdsfd-deck-row { display: flex; align-items: center; gap: 5px; }
+    .hdsfd-deck-btn {
+      width: 26px;
+      height: 26px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.72);
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: transform 0.18s ease, background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .hdsfd-deck-btn .hdsfd-icon { width: 13px; height: 13px; }
+    .hdsfd-deck-btn:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.14);
+      transform: translateY(-1px);
+    }
+    .hdsfd-deck-btn:active { transform: scale(0.93); }
+    .hdsfd-deck-btn.is-primary {
+      width: 32px;
+      height: 32px;
+      color: #fff;
+      background: linear-gradient(160deg, #fb7185, #e11d48);
+      border-color: rgba(255, 255, 255, 0.34);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.42), 0 8px 18px -10px rgba(244, 63, 94, 0.95);
+    }
+    .hdsfd-deck-btn.is-primary .hdsfd-icon { width: 15px; height: 15px; }
+    .hdsfd-deck-btn.is-on {
+      color: #fda4af;
+      background: rgba(244, 63, 94, 0.16);
+      border-color: rgba(244, 63, 94, 0.45);
+    }
+    .hdsfd-deck-vol { display: flex; align-items: center; gap: 5px; margin-left: auto; min-width: 0; }
+
+    /* ===== PLUS BUTTON ===== */
+    .hdsfd-plus {
+      width: 28px;
+      height: 28px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.92);
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08));
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 10px 24px -14px rgba(0, 0, 0, 0.95);
+      -webkit-backdrop-filter: blur(14px) saturate(160%);
+      backdrop-filter: blur(14px) saturate(160%);
+      transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1), background 0.25s ease, border-color 0.25s ease;
+    }
+    .hdsfd-plus .hdsfd-icon { width: 15px; height: 15px; }
+    .hdsfd-plus:hover {
+      transform: translateY(-1px) scale(1.06);
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.13));
+      border-color: rgba(255, 255, 255, 0.42);
+    }
+    .hdsfd-plus:active { transform: scale(0.93); }
+    .hdsfd-plus-rail {
+      position: absolute;
+      right: 14px;
+      bottom: 14px;
+      z-index: 40;
+      display: flex;
+      pointer-events: auto;
+    }
+    .hdsfd-plus-floating {
+      width: 36px;
+      height: 36px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 14px 30px -14px rgba(0, 0, 0, 1);
+    }
+    .hdsfd-plus-floating .hdsfd-icon { width: 17px; height: 17px; }
+
+    /* ===== ORBIT NAVIGATOR (empty pages + right-click zones) ===== */
+    .hdsfd-orbit {
+      position: fixed;
+      right: 18px;
+      bottom: 96px;
+      z-index: 99990;
+      width: 52px;
+      height: 52px;
+    }
+    @media (min-width: 768px) {
+      .hdsfd-orbit { right: 26px; bottom: 28px; }
+    }
+    .hdsfd-orbit[data-mode="context"] { right: auto; bottom: auto; width: 0; height: 0; }
+    .hdsfd-orbit-trigger {
+      width: 52px;
+      height: 52px;
+      border-radius: 999px;
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.09));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.55), 0 18px 40px -18px rgba(0, 0, 0, 1);
+    }
+    .hdsfd-orbit-trigger .hdsfd-icon {
+      width: 22px;
+      height: 22px;
+      transition: transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+    }
+    .hdsfd-orbit.is-open .hdsfd-orbit-trigger .hdsfd-icon { transform: rotate(135deg); }
+    .hdsfd-orbit[data-mode="context"] .hdsfd-orbit-trigger { display: none; }
+    .hdsfd-orbit-fan { position: absolute; inset: 0; pointer-events: none; }
+    .hdsfd-orbit-item {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 38px;
+      height: 38px;
+      margin: -19px 0 0 -19px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: rgba(255, 255, 255, 0.88);
+      background: linear-gradient(160deg, rgba(38, 44, 68, 0.94), rgba(13, 17, 30, 0.96));
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 16px 34px -18px rgba(0, 0, 0, 1);
+      -webkit-backdrop-filter: blur(16px) saturate(170%);
+      backdrop-filter: blur(16px) saturate(170%);
+      opacity: 0;
+      transform: translate(0, 0) scale(0.45);
+      pointer-events: none;
+      transition: transform 0.36s cubic-bezier(0.2, 0.9, 0.25, 1), opacity 0.24s ease;
+      transition-delay: 0ms;
+    }
+    .hdsfd-orbit-item .hdsfd-icon { width: 16px; height: 16px; }
+    .hdsfd-orbit.is-open .hdsfd-orbit-item {
+      opacity: 1;
+      transform: translate(var(--x), calc(var(--y) - 4px)) scale(1);
+      pointer-events: auto;
+      transition-delay: var(--d);
+    }
+    .hdsfd-orbit-item:hover { border-color: rgba(253, 164, 175, 0.55); color: #fff; }
+    .hdsfd-orbit-label {
+      position: absolute;
+      left: calc(100% + 8px);
+      top: 50%;
+      transform: translate(-4px, -50%);
+      white-space: nowrap;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      color: #fff;
+      background: rgba(10, 13, 24, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      padding: 3px 9px;
+      border-radius: 999px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    .hdsfd-orbit-item:hover .hdsfd-orbit-label { opacity: 1; transform: translate(0, -50%); }
+    @media (max-width: 640px) {
+      .hdsfd-orbit-label { display: none; }
+    }
+
   </style>
 </head>
 <body class="h-full">
@@ -1011,6 +1264,8 @@
   <symbol id="i-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-repeat" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m17 2 4 4-4 4" /> <path d="M3 11v-1a4 4 0 0 1 4-4h14" /> <path d="m7 22-4-4 4-4" /> <path d="M21 13v1a4 4 0 0 1-4 4H3" /></symbol>
   <symbol id="i-repeat-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-repeat-1" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m17 2 4 4-4 4" /> <path d="M3 11v-1a4 4 0 0 1 4-4h14" /> <path d="m7 22-4-4 4-4" /> <path d="M21 13v1a4 4 0 0 1-4 4H3" /> <path d="M11 10h1v4" /></symbol>
   <symbol id="i-volume-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-volume-2" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z" /> <path d="M16 9a5 5 0 0 1 0 6" /> <path d="M19.364 18.364a9 9 0 0 0 0-12.728" /></symbol>
+  <symbol id="i-volume-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6A1.4 1.4 0 0 1 5.4 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5z" /><path d="M16 9a5 5 0 0 1 0 6" /></symbol>
+  <symbol id="i-volume-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6A1.4 1.4 0 0 1 5.4 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5z" /><line x1="22" x2="16" y1="9" y2="15" /><line x1="16" x2="22" y1="9" y2="15" /></symbol>
   <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-x" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-plus" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M5 12h14" /> <path d="M12 5v14" /></symbol>
   <symbol id="i-trash-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-trash-2" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 6h18" /> <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /> <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /> <line x1="10" x2="10" y1="11" y2="17" /> <line x1="14" x2="14" y1="11" y2="17" /></symbol>
@@ -1866,7 +2121,7 @@
                     <span><svg class="hdsfd-icon"><use href="#i-trash-2"></use></svg></span>
                     <span>Clear</span>
                   </button>
-                  <button onclick="addPhysicsPostIt()" class="w-7 h-7 sm:w-8 sm:h-8 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-base sm:text-lg flex items-center justify-center shadow-lg shadow-amber-400/20 transition-all active:scale-95" title="Peel New Sticky Note">+</button>
+                  <button onclick="addPhysicsPostIt()" class="hdsfd-plus" title="Peel New Sticky Note" aria-label="New sticky note"><svg class="hdsfd-icon"><use href="#i-plus"></use></svg></button>
                 </div>
               </div>
 
@@ -2665,6 +2920,8 @@
     <audio id="music-audio" preload="none"></audio>
 
     <!-- App Logic Scripts (Cache-Busting Query) -->
-    <script src="app.js?v=3.4"></script>
+    <script src="app.js?v=3.5"></script>
+  <script src="hdsfd-ui.js?v=1"></script>
+  <script type="module" src="liquid-glass.js?v=1"></script>
   </body>
 </html>

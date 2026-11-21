@@ -1,5 +1,5 @@
 // HDSFD Progressive Web App Service Worker
-const CACHE_NAME = 'hdsfd-cache-v2.6';
+const CACHE_NAME = 'hdsfd-cache-v2.7';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

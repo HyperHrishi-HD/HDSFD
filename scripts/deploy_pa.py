@@ -22,6 +22,8 @@ RUNTIME_FILES = (
     "app.py",
     "index.html",
     "app.js",
+    "hdsfd-ui.js",
+    "liquid-glass.js",
     "sw.js",
     "manifest.json",
     "privacy.html",
@@ -30,6 +32,8 @@ RUNTIME_FILES = (
     "requirements.txt",
     "backend/__init__.py",
     "backend/school_connect.py",
+    "vendor/quick-liquid/index.mjs",
+    "vendor/quick-liquid/chunk-4TLGP4GF.mjs",
 )
 
 

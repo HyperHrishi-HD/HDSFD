@@ -884,6 +884,26 @@ def app_js():
     resp.headers['Expires'] = '0'
     return resp
 
+@app.route('/hdsfd-ui.js')
+def hdsfd_ui_js():
+    resp = send_from_directory('.', 'hdsfd-ui.js', mimetype='text/javascript')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+@app.route('/liquid-glass.js')
+def liquid_glass_js():
+    resp = send_from_directory('.', 'liquid-glass.js', mimetype='text/javascript')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
+
+@app.route('/vendor/quick-liquid/<path:filename>')
+def quick_liquid_vendor(filename):
+    if not filename.endswith('.mjs'):
+        return ("Not found", 404)
+    resp = send_from_directory('vendor/quick-liquid', filename, mimetype='text/javascript')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
 @app.route('/manifest.json')
 def manifest():
     return send_from_directory('.', 'manifest.json', mimetype='application/manifest+json')
