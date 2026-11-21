@@ -44,7 +44,7 @@
   <script src="https://www.youtube.com/iframe_api"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700;800;900&family=Kalam:wght@400;700&display=swap" rel="stylesheet">
   <style>
     html {
       -webkit-text-size-adjust: 100%;
@@ -54,7 +54,7 @@
     html, body {
       height: 100%;
       margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", 'Inter', sans-serif;
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", 'Inter', sans-serif;
       background-color: #0c1021;
       color: #ffffff;
       overflow: hidden;
@@ -132,9 +132,12 @@
       text-shadow: 0 4px 30px rgba(168, 85, 247, 0.4);
     }
 
+    /* v3 Fix 1: never animate a full-screen background-position behind
+       backdrop-filter panels. The gradient stays static; only compositor
+       transforms in the refraction layer move. */
     .bg-gradient-animated {
-      background-size: 400% 400%;
-      animation: gradientShift 15s ease infinite;
+      background-size: cover;
+      animation: none;
     }
 
     @keyframes gradientShift {
@@ -264,8 +267,8 @@
       z-index: 0;
       pointer-events: none;
       overflow: hidden;
-      filter: blur(72px) saturate(115%);
-      opacity: 0.28;
+      filter: none;
+      opacity: 0.24;
     }
     .refract-blob {
       position: absolute;
@@ -315,28 +318,11 @@
       scrollbar-gutter: stable;
       overscroll-behavior-y: contain;
       -webkit-overflow-scrolling: touch;
-      will-change: scroll-position;
     }
 
-    /* While the user scrolls fast, drop the expensive compositing work so the
-       browser never paints an empty frame. Everything restores on its own. */
-    body.is-scrolling #liquid-refraction-layer { opacity: 0.18; }
-    body.is-scrolling .refract-blob { animation-play-state: paused; }
-    body.is-scrolling .glass,
-    body.is-scrolling .glass-card,
-    body.is-scrolling .glass-panel,
-    body.is-scrolling .glass-modal,
-    body.is-scrolling .music-shell {
-      backdrop-filter: none !important;
-      -webkit-backdrop-filter: none !important;
-    }
-    body.is-scrolling .glass { background-color: rgba(12, 16, 32, 0.84); }
-    body.is-scrolling .glass-card { background-color: rgba(11, 15, 30, 0.88); }
-    body.is-scrolling .glass-panel { background-color: rgba(14, 18, 36, 0.9); }
-    body.is-scrolling .glass-card::before { opacity: 0.45; }
-    @media (prefers-reduced-motion: reduce) {
-      body.is-scrolling #liquid-refraction-layer { transition: none; }
-    }
+    /* v3 Fix 1: no scroll-time material swaps. The old is-scrolling rule
+       removed backdrop-filter and changed fills mid-scroll, which is what
+       produced the visible glass flash. The material now stays constant. */
     #gemini-agent-chat-stream,
     #notes-canvas-arena,
     .music-scroll {
@@ -1946,6 +1932,452 @@
       .hdsfd-toast-desc { font-size: 11px; }
     }
 
+    /* =====================================================================
+       v3 GLASSY DASHBOARD RESKIN
+       Styling only. Existing IDs, classes and JS hooks are preserved.
+       ===================================================================== */
+    :root {
+      --reskin-accent: #7c3aed;
+      --reskin-accent-soft: #a78bfa;
+      --reskin-text: rgba(255, 255, 255, 0.92);
+      --reskin-text-soft: rgba(255, 255, 255, 0.62);
+      --reskin-text-muted: rgba(255, 255, 255, 0.45);
+      --reskin-line: rgba(255, 255, 255, 0.07);
+      --reskin-line-strong: rgba(255, 255, 255, 0.12);
+      --reskin-row-hover: rgba(255, 255, 255, 0.045);
+      --reskin-shadow: 0 24px 48px -16px rgba(2, 6, 23, 0.45), 0 4px 12px -4px rgba(2, 6, 23, 0.30);
+    }
+
+    /* Soft light without a per-frame blur filter behind the glass panels. */
+    .orb { filter: none; opacity: 0.40; }
+    .orb-1 { background: radial-gradient(circle at 50% 50%, rgba(192, 132, 252, 0.50), rgba(192, 132, 252, 0) 68%) !important; }
+    .orb-2 { background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.42), rgba(56, 189, 248, 0) 68%) !important; }
+    .orb-3 { background: radial-gradient(circle at 50% 50%, rgba(244, 63, 94, 0.30), rgba(244, 63, 94, 0) 68%) !important; opacity: 0.28; }
+
+    #dashboard,
+    #dashboard button,
+    #dashboard input,
+    #dashboard select,
+    #dashboard textarea,
+    #hdsfd-toast-region,
+    .music-shell {
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", 'Inter', sans-serif;
+    }
+
+    /* Fix 2: translucent violet-tinted glass. The dark base is deliberately
+       low enough for the tree to read through, while 18px blur keeps copy
+       legible over the brightest background frames. */
+    .glass,
+    .glass-card,
+    .glass-panel {
+      color: var(--reskin-text);
+      border-color: var(--reskin-line-strong);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), var(--reskin-shadow);
+    }
+
+    .glass {
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.055)),
+        radial-gradient(120% 100% at 0% 0%, rgba(124, 58, 237, 0.10), rgba(124, 58, 237, 0) 62%),
+        rgba(9, 13, 26, 0.34);
+      backdrop-filter: blur(16px) saturate(160%);
+      -webkit-backdrop-filter: blur(16px) saturate(160%);
+      border-radius: 16px;
+    }
+
+    .glass-card {
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06)),
+        radial-gradient(120% 100% at 0% 0%, rgba(124, 58, 237, 0.11), rgba(124, 58, 237, 0) 62%),
+        rgba(9, 13, 26, 0.31);
+      backdrop-filter: blur(18px) saturate(160%);
+      -webkit-backdrop-filter: blur(18px) saturate(160%);
+      border-radius: 20px;
+    }
+
+    .glass-panel {
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.055)),
+        radial-gradient(120% 100% at 0% 0%, rgba(124, 58, 237, 0.12), rgba(124, 58, 237, 0) 62%),
+        rgba(8, 12, 24, 0.32);
+      backdrop-filter: blur(18px) saturate(160%);
+      -webkit-backdrop-filter: blur(18px) saturate(160%);
+      border-radius: 20px;
+    }
+
+    .glass-modal {
+      background:
+        radial-gradient(110% 90% at 0% -10%, rgba(124, 58, 237, 0.20), rgba(124, 58, 237, 0) 62%),
+        linear-gradient(160deg, rgba(17, 22, 44, 0.90), rgba(10, 13, 26, 0.94));
+      backdrop-filter: blur(30px) saturate(170%);
+      -webkit-backdrop-filter: blur(30px) saturate(170%);
+      border-radius: 24px;
+    }
+
+    .glass-card::before,
+    .glass-panel::before,
+    .glass::before { opacity: 0.55; }
+
+    .glass-card:hover {
+      border-color: rgba(255, 255, 255, 0.20);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.20), 0 28px 56px -18px rgba(2, 6, 23, 0.55), 0 4px 12px -4px rgba(2, 6, 23, 0.32);
+    }
+
+    /* Nested glass is a plain translucent fill: only the outer panel blurs. */
+    .glass-card .glass,
+    .glass-panel .glass,
+    .glass .glass,
+    .glass-card .glass-card,
+    .glass-panel .glass-panel {
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      background: rgba(255, 255, 255, 0.045);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+    }
+
+    #dashboard .glass-card,
+    #dashboard .glass-panel,
+    #dashboard .glass { text-shadow: 0 1px 8px rgba(3, 6, 18, 0.25); }
+
+    /* Calm workspace spacing and the reference's small-caps panel labels. */
+    #content-area { padding: 16px 16px calc(6.5rem + env(safe-area-inset-bottom, 0px)); }
+    @media (min-width: 1024px) {
+      #content-area { padding: 24px 24px calc(6.5rem + env(safe-area-inset-bottom, 0px)); }
+    }
+
+    header.glass {
+      margin: 12px 16px 0;
+      padding: 10px 18px;
+      border-radius: 20px;
+      background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)),
+        rgba(8, 12, 24, 0.42);
+    }
+    @media (max-width: 640px) {
+      header.glass { margin: 8px 8px 0; padding: 8px 12px; }
+    }
+
+    #dashboard .glass-card h3,
+    #dashboard .glass-panel h3,
+    #tab-settings .glass h3,
+    #tab-settings .reskin-label,
+    .reskin-label {
+      font-size: 12px !important;
+      font-weight: 600 !important;
+      letter-spacing: 0.09em !important;
+      text-transform: uppercase !important;
+      color: var(--reskin-text-soft) !important;
+    }
+
+    #tab-settings { max-width: 960px; gap: 20px; }
+    #tab-settings > .glass-card { padding: 24px; }
+    #tab-focus .grid { gap: 20px; }
+    @media (max-width: 640px) {
+      #tab-settings > .glass-card { padding: 16px; }
+      #tab-focus .grid { gap: 16px; }
+    }
+
+    /* Timer hero: keep the existing slider/stepper mechanics, just reskin. */
+    #tab-focus .glass-card:has(.reskin-hero) { border-radius: 24px !important; }
+    #tab-focus .reskin-hero { border-radius: 24px !important; padding: 24px !important; }
+    @media (max-width: 640px) { #tab-focus .reskin-hero { padding: 18px !important; } }
+    #pomo-time-display {
+      font-family: 'Manrope', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 44px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.045em;
+    }
+    #pomo-ring { stroke: var(--reskin-accent-soft); }
+    #pomo-start-btn,
+    #pomo-pause-btn {
+      border-radius: 999px;
+      min-height: 44px;
+      padding: 10px 24px;
+      border: 1px solid rgba(167, 139, 250, 0.45);
+      background: linear-gradient(135deg, rgba(124, 58, 237, 0.78), rgba(167, 139, 250, 0.46));
+      color: #fff;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 10px 24px -12px rgba(124, 58, 237, 0.9);
+    }
+    #pomo-start-btn:hover,
+    #pomo-pause-btn:hover { background: linear-gradient(135deg, rgba(139, 92, 246, 0.9), rgba(196, 181, 253, 0.52)); }
+    #tab-focus button[onclick="resetTimer()"] {
+      min-width: 44px;
+      min-height: 44px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--reskin-line-strong);
+    }
+    #tab-focus .reskin-presets {
+      display: flex;
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+      gap: 2px;
+      width: 100%;
+      max-width: 340px;
+      margin-top: 14px;
+      padding: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+    }
+    #tab-focus .reskin-presets::-webkit-scrollbar { display: none; }
+    #tab-focus .reskin-presets button {
+      flex: 1 0 auto;
+      min-height: 44px;
+      padding: 7px 10px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.58);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    #tab-focus .reskin-presets button:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
+    #tab-focus .reskin-presets button[class*="bg-purple-500"] {
+      background: rgba(255, 255, 255, 0.14) !important;
+      box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.45);
+      color: #fff;
+    }
+    #tab-focus #custom-pomo-input,
+    #tab-focus #pomo-slider { accent-color: var(--reskin-accent-soft); }
+
+    /* Shared row language for tasks and schedule. */
+    #dashboard .task-card {
+      padding: 10px 8px !important;
+      border: 0 !important;
+      border-bottom: 1px solid var(--reskin-line) !important;
+      border-radius: 12px !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    #dashboard .task-card::before { display: none; }
+    #dashboard .task-card:hover { background: var(--reskin-row-hover) !important; }
+    #dashboard .task-card input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--reskin-accent); }
+    #schedule-cards-list > .glass {
+      padding: 12px 10px !important;
+      border: 0 !important;
+      border-left: 2px solid rgba(167, 139, 250, 0.75) !important;
+      border-radius: 12px !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+    #schedule-cards-list > .glass:hover { background: var(--reskin-row-hover) !important; }
+    #home-schedule-notifications > div,
+    #home-starred-tasks-list > div {
+      border-radius: 12px !important;
+      border-color: var(--reskin-line) !important;
+      background: rgba(255, 255, 255, 0.045) !important;
+      box-shadow: none !important;
+    }
+
+    /* Stats: four equal metric cards with tabular numbers. */
+    #tab-settings .reskin-metrics { gap: 12px; align-items: stretch; }
+    #tab-settings .reskin-metric {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      min-height: 92px;
+      padding: 14px !important;
+      border: 1px solid var(--reskin-line-strong) !important;
+      border-radius: 12px !important;
+      background: rgba(255, 255, 255, 0.055) !important;
+      text-align: left !important;
+    }
+    #tab-settings .reskin-metric > span:first-child {
+      color: var(--reskin-text-soft) !important;
+      font-size: 10px !important;
+      font-weight: 600 !important;
+      letter-spacing: 0.09em;
+    }
+    #tab-settings .reskin-metric > span:not(:first-child) {
+      font-size: 30px !important;
+      font-weight: 700 !important;
+      line-height: 1.05;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.03em;
+    }
+    #tab-settings .reskin-growth {
+      padding: 14px !important;
+      border: 1px solid var(--reskin-line-strong) !important;
+      border-radius: 12px !important;
+      background: rgba(255, 255, 255, 0.045) !important;
+    }
+    #tab-settings .reskin-growth > div:last-child {
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    #stat-tree-progress-bar {
+      background: linear-gradient(90deg, var(--reskin-accent), var(--reskin-accent-soft)) !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+
+    /* Shop cards: plain inner glass at 16px, accent ring on the theme key. */
+    #tab-settings .reskin-shop-card {
+      border-radius: 16px !important;
+      border-color: var(--reskin-line-strong) !important;
+      background: rgba(255, 255, 255, 0.045) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+      box-shadow: none !important;
+      padding: 14px !important;
+    }
+    #tab-settings .reskin-shop-card:hover { border-color: rgba(167, 139, 250, 0.45) !important; }
+    #tab-settings .reskin-accent-ring { box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.5), 0 0 28px -12px rgba(124, 58, 237, 0.8) !important; }
+
+    /* Status pills and circular player controls. */
+    #global-sync-badge,
+    #google-status-badge,
+    #settings-gdrive-badge,
+    #school-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    #global-sync-badge::before,
+    #google-status-badge::before,
+    #settings-gdrive-badge::before,
+    #school-status-badge::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      flex-shrink: 0;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.85;
+    }
+    #global-sync-badge::before { background: #34d399; }
+    #mixer-toggle-btn {
+      min-height: 44px;
+      border-radius: 999px;
+      border-color: rgba(167, 139, 250, 0.34);
+      background: rgba(124, 58, 237, 0.18);
+    }
+    #mixer-toggle-btn:hover { background: rgba(124, 58, 237, 0.28); }
+    #yt-toggle-btn {
+      width: 44px !important;
+      height: 44px !important;
+      border-radius: 999px !important;
+      background: linear-gradient(135deg, #7c3aed, #a78bfa) !important;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      color: #fff !important;
+      box-shadow: 0 8px 20px -10px rgba(124, 58, 237, 0.9);
+    }
+    #yt-toggle-btn:hover { background: linear-gradient(135deg, #8b5cf6, #c4b5fd) !important; }
+    #tab-focus button[onclick="openMusicPlayer()"],
+    #tab-focus .music-launch-btn { border-radius: 14px !important; }
+
+    /* Inputs stay comfortable on small screens without zooming the layout. */
+    #gtask-title-input,
+    #settings-name-input,
+    #music-search-input,
+    #quote-custom-input { font-size: 16px; }
+
+    @media (max-width: 640px) {
+      #tab-focus .reskin-presets { max-width: 100%; }
+      #tab-settings .reskin-metric { min-height: 86px; padding: 12px !important; }
+      #tab-settings .reskin-metric > span:not(:first-child) { font-size: 24px !important; }
+      #dashboard .task-card, #schedule-cards-list > .glass { padding-left: 6px !important; padding-right: 6px !important; }
+    }
+
+    /* Guest embed fallback: only shown when the YouTube embed stays silent. */
+    .music-embed-fallback {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 8px 12px 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(251, 191, 36, 0.26);
+      border-radius: 14px;
+      background: rgba(251, 191, 36, 0.08);
+      color: rgba(255, 255, 255, 0.86);
+      text-align: left;
+    }
+    .music-embed-fallback.hidden { display: none !important; }
+    .music-embed-fallback-icon {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(251, 191, 36, 0.14);
+      color: #fcd34d;
+    }
+    .music-embed-fallback-icon .hdsfd-icon { width: 15px; height: 15px; }
+    .music-embed-fallback-copy { min-width: 0; flex: 1 1 auto; }
+    .music-embed-fallback-copy strong {
+      display: block;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.3;
+    }
+    .music-embed-fallback-copy span {
+      display: block;
+      margin-top: 1px;
+      font-size: 10px;
+      line-height: 1.35;
+      color: rgba(255, 255, 255, 0.58);
+    }
+    .music-embed-fallback-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .music-embed-fallback-actions button,
+    .music-embed-fallback-actions a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      min-height: 34px;
+      padding: 6px 10px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .music-embed-fallback-actions button {
+      border: 1px solid rgba(167, 139, 250, 0.4);
+      background: rgba(124, 58, 237, 0.28);
+      color: #ede9fe;
+    }
+    .music-embed-fallback-actions button:hover { background: rgba(124, 58, 237, 0.44); }
+    .music-embed-fallback-actions a {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      background: rgba(255, 255, 255, 0.06);
+      color: rgba(255, 255, 255, 0.82);
+    }
+    .music-embed-fallback-actions a:hover { background: rgba(255, 255, 255, 0.12); }
+    .music-embed-fallback-actions .hdsfd-icon { width: 12px; height: 12px; }
+    @media (max-width: 640px) {
+      .music-embed-fallback { flex-wrap: wrap; margin: 8px 8px 0; }
+      .music-embed-fallback-actions { width: 100%; justify-content: flex-start; padding-left: 38px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #dashboard .glass-card,
+      #dashboard .glass-panel,
+      #dashboard .glass,
+      #dashboard button { transition-duration: 1ms !important; }
+    }
+
   </style>
 </head>
 <body class="h-full">
@@ -2391,7 +2823,7 @@
             
             <!-- Left: Soundscape (Rain & Brown Noise always visible, YouTube expandable with Next/Prev and 10 history) -->
             <div class="lg:col-span-4 order-4 lg:order-1 flex flex-col gap-4">
-              <div class="glass-card p-4 space-y-3.5 text-left h-full flex flex-col justify-between">
+              <div class="glass-card reskin-panel p-4 space-y-3.5 text-left h-full flex flex-col justify-between">
                 <div class="space-y-3">
                   <!-- Header -->
                   <div class="flex items-center justify-between border-b border-white/10 pb-2">
@@ -2474,7 +2906,7 @@
 
             <!-- Center: Session Focus (Dynamic 120m Slider & Decimal Custom Stepper) -->
             <div class="lg:col-span-5 order-2 lg:order-2 flex flex-col gap-4">
-              <div class="glass-card p-5 w-full flex flex-col items-center justify-center min-h-[380px] text-center">
+              <div class="glass-card reskin-hero p-5 w-full flex flex-col items-center justify-center min-h-[380px] text-center">
                 
                 <!-- Radial Timer Ring (With Sunlight Essence Glowing Aura) -->
                 <div id="timer-ring-container" class="relative w-48 h-48 flex items-center justify-center my-1 rounded-full transition-all duration-700">
@@ -2497,7 +2929,7 @@
                 </div>
 
                 <!-- Preset Time Chips -->
-                <div class="flex flex-wrap justify-center items-center gap-1.5 sm:gap-2 mt-3">
+                <div class="reskin-presets flex flex-wrap justify-center items-center gap-1.5 sm:gap-2 mt-3">
                   <button onclick="setPomoPreset(15)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">15m</button>
                   <button onclick="setPomoPreset(25)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-purple-500/20 border border-purple-500/40 text-purple-300">25m</button>
                   <button onclick="setPomoPreset(45)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">45m</button>
@@ -2531,7 +2963,7 @@
             <!-- Right: Live Schedule Notifications & Starred Tasks -->
             <div class="lg:col-span-3 order-1 lg:order-3 flex flex-col gap-3">
               <!-- Live Schedule & Notifications Status Card -->
-              <div class="glass-card p-3.5 text-left space-y-2.5">
+              <div class="glass-card reskin-panel p-3.5 text-left space-y-2.5">
                 <div class="border-b border-white/10 pb-1.5 flex justify-between items-center">
                   <div class="flex items-center gap-1.5">
                     <span class="relative flex h-2 w-2">
@@ -2564,7 +2996,7 @@
               </div>
 
               <!-- Starred Tasks Box (Grouped by list subsections, + button to Tasks tab) -->
-              <div class="glass-card p-3.5 text-left flex-1 flex flex-col justify-between min-h-[240px]">
+              <div class="glass-card reskin-panel p-3.5 text-left flex-1 flex flex-col justify-between min-h-[240px]">
                 <div class="flex-1 flex flex-col overflow-hidden">
                   <div class="flex justify-between items-center border-b border-white/10 pb-1.5 mb-2">
                     <div class="flex items-center gap-1.5">
@@ -2936,30 +3368,30 @@
             <!-- Stats Overview Card (With Digital Sanctuary Tree Level & Lifetime XP) -->
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
               <div class="flex justify-between items-center border-b border-white/10 pb-1.5">
-                <span class="text-xs font-bold text-white/80 uppercase tracking-wider"><svg class="hdsfd-icon"><use href="#i-chart-column"></use></svg> Your Study & Growth Stats</span>
+                <span class="reskin-label text-xs font-bold text-white/80 uppercase tracking-wider"><svg class="hdsfd-icon"><use href="#i-chart-column"></use></svg> Your Study & Growth Stats</span>
                 <span id="stat-tree-multiplier-badge" class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">1.0x Growth</span>
               </div>
-              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
-                <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
+              <div class="reskin-metrics grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                <div class="reskin-metric bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
                   <span class="text-[9px] text-white/50 uppercase font-bold block">Focus Time</span>
                   <span id="stat-focus-time" class="text-sm font-black text-purple-300">0 mins</span>
                 </div>
-                <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
+                <div class="reskin-metric bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
                   <span class="text-[9px] text-white/50 uppercase font-bold block">Tasks Done</span>
                   <span id="stat-tasks-done" class="text-sm font-black text-emerald-300">0 done</span>
                 </div>
-                <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
+                <div class="reskin-metric bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
                   <span class="text-[9px] text-white/50 uppercase font-bold block">Streak</span>
                   <span id="stat-streak" class="text-sm font-black text-amber-300">1 Day</span>
                 </div>
-                <div class="bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
+                <div class="reskin-metric bg-black/25 p-2.5 rounded-xl border border-white/10 text-center">
                   <span class="text-[9px] text-white/50 uppercase font-bold block">Current Coins</span>
                   <span id="stat-coins" class="text-sm font-black text-amber-400"><svg class="hdsfd-icon"><use href="#i-coins"></use></svg> 0</span>
                 </div>
               </div>
 
               <!-- Sanctuary Tree Growth Status Banner -->
-              <div class="bg-black/30 p-3 rounded-xl border border-white/10 space-y-2">
+              <div class="reskin-growth bg-black/30 p-3 rounded-xl border border-white/10 space-y-2">
                 <div class="flex items-center justify-between text-xs">
                   <div class="flex items-center gap-2">
                     <span id="stat-tree-icon" class="text-lg"><svg class="hdsfd-icon"><use href="#i-sprout"></use></svg></span>
@@ -2986,7 +3418,7 @@
               <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-2.5">
                 
                 <!-- 1. Fertile Spring Dew (Tiered Multiplier +10% per tier) -->
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-emerald-400/50 transition-all">
+                <div class="glass reskin-shop-card p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-emerald-400/50 transition-all">
                   <div>
                     <div class="flex items-center justify-between">
                       <span class="text-xs font-bold text-emerald-300"><svg class="hdsfd-icon"><use href="#i-droplet"></use></svg> Fertile Spring Dew</span>
@@ -2998,7 +3430,7 @@
                 </div>
 
                 <!-- 2. Sunlight Essence (2x Focus / Zen 1 Session) -->
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-amber-400/50 transition-all">
+                <div class="glass reskin-shop-card p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-amber-400/50 transition-all">
                   <div>
                     <span class="text-xs font-bold text-amber-300"><svg class="hdsfd-icon"><use href="#i-zap"></use></svg> Sunlight Essence</span>
                     <p class="text-[10px] text-white/50 mt-0.5">2x Coins on Pomodoro & Zen (1 Session)</p>
@@ -3007,7 +3439,7 @@
                 </div>
 
                 <!-- 3. Glowing Vines (Tiered 1.5x Growth - 1 Day) -->
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-teal-400/50 transition-all">
+                <div class="glass reskin-shop-card p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-teal-400/50 transition-all">
                   <div>
                     <div class="flex items-center justify-between">
                       <span class="text-xs font-bold text-teal-300"><svg class="hdsfd-icon"><use href="#i-leaf"></use></svg> Glowing Vines</span>
@@ -3019,7 +3451,7 @@
                 </div>
 
                 <!-- 4. Blossom Petals (1.5x Coins + 10 🪙/hr passive - 1 Day) -->
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-rose-400/50 transition-all">
+                <div class="glass reskin-shop-card p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-rose-400/50 transition-all">
                   <div>
                     <span class="text-xs font-bold text-rose-300"><svg class="hdsfd-icon"><use href="#i-flower-2"></use></svg> Blossom Petals</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Drifting petals (x1.5 Coins + 10<svg class="hdsfd-icon"><use href="#i-coins"></use></svg>/hr - 1 Day)</p>
@@ -3028,7 +3460,7 @@
                 </div>
 
                 <!-- 5. Starlight Aura (2x Coins & 2x Growth - 1 Week) -->
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-yellow-300/50 transition-all">
+                <div class="glass reskin-shop-card p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-yellow-300/50 transition-all">
                   <div>
                     <span class="text-xs font-bold text-yellow-300"><svg class="hdsfd-icon"><use href="#i-star"></use></svg> Starlight Aura</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Radiant tree halo (2x Coins & Growth - 1 Week)</p>
@@ -3037,7 +3469,7 @@
                 </div>
 
                 <!-- 6. Streak Shield (2 Days Protection) -->
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-cyan-400/50 transition-all">
+                <div class="glass reskin-shop-card p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-cyan-400/50 transition-all">
                   <div>
                     <span class="text-xs font-bold text-cyan-300"><svg class="hdsfd-icon"><use href="#i-snowflake"></use></svg> Streak Shield</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Protects streak & tree vitality (2 Days)</p>
@@ -3046,7 +3478,7 @@
                 </div>
 
                 <!-- 7. Cosmic Theme Key (Sign in to unlock all + 200 🪙) -->
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-purple-400/50 transition-all">
+                <div class="glass reskin-shop-card reskin-accent-ring p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-purple-400/50 transition-all">
                   <div>
                     <span class="text-xs font-bold text-purple-300"><svg class="hdsfd-icon"><use href="#i-palette"></use></svg> Cosmic Theme Key</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Unlock all premium fluid themes</p>
@@ -3055,7 +3487,7 @@
                 </div>
 
                 <!-- 8. Zen Master Crown (YouTube Sub + 1000 🪙) -->
-                <div class="glass p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-amber-300/50 transition-all">
+                <div class="glass reskin-shop-card p-3 rounded-xl border border-white/10 flex flex-col justify-between hover:border-amber-300/50 transition-all">
                   <div>
                     <span class="text-xs font-bold text-amber-200"><svg class="hdsfd-icon"><use href="#i-crown"></use></svg> Zen Master Crown</span>
                     <p class="text-[10px] text-white/50 mt-0.5">Royal crown badge (+1000 coins)</p>
@@ -3068,7 +3500,7 @@
             <!-- Fluid Gradient Themes -->
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-2.5">
               <div class="flex items-center justify-between">
-                <label class="text-xs font-bold text-white/80 uppercase tracking-wider block">Fluid Gradient Themes</label>
+                <label class="reskin-label text-xs font-bold text-white/80 uppercase tracking-wider block">Fluid Gradient Themes</label>
                 <span id="current-theme-badge" class="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-full font-bold">Midnight</span>
               </div>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
@@ -3111,7 +3543,7 @@
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
               <div class="flex items-center justify-between">
                 <div>
-                  <span class="text-xs font-bold text-white">Google Drive Backup</span>
+                  <span class="reskin-label text-xs font-bold text-white">Google Drive Backup</span>
                   <p class="text-[10px] text-white/50"><svg class="hdsfd-icon"><use href="#i-folder"></use></svg> Target Folder: <b>HDSFD Backup</b></p>
                 </div>
                 <span id="settings-gdrive-badge" class="text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold">Guest Mode</span>
@@ -3151,7 +3583,7 @@
             <div class="glass p-4 rounded-2xl border border-white/10 space-y-3">
               <div class="flex items-center justify-between">
                 <div>
-                  <span class="text-xs font-bold text-white">HDSFD Account &amp; School Connect</span>
+                  <span class="reskin-label text-xs font-bold text-white">HDSFD Account &amp; School Connect</span>
                   <p class="text-[10px] text-white/50"><svg class="hdsfd-icon"><use href="#i-graduation-cap"></use></svg> Sync tasks and calendar without Google — import school calendars and assignments</p>
                 </div>
                 <span id="school-status-badge" class="text-[9px] bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 py-0.5 rounded font-bold">Guest Mode</span>
@@ -3669,6 +4101,17 @@
               <span id="music-volume-label" class="music-volume-label">70%</span>
             </div>
           </div>
+          <div id="music-embed-fallback" class="music-embed-fallback hidden" role="status" aria-live="polite">
+            <span class="music-embed-fallback-icon"><svg class="hdsfd-icon"><use href="#i-triangle-alert"></use></svg></span>
+            <div class="music-embed-fallback-copy">
+              <strong>YouTube player didn't start</strong>
+              <span>Retry it, or open this track on YouTube.</span>
+            </div>
+            <div class="music-embed-fallback-actions">
+              <button type="button" onclick="musicEmbedRetry()">Retry</button>
+              <a id="music-embed-open" href="https://www.youtube.com" target="_blank" rel="noopener noreferrer">Open on YouTube <svg class="hdsfd-icon"><use href="#i-arrow-up-right"></use></svg></a>
+            </div>
+          </div>
         </div>
 
         <!-- Loading pill -->
@@ -3687,7 +4130,7 @@
     <audio id="music-audio" preload="none"></audio>
 
     <!-- App Logic Scripts (Cache-Busting Query) -->
-    <script src="app.js?v=5.1"></script>
+    <script src="app.js?v=5.4"></script>
   <script src="hdsfd-ui.js?v=2"></script>
   <script type="module" src="liquid-glass.js?v=1"></script>
   </body>

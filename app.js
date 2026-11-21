@@ -30,6 +30,8 @@ let musicEmbedFrame = null;
 let musicEmbedTime = 0;
 let musicEmbedDuration = 0;
 let musicEmbedBound = false;
+let musicEmbedWatchdog = null;
+let musicEmbedStarted = false;
 let ytCurrentVideoId = null;
 let ytCurrentPlaylistId = null;
 let ytSavedTime = 0;
@@ -4551,6 +4553,11 @@ function musicEmbedBindMessages() {
     // it so hitting next quickly never skips the newly selected track.
     const eventVideoId = info.videoData && info.videoData.video_id;
     if (eventVideoId && musicState.current && eventVideoId !== musicState.current.id) return;
+    if (Number(info.playerState) === 1 || Number(info.currentTime) > 0.25) {
+      musicEmbedStarted = true;
+      musicEmbedClearWatchdog();
+      musicEmbedHideFallback();
+    }
     if (info.playerState !== undefined) {
       const playing = Number(info.playerState) === 1;
       const changed = isYTPlaying !== playing;
@@ -4571,7 +4578,57 @@ function musicEmbedBindMessages() {
   });
 }
 
+function musicEmbedClearWatchdog() {
+  if (musicEmbedWatchdog) clearTimeout(musicEmbedWatchdog);
+  musicEmbedWatchdog = null;
+}
+
+function musicEmbedHideFallback() {
+  const box = document.getElementById('music-embed-fallback');
+  if (box) box.classList.add('hidden');
+}
+
+function musicEmbedShowFallback() {
+  const box = document.getElementById('music-embed-fallback');
+  if (!box) return;
+  const item = musicState.current;
+  const link = document.getElementById('music-embed-open');
+  if (item && link) link.href = item.url || `https://www.youtube.com/watch?v=${item.id}`;
+  box.classList.remove('hidden');
+}
+
+function musicEmbedScheduleWatchdog() {
+  musicEmbedClearWatchdog();
+  musicEmbedStarted = false;
+  musicEmbedWatchdog = setTimeout(() => {
+    musicEmbedWatchdog = null;
+    if (!musicEmbedFrame || musicEmbedStarted) return;
+    if (musicState.engine !== 'youtube') return;
+    musicEmbedShowFallback();
+  }, 7000);
+}
+
+function musicEmbedRetry() {
+  const item = musicState.current;
+  if (!item) return;
+  musicEmbedHideFallback();
+  musicEmbedClearWatchdog();
+  // Reload inside the existing iframe instead of tearing it down; replacing
+  // the element can make embedded players churn during their own teardown.
+  if (musicEmbedFrame) {
+    try { musicEmbedFrame.src = 'about:blank'; } catch (e) { /* noop */ }
+  }
+  setTimeout(() => {
+    if (!musicState.current || musicState.current.id !== item.id) return;
+    if (musicState.engine !== 'youtube') return;
+    musicEmbedPlay(item, musicGuestMode() ? undefined : 'YouTube embed', musicGuestMode() ? undefined : false);
+  }, 180);
+  showInAppNotification('Retrying YouTube player', { variant: 'info' });
+}
+
 function musicEmbedStop() {
+  musicEmbedClearWatchdog();
+  musicEmbedHideFallback();
   if (!musicEmbedFrame) {
     isYTPlaying = false;
     return;
@@ -4620,6 +4677,10 @@ function musicEmbedPlay(item, label, lowQuality) {
   });
   musicEmbedTime = 0;
   musicEmbedDuration = Number(item.seconds) || 0;
+  musicEmbedHideFallback();
+  musicEmbedScheduleWatchdog();
+  const openLink = document.getElementById('music-embed-open');
+  if (openLink) openLink.href = item.url || `https://www.youtube.com/watch?v=${item.id}`;
   musicEmbedFrame.src = `https://www.youtube.com/embed/${encodeURIComponent(item.id)}?${params.toString()}`;
 
   musicState.engine = 'youtube';
@@ -5385,6 +5446,12 @@ function musicToggle() {
       musicEmbedPost(isYTPlaying ? 'playVideo' : 'pauseVideo');
       updateYTButtonState(isYTPlaying);
       musicSetPlayingUI(isYTPlaying);
+      if (isYTPlaying) {
+        musicEmbedHideFallback();
+        musicEmbedScheduleWatchdog();
+      } else {
+        musicEmbedClearWatchdog();
+      }
       return;
     }
     toggleYouTubePlayback();
@@ -5482,6 +5549,8 @@ function musicPrev() {
 }
 
 function musicHandleEnded() {
+  musicEmbedClearWatchdog();
+  musicEmbedHideFallback();
   if (musicState.current) musicTasteCountPlay(musicState.current);
   if (musicState.repeat === 'one' && musicEmbedFrame && musicState.current) {
     musicEmbedPlay(musicState.current);
