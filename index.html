@@ -1251,6 +1251,111 @@
       .hdsfd-orbit-label { display: none; }
     }
 
+
+    /* =========================================================================
+       Responsive & accessibility polish (phones, tablets, desktops)
+       Additive only: each rule targets existing elements and is scoped to a
+       small screen or a coarse pointer, so desktop layout is unchanged.
+       ========================================================================= */
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+    /* Media and long strings must never push a card wider than its column */
+    img, svg, video, canvas { max-width: 100%; }
+    img, video { height: auto; }
+    .glass-card p, .glass-card h3, .glass p, .task-title, .note-body { overflow-wrap: anywhere; }
+
+    /* Dialogs scroll inside the panel instead of clipping on short screens */
+    .glass-modal {
+      max-height: calc(100dvh - 2rem);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* Mobile Safari zooms the page when a field under 16px receives focus */
+    @media (max-width: 640px) {
+      input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+      select, textarea { font-size: 16px; }
+      .glass-modal { max-height: calc(100dvh - 1rem); }
+      [class*="text-[10px]"], [class*="text-[9px]"] { font-size: 11px; }
+      .nav-btn span { font-size: 10px; }
+    }
+
+    /* Comfortable touch targets for header chips, sub-tabs and filters */
+    @media (max-width: 640px), (pointer: coarse) {
+      #global-sync-badge,
+      #google-status-badge,
+      #tab2-subtab-cal-btn,
+      #tab2-subtab-sched-btn,
+      .gtask-tab-btn,
+      .nav-btn {
+        min-height: 44px;
+        padding-top: 0.35rem;
+        padding-bottom: 0.35rem;
+      }
+      #global-sync-badge, #google-status-badge { padding-left: 0.65rem; padding-right: 0.65rem; }
+      .gtask-tab-btn { min-width: 44px; }
+    }
+
+    /* Task filter strip scrolls sideways: keep momentum, hide the bar, snap */
+    #gtasks-list-tabs {
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      scroll-snap-type: x proximity;
+      scroll-padding-inline: 4px;
+    }
+    #gtasks-list-tabs::-webkit-scrollbar { display: none; }
+    #gtasks-list-tabs > .gtask-tab-btn { scroll-snap-align: start; }
+
+    /* Floating bottom nav: clear the iOS home indicator, never sit on content */
+    nav.fixed.bottom-5 > div { padding-bottom: 0.4rem; }
+    @media (max-width: 768px) {
+      nav.fixed.bottom-5 { bottom: calc(1rem + env(safe-area-inset-bottom, 0px)); }
+      #dashboard main { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)); }
+    }
+
+
+    /* Playback and sound controls are the most-used touch targets on a phone:
+       grow them to a comfortable size without touching desktop density. */
+    @media (max-width: 640px), (pointer: coarse) {
+      #global-sync-badge { min-width: 44px; }
+      #mixer-toggle-btn { min-height: 44px; }
+      #yt-toggle-btn { width: 44px; height: 44px; }
+      button[onclick="musicNext()"], button[onclick="musicToggle()"] { min-width: 40px; min-height: 40px; }
+      .hdsfd-deck-row { gap: 7px; }
+      .hdsfd-deck-btn { width: 34px; height: 34px; }
+      .hdsfd-deck-btn.is-primary { width: 40px; height: 40px; }
+      .hdsfd-deck-btn .hdsfd-icon { width: 15px; height: 15px; }
+      .hdsfd-deck-btn.is-primary .hdsfd-icon { width: 17px; height: 17px; }
+    }
+
+    /* Focus-tab controls were as small as 15px tall on phones */
+    @media (max-width: 640px), (pointer: coarse) {
+      button[onclick="openMusicPlayer()"] { min-height: 40px; padding: 0.4rem 0.3rem; }
+      #pomo-start-btn { min-height: 44px; }
+      button[onclick="resetTimer()"] { width: 44px; height: 44px; }
+      button[onclick^="setPomoPreset"] { min-height: 40px; min-width: 44px; }
+    }
+
+    /* Settings actions: save and shop buttons were 28-37px tall on phones */
+    @media (max-width: 640px), (pointer: coarse) {
+      #settings-name-save-btn { min-height: 44px; }
+      button[id^="buy-"] { min-height: 40px; }
+    }
+
+    /* Theme swatches in Settings: 37px tall, just under a comfortable tap */
+    @media (max-width: 640px), (pointer: coarse) {
+      .theme-select-btn { min-height: 44px; }
+    }
+
+    /* Home-tab micro controls: custom-timer steppers, zen button, task shortcut */
+    @media (max-width: 640px), (pointer: coarse) {
+      button[onclick^="adjustCustomTimeStep"] { min-width: 40px; min-height: 40px; }
+      button[onclick="setCustomPomoFromInput()"], button[onclick="enterZenMode()"] { min-height: 40px; }
+      button[onclick="setCustomPomoFromInput()"] { min-width: 40px; }
+      button[onclick="switchTab('tasks-notes')"][class*="w-5"] { min-width: 40px; min-height: 40px; }
+      button[onclick*="switchTab2Subview('schedule')"] { min-height: 40px; padding-block: 0.35rem; }
+    }
   </style>
 </head>
 <body class="h-full">
