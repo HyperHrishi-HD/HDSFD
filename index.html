@@ -1040,6 +1040,15 @@
       }
     }
 
+    /* Safe-area values are read by the zen dock so fullscreen notches push the
+       trigger and its panel inward instead of clipping them. */
+    :root {
+      --hdsfd-safe-top: env(safe-area-inset-top, 0px);
+      --hdsfd-safe-right: env(safe-area-inset-right, 0px);
+      --hdsfd-safe-bottom: env(safe-area-inset-bottom, 0px);
+      --hdsfd-safe-left: env(safe-area-inset-left, 0px);
+    }
+
     /* ===== ZEN ORBIT DOCK (movable; zen-only action set) ===== */
     /* The main dock sits above the zen overlay (z-60 vs z-50); fade it out so
        zen really is a distraction-free space. */
@@ -1201,8 +1210,9 @@
     .zen-orbit-panel {
       position: fixed;
       z-index: 75;
-      width: min(272px, calc(100vw - 24px));
+      width: min(272px, calc(100vw - 24px - var(--hdsfd-safe-left, 0px) - var(--hdsfd-safe-right, 0px)));
       max-height: min(58vh, 400px);
+      max-height: min(58dvh, 400px, calc(100dvh - 24px - var(--hdsfd-safe-top, 0px) - var(--hdsfd-safe-bottom, 0px)));
       display: flex;
       flex-direction: column;
       padding: 12px;
@@ -1254,6 +1264,35 @@
     .zen-orbit-panel-close:hover { color: #fff; background: rgba(255, 255, 255, 0.12); }
     .zen-orbit-panel-close .hdsfd-icon { width: 13px; height: 13px; }
     .zen-orbit-panel-body { overflow-y: auto; padding-top: 10px; min-height: 0; }
+    .zen-pomo-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 38px;
+      padding: 0 14px;
+      margin: 2px 0 4px;
+      border-radius: 999px;
+      border: 1px solid rgba(196, 181, 253, 0.32);
+      background: rgba(255, 255, 255, 0.07);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      transition: background 0.2s ease, border-color 0.2s ease, transform 0.18s ease;
+      touch-action: manipulation;
+    }
+    .zen-pomo-toggle:hover { background: rgba(255, 255, 255, 0.13); border-color: rgba(216, 180, 254, 0.55); }
+    .zen-pomo-toggle:active { transform: scale(0.97); }
+    .zen-pomo-toggle .hdsfd-icon { width: 13px; height: 13px; }
+    .zen-pomo-toggle-ico { display: inline-flex; align-items: center; justify-content: center; }
+    .zen-pomo-toggle.is-running {
+      color: #fde68a;
+      border-color: rgba(251, 191, 36, 0.42);
+      background: rgba(251, 191, 36, 0.12);
+    }
     .zen-orbit-section { display: flex; flex-direction: column; gap: 10px; }
     .zen-orbit-section.hidden { display: none; }
     .zen-orbit-sound-row {
@@ -1270,6 +1309,7 @@
       font-weight: 600;
     }
     .zen-orbit-slider { width: 100%; height: 18px; accent-color: #c084fc; cursor: pointer; }
+    .zen-orbit-slider.hdsfd-range { height: 24px; }
     .zen-orbit-primary {
       display: flex;
       align-items: center;
@@ -1791,12 +1831,16 @@
       background: transparent;
       cursor: pointer;
       --p: 0%;
+      --range-a: rgba(251, 113, 133, 0.95);
+      --range-b: rgba(244, 63, 94, 0.95);
     }
+    .hdsfd-range[data-tone="cyan"] { --range-a: rgba(34, 211, 238, 0.95); --range-b: rgba(6, 182, 212, 0.95); }
+    .hdsfd-range[data-tone="purple"] { --range-a: rgba(216, 180, 254, 0.95); --range-b: rgba(168, 85, 247, 0.95); }
     .hdsfd-range::-webkit-slider-runnable-track {
       height: 3px;
       border-radius: 999px;
       background: linear-gradient(90deg,
-        rgba(251, 113, 133, 0.95) 0%, rgba(244, 63, 94, 0.95) var(--p),
+        var(--range-a) 0%, var(--range-b) var(--p),
         rgba(255, 255, 255, 0.14) var(--p), rgba(255, 255, 255, 0.14) 100%);
     }
     .hdsfd-range::-webkit-slider-thumb {
@@ -1819,7 +1863,7 @@
     .hdsfd-range::-moz-range-progress {
       height: 3px;
       border-radius: 999px;
-      background: linear-gradient(90deg, rgba(251, 113, 133, 0.95), rgba(244, 63, 94, 0.95));
+      background: linear-gradient(90deg, var(--range-a), var(--range-b));
     }
     .hdsfd-range::-moz-range-thumb {
       width: 11px;
@@ -2496,6 +2540,8 @@
       border: 1px solid var(--reskin-line-strong);
     }
     #tab-focus .reskin-presets {
+      position: relative;
+      isolation: isolate;
       display: flex;
       flex-wrap: nowrap;
       justify-content: flex-start;
@@ -2522,10 +2568,20 @@
       font-size: 11px;
       font-weight: 600;
     }
+    #tab-focus .reskin-presets button { position: relative; z-index: 1; }
     #tab-focus .reskin-presets button:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
-    #tab-focus .reskin-presets button[class*="bg-purple-500"] {
-      background: rgba(255, 255, 255, 0.14) !important;
-      box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.45);
+    /* Same liquid glass lens as the bottom tab bar, reused for the preset row. */
+    #tab-focus #focus-preset-lens {
+      top: 4px;
+      height: calc(100% - 8px);
+      opacity: 0;
+      transition: transform 0.46s cubic-bezier(0.32, 1.28, 0.5, 1), width 0.46s cubic-bezier(0.32, 1.28, 0.5, 1), opacity 0.2s ease;
+    }
+    #tab-focus .reskin-presets.is-lens-init #focus-preset-lens { transition: none; }
+    #tab-focus .reskin-presets button.is-active,
+    #tab-focus .reskin-presets button.is-active:hover {
+      background: transparent !important;
+      box-shadow: none !important;
       color: #fff;
     }
     #tab-focus #custom-pomo-input,
@@ -3249,7 +3305,7 @@
                         <span class="text-cyan-300"><svg class="hdsfd-icon"><use href="#i-cloud-rain"></use></svg> Rain</span>
                         <span id="val-rain" class="text-white/60 font-mono">30%</span>
                       </div>
-                      <input id="vol-rain" type="range" min="0" max="1" step="0.05" value="0.3" oninput="updateMixerVolume()" class="w-full accent-cyan-400 cursor-pointer">
+                      <input id="vol-rain" type="range" min="0" max="1" step="0.05" value="0.3" oninput="updateMixerVolume()" class="hdsfd-range w-full cursor-pointer" data-tone="cyan">
                     </div>
                     <!-- Brown Noise Slider -->
                     <div>
@@ -3257,7 +3313,7 @@
                         <span class="text-purple-300"><svg class="hdsfd-icon"><use href="#i-radio"></use></svg> Brown Noise</span>
                         <span id="val-noise" class="text-white/60 font-mono">10%</span>
                       </div>
-                      <input id="vol-noise" type="range" min="0" max="1" step="0.05" value="0.1" oninput="updateMixerVolume()" class="w-full accent-purple-400 cursor-pointer">
+                      <input id="vol-noise" type="range" min="0" max="1" step="0.05" value="0.1" oninput="updateMixerVolume()" class="hdsfd-range w-full cursor-pointer" data-tone="purple">
                     </div>
                   </div>
 
@@ -3331,18 +3387,19 @@
                 </div>
 
                 <!-- Preset Time Chips -->
-                <div class="reskin-presets flex flex-wrap justify-center items-center gap-1.5 sm:gap-2 mt-3">
-                  <button onclick="setPomoPreset(15)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">15m</button>
-                  <button onclick="setPomoPreset(25)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-purple-500/20 border border-purple-500/40 text-purple-300">25m</button>
-                  <button onclick="setPomoPreset(45)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">45m</button>
-                  <button onclick="setPomoPreset(60)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">60m</button>
-                  <button onclick="setPomoPreset(90)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">90m</button>
+                <div id="focus-preset-switcher" class="reskin-presets">
+                  <span id="focus-preset-lens" class="nav-lens" aria-hidden="true"></span>
+                  <button type="button" data-preset="15" onclick="setPomoPreset(15)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">15m</button>
+                  <button type="button" data-preset="25" onclick="setPomoPreset(25)" class="is-active px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">25m</button>
+                  <button type="button" data-preset="45" onclick="setPomoPreset(45)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">45m</button>
+                  <button type="button" data-preset="60" onclick="setPomoPreset(60)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">60m</button>
+                  <button type="button" data-preset="90" onclick="setPomoPreset(90)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/15 text-white/80">90m</button>
                 </div>
 
                 <!-- Dynamic Slider (0-50% = 5-90m, 50-100% = 90-120m) -->
                 <div class="w-full max-w-xs mt-3 flex items-center gap-2.5">
                   <span class="text-[10px] text-white/40 font-bold">5m</span>
-                  <input id="pomo-slider" type="range" min="0" max="100" step="1" value="23" oninput="onDynamicSliderChange(this.value)" class="flex-1 accent-purple-400 cursor-pointer">
+                  <input id="pomo-slider" type="range" min="0" max="100" step="1" value="12" oninput="onDynamicSliderChange(this.value)" class="hdsfd-range flex-1 cursor-pointer" data-tone="purple">
                   <span id="slider-val" class="text-[10px] text-purple-300 font-bold w-9 text-right">25m</span>
                 </div>
 
@@ -4101,11 +4158,11 @@
             <button type="button" id="zen-sound-toggle" class="zen-orbit-primary" onclick="toggleZenSoundscape()">Play soundscape</button>
             <div>
               <div class="zen-orbit-sound-row"><span>Rain</span><span id="zen-val-rain">30%</span></div>
-              <input id="zen-rain-slider" type="range" min="0" max="1" step="0.05" value="0.3" class="zen-orbit-slider" oninput="zenSetSound('rain', this.value)" aria-label="Rain volume">
+              <input id="zen-rain-slider" type="range" min="0" max="1" step="0.05" value="0.3" class="zen-orbit-slider hdsfd-range" data-tone="cyan" oninput="zenSetSound('rain', this.value)" aria-label="Rain volume">
             </div>
             <div>
               <div class="zen-orbit-sound-row"><span>Brown noise</span><span id="zen-val-noise">10%</span></div>
-              <input id="zen-noise-slider" type="range" min="0" max="1" step="0.05" value="0.1" class="zen-orbit-slider" oninput="zenSetSound('noise', this.value)" aria-label="Brown noise volume">
+              <input id="zen-noise-slider" type="range" min="0" max="1" step="0.05" value="0.1" class="zen-orbit-slider hdsfd-range" data-tone="purple" oninput="zenSetSound('noise', this.value)" aria-label="Brown noise volume">
             </div>
           </div>
           <div class="zen-orbit-section hidden" data-zen-panel="tasks">
@@ -4125,6 +4182,10 @@
       <div class="text-xs uppercase tracking-[0.3em] text-white/40 font-bold mb-4">ZEN FOCUS SANCTUARY</div>
       <div id="zen-clock-seconds" class="text-7xl md:text-8xl apple-clock-font tracking-tight text-white drop-shadow-2xl mb-3">00:00:00</div>
       <div id="zen-pomo-display" class="text-4xl font-bold text-purple-400 my-3 apple-clock-font">25:00</div>
+      <button type="button" id="zen-pomo-toggle" class="zen-pomo-toggle" onclick="zenPomoToggle()" onpointerdown="event.stopPropagation()" aria-label="Start focus timer" aria-pressed="false">
+        <span id="zen-pomo-toggle-ico" class="zen-pomo-toggle-ico"><svg class="hdsfd-icon"><use href="#i-play"></use></svg></span>
+        <span id="zen-pomo-toggle-label">Start focus</span>
+      </button>
       
       <!-- Auto-Fading Hold Text (Reappears for 5s on touch/press) -->
       <p id="zen-hold-msg" class="text-white/40 text-xs font-bold uppercase tracking-widest mt-6 mb-3 transition-opacity duration-700">
@@ -4531,7 +4592,7 @@
     <audio id="music-audio" preload="none"></audio>
 
     <!-- App Logic Scripts (Cache-Busting Query) -->
-    <script src="app.js?v=6.2"></script>
+    <script src="app.js?v=6.3"></script>
   <script src="hdsfd-ui.js?v=2"></script>
   <script type="module" src="liquid-glass.js?v=1"></script>
   </body>

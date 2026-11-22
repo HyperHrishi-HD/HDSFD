@@ -459,6 +459,8 @@ function initializeUserSession() {
   startClockWithSeconds();
   renderYTHistory();
   initZenOrbitDock();
+  initRangeFills();
+  initFocusPresetSwitcher();
   initSplitResizer();
   fetchData().then(() => {
     autoSyncGoogleTasksAndCalendar();
@@ -3188,6 +3190,86 @@ function initLiquidNav() {
   setTimeout(settle, 900);
 }
 
+// The focus presets reuse the bottom bar's lens, including its squash on arrival.
+// The active preset follows pomoDurationSeconds, so a custom time hides the lens.
+function moveFocusPresetLens(suppressMotion) {
+  const bar = document.getElementById('focus-preset-switcher');
+  const lens = document.getElementById('focus-preset-lens');
+  if (!bar || !lens) return;
+  const buttons = Array.from(bar.querySelectorAll('button[data-preset]'));
+  if (!buttons.length) return;
+
+  const minutes = pomoDurationSeconds / 60;
+  let active = null;
+  buttons.forEach(btn => {
+    const matches = Math.abs(Number(btn.dataset.preset) - minutes) < 0.01;
+    btn.classList.toggle('is-active', matches);
+    if (matches) active = btn;
+  });
+
+  if (!active) {
+    lens.style.opacity = '0';
+    return;
+  }
+
+  const barRect = bar.getBoundingClientRect();
+  const rect = active.getBoundingClientRect();
+  if (!rect.width || !barRect.width) {
+    lens.style.opacity = '0';
+    return;
+  }
+
+  const index = buttons.indexOf(active);
+  const previous = bar.dataset.lensIndex === undefined || bar.dataset.lensIndex === ''
+    ? null
+    : Number(bar.dataset.lensIndex);
+  const borderLeft = parseFloat(getComputedStyle(bar).borderLeftWidth) || 0;
+
+  if (suppressMotion) {
+    bar.classList.add('is-lens-init');
+    lens.classList.remove('is-morphing');
+  }
+  lens.style.opacity = '1';
+  lens.style.width = `${rect.width.toFixed(2)}px`;
+  lens.style.transform = `translate3d(${(rect.left - barRect.left - borderLeft).toFixed(2)}px, 0, 0)`;
+
+  if (!suppressMotion && previous !== null && previous !== index) {
+    lens.style.transformOrigin = index > previous ? 'left center' : 'right center';
+    lens.classList.remove('is-morphing');
+    void lens.offsetWidth;
+    lens.classList.add('is-morphing');
+  }
+  bar.dataset.lensIndex = String(index);
+
+  if (suppressMotion) {
+    clearTimeout(bar._lensInitTimer);
+    bar._lensInitTimer = setTimeout(() => bar.classList.remove('is-lens-init'), 80);
+  }
+}
+
+function initFocusPresetSwitcher() {
+  const bar = document.getElementById('focus-preset-switcher');
+  const lens = document.getElementById('focus-preset-lens');
+  if (!bar || !lens || bar.dataset.bound === '1') return;
+  bar.dataset.bound = '1';
+  lens.addEventListener('animationend', () => lens.classList.remove('is-morphing'));
+
+  const settle = () => moveFocusPresetLens(true);
+  window.addEventListener('resize', settle, { passive: true });
+  window.addEventListener('orientationchange', settle, { passive: true });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', settle, { passive: true });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(settle).catch(() => {});
+  if (window.ResizeObserver) {
+    try { new ResizeObserver(settle).observe(bar); } catch (e) { /* older engines */ }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) settle(); });
+
+  settle();
+  requestAnimationFrame(settle);
+  setTimeout(settle, 260);
+  setTimeout(settle, 900);
+}
+
 function switchTab(tab) {
   activeTab = tab;
 
@@ -3208,6 +3290,10 @@ function switchTab(tab) {
   moveLiquidNavLens();
 
   renderCurrentTab();
+  if (tab === 'focus') {
+    moveFocusPresetLens(true);
+    setTimeout(() => moveFocusPresetLens(true), 60);
+  }
 }
 
 function renderCurrentTab() {
@@ -6509,6 +6595,31 @@ function initBrownNoise() {
   }
 }
 
+function syncRangeFill(el) {
+  if (!el) return;
+  const min = Number(el.min);
+  const max = Number(el.max);
+  const value = Number(el.value);
+  const lo = Number.isFinite(min) ? min : 0;
+  const hi = Number.isFinite(max) ? max : 100;
+  const pct = hi > lo ? ((value - lo) / (hi - lo)) * 100 : 0;
+  el.style.setProperty('--p', `${Math.max(0, Math.min(100, pct)).toFixed(2)}%`);
+}
+
+function syncAllRangeFills() {
+  document.querySelectorAll('.hdsfd-range').forEach(syncRangeFill);
+}
+
+function initRangeFills() {
+  syncAllRangeFills();
+  if (document.documentElement.dataset.rangeFillBound === '1') return;
+  document.documentElement.dataset.rangeFillBound = '1';
+  document.addEventListener('input', event => {
+    const range = event.target && event.target.closest ? event.target.closest('.hdsfd-range') : null;
+    if (range) syncRangeFill(range);
+  }, { passive: true });
+}
+
 function updateMixerVolume() {
   const volRain = document.getElementById('vol-rain');
   const volNoise = document.getElementById('vol-noise');
@@ -6530,6 +6641,14 @@ function updateMixerVolume() {
     if (noiseLabel) noiseLabel.textContent = pct;
     if (zenNoiseLabel) zenNoiseLabel.textContent = pct;
   }
+  const zenRain = document.getElementById('zen-rain-slider');
+  const zenNoise = document.getElementById('zen-noise-slider');
+  if (zenRain && volRain) zenRain.value = volRain.value;
+  if (zenNoise && volNoise) zenNoise.value = volNoise.value;
+  syncRangeFill(volRain);
+  syncRangeFill(volNoise);
+  syncRangeFill(zenRain);
+  syncRangeFill(zenNoise);
 }
 
 // ===== YOUTUBE SONG & PLAYLIST CONTROLLER =====
@@ -6866,6 +6985,7 @@ function startTimer() {
       updateStatsOverview();
     }
   }, 1000);
+  zenPomoSyncControls();
 }
 
 function pauseTimer() {
@@ -6884,6 +7004,7 @@ function pauseTimer() {
   }
   document.getElementById('pomo-start-btn').classList.remove('hidden');
   document.getElementById('pomo-pause-btn').classList.add('hidden');
+  zenPomoSyncControls();
 }
 
 function resetTimer() {
@@ -6891,6 +7012,7 @@ function resetTimer() {
   pomoSessionElapsedSeconds = 0;
   pomoRemainingSeconds = pomoDurationSeconds;
   updatePomoDisplay();
+  zenPomoSyncControls();
 }
 
 function setPomoPreset(mins, exactSeconds = 0) {
@@ -6910,9 +7032,12 @@ function setPomoPreset(mins, exactSeconds = 0) {
   }
   
   if (slider) slider.value = Math.max(0, Math.min(100, sliderPos));
+  if (slider) syncRangeFill(slider);
   if (sliderVal) sliderVal.textContent = `${mins}m`;
   if (customInput) customInput.value = exactSeconds > 0 ? (exactSeconds / 60).toFixed(2).replace(/\.00$/, '') : mins;
   updatePomoDisplay();
+  moveFocusPresetLens();
+  zenPomoSyncControls();
 }
 
 function onDynamicSliderChange(val) {
@@ -6931,6 +7056,9 @@ function onDynamicSliderChange(val) {
   if (sliderVal) sliderVal.textContent = `${mins}m`;
   if (customInput) customInput.value = mins;
   updatePomoDisplay();
+  syncRangeFill(document.getElementById('pomo-slider'));
+  moveFocusPresetLens();
+  zenPomoSyncControls();
 }
 
 function adjustCustomTimeStep(delta) {
@@ -6981,6 +7109,7 @@ function enterZenMode() {
   closeZenOrbitPanel();
   setZenOrbitOpen(false);
   applyZenOrbitPosition();
+  zenPomoSyncControls();
   zenStartTime = Date.now();
 
   if (holdMsg) {
@@ -6994,6 +7123,30 @@ function enterZenMode() {
   if (document.documentElement.requestFullscreen) {
     document.documentElement.requestFullscreen().catch(() => {});
   }
+}
+
+function zenPomoSyncControls() {
+  const btn = document.getElementById('zen-pomo-toggle');
+  if (!btn) return;
+  const running = !!pomoTimerId;
+  const paused = !running && pomoRemainingSeconds > 0 && pomoRemainingSeconds < pomoDurationSeconds;
+  const label = document.getElementById('zen-pomo-toggle-label');
+  const icon = document.getElementById('zen-pomo-toggle-ico');
+  if (label) label.textContent = running ? 'Pause focus' : (paused ? 'Resume focus' : 'Start focus');
+  if (icon) icon.innerHTML = hdsfdIcon(running ? 'pause' : 'play');
+  btn.classList.toggle('is-running', running);
+  btn.setAttribute('aria-pressed', running ? 'true' : 'false');
+  btn.setAttribute('aria-label', running ? 'Pause focus timer' : (paused ? 'Resume focus timer' : 'Start focus timer'));
+}
+
+function zenPomoToggle() {
+  if (pomoTimerId) {
+    pauseTimer();
+  } else {
+    if (pomoRemainingSeconds <= 0) resetTimer();
+    startTimer();
+  }
+  zenPomoSyncControls();
 }
 
 function exitZenMode() {
@@ -7054,13 +7207,31 @@ function zenOrbitClamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function zenSafeInsets() {
+  const style = getComputedStyle(document.documentElement);
+  const read = (name) => {
+    const parsed = parseFloat(style.getPropertyValue(name));
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+  };
+  return {
+    top: read('--hdsfd-safe-top'),
+    right: read('--hdsfd-safe-right'),
+    bottom: read('--hdsfd-safe-bottom'),
+    left: read('--hdsfd-safe-left')
+  };
+}
+
 function zenOrbitBounds() {
   const size = zenOrbitState.size;
+  const safe = zenSafeInsets();
+  const pad = 12;
+  const minX = safe.left + pad;
+  const minY = safe.top + pad;
   return {
-    minX: 12,
-    maxX: Math.max(12, window.innerWidth - size - 12),
-    minY: 12,
-    maxY: Math.max(12, window.innerHeight - size - 12)
+    minX,
+    minY,
+    maxX: Math.max(minX, window.innerWidth - safe.right - size - pad),
+    maxY: Math.max(minY, window.innerHeight - safe.bottom - size - pad)
   };
 }
 
@@ -7154,6 +7325,11 @@ function positionZenOrbitPanel() {
   if (!panel || panel.classList.contains('hidden')) return;
   const pad = 12;
   const gap = 12;
+  const safe = zenSafeInsets();
+  const safeLeft = safe.left + pad;
+  const safeTop = safe.top + pad;
+  const safeRight = window.innerWidth - safe.right - pad;
+  const safeBottom = window.innerHeight - safe.bottom - pad;
   const pw = panel.offsetWidth;
   const ph = panel.offsetHeight;
   const dockLeft = zenOrbitState.x;
@@ -7163,17 +7339,18 @@ function positionZenOrbitPanel() {
   let left = null;
   let top = null;
 
-  if (dockRight + gap + pw <= window.innerWidth - pad) left = dockRight + gap;
-  else if (dockLeft - gap - pw >= pad) left = dockLeft - gap - pw;
+  if (dockRight + gap + pw <= safeRight) left = dockRight + gap;
+  else if (dockLeft - gap - pw >= safeLeft) left = dockLeft - gap - pw;
 
   if (left === null) {
-    left = Math.max(pad, Math.min(dockLeft + zenOrbitState.size / 2 - pw / 2, window.innerWidth - pw - pad));
-    top = dockBottom + gap + ph <= window.innerHeight - pad ? dockBottom + gap : dockTop - gap - ph;
+    left = Math.max(safeLeft, Math.min(dockLeft + zenOrbitState.size / 2 - pw / 2, safeRight - pw));
+    top = dockBottom + gap + ph <= safeBottom ? dockBottom + gap : dockTop - gap - ph;
   } else {
     top = dockTop + zenOrbitState.size / 2 - ph / 2;
   }
 
-  top = Math.max(pad, Math.min(top, window.innerHeight - ph - pad));
+  top = Math.max(safeTop, Math.min(top, Math.max(safeTop, safeBottom - ph)));
+  left = Math.max(safeLeft, Math.min(left, Math.max(safeLeft, safeRight - pw)));
   panel.style.left = left.toFixed(1) + 'px';
   panel.style.top = top.toFixed(1) + 'px';
 }
@@ -7185,6 +7362,7 @@ function zenOrbitSyncSound() {
   const zenNoise = document.getElementById('zen-noise-slider');
   if (rain && zenRain) zenRain.value = rain.value;
   if (noise && zenNoise) zenNoise.value = noise.value;
+  [rain, noise, zenRain, zenNoise].forEach(syncRangeFill);
   const rainLabel = document.getElementById('zen-val-rain');
   const noiseLabel = document.getElementById('zen-val-noise');
   if (rainLabel && rain) rainLabel.textContent = Math.round(parseFloat(rain.value) * 100) + '%';
@@ -7206,6 +7384,8 @@ function zenSetSound(kind, value) {
   const label = document.getElementById(kind === 'rain' ? 'zen-val-rain' : 'zen-val-noise');
   if (main) main.value = numeric;
   if (label) label.textContent = Math.round(numeric * 100) + '%';
+  syncRangeFill(main);
+  syncRangeFill(document.getElementById(kind === 'rain' ? 'zen-rain-slider' : 'zen-noise-slider'));
   // The noise source keeps running at zero gain when the mix is stopped, so a
   // volume move must store the level without un-muting a paused soundscape.
   if (kind === 'noise' && !isPlayingSoundscape) return;
@@ -7400,7 +7580,7 @@ function initZenOrbitDock() {
 document.addEventListener('keydown', (e) => {
   const zenOverlay = document.getElementById('zen-overlay');
   if (zenOverlay && !zenOverlay.classList.contains('hidden')) {
-    if (e.target && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (e.target && e.target.closest('#zen-pomo-toggle, input, textarea, select, [contenteditable="true"]')) return;
     onZenScreenTouch();
     if (e.code === 'Space' || e.key === ' ') {
       e.preventDefault();
