@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, send_from_directory, redirect
+from flask import Flask, request, jsonify, send_from_directory, redirect, session
 import sqlite3
 import os
 import json
@@ -180,6 +180,17 @@ def init_db():
         cursor.execute('ALTER TABLE user_tokens ADD COLUMN display_name TEXT')
     except Exception:
         pass
+    try:
+        cursor.execute('ALTER TABLE user_tokens ADD COLUMN google_email TEXT')
+    except Exception:
+        pass
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS oauth_states (
+            state_hash TEXT PRIMARY KEY,
+            owner TEXT,
+            expires_at TIMESTAMP NOT NULL
+        )
+    ''')
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS gemini_chat_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -232,6 +243,86 @@ def issue_session(username):
     return raw_token, expires
 
 
+OAUTH_STATE_TTL_SECONDS = 600
+
+
+def issue_oauth_state(owner=None):
+    """Create a one-time OAuth state value.
+
+    The optional owner is the already signed-in HDSFD account that is linking
+    Google. It is stored server-side, never inside the state string itself.
+    """
+    state = secrets.token_urlsafe(24)
+    state_hash = hashlib.sha256(state.encode('utf-8')).hexdigest()
+    now = datetime.datetime.now(timezone.utc)
+    expires = now + timedelta(seconds=OAUTH_STATE_TTL_SECONDS)
+    conn = get_db()
+    conn.execute('DELETE FROM oauth_states WHERE expires_at <= ?', (now.isoformat(),))
+    conn.execute(
+        'INSERT INTO oauth_states (state_hash, owner, expires_at) VALUES (?, ?, ?)',
+        (state_hash, owner, expires.isoformat()),
+    )
+    conn.commit()
+    conn.close()
+    return state
+
+
+def consume_oauth_state(state):
+    """Validate and burn a one-time OAuth state.
+
+    Returns (ok, owner). A missing, expired or replayed state is always invalid,
+    so a callback can never be replayed against another browser.
+    """
+    state = str(state or '')
+    if not state or len(state) > 200:
+        return False, None
+    state_hash = hashlib.sha256(state.encode('utf-8')).hexdigest()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT owner, expires_at FROM oauth_states WHERE state_hash = ?',
+        (state_hash,),
+    ).fetchone()
+    conn.execute('DELETE FROM oauth_states WHERE state_hash = ?', (state_hash,))
+    conn.commit()
+    conn.close()
+    if not row:
+        return False, None
+    try:
+        if datetime.datetime.fromisoformat(row['expires_at']) <= datetime.datetime.now(timezone.utc):
+            return False, None
+    except (TypeError, ValueError):
+        return False, None
+    return True, (row['owner'] or None)
+
+
+def oauth_error_response(message):
+    page = """<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Connection Failed</title>
+  <style>
+    body { background: #0b0718; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+    .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14); padding: 32px; border-radius: 24px; text-align: center; max-width: 420px; }
+    h1 { font-size: 20px; color: #fca5a5; margin: 12px 0 8px; }
+    p { color: #cbd5e1; font-size: 14px; line-height: 1.5; margin: 0 0 18px; }
+    button { background: rgba(168,85,247,0.2); border: 1px solid rgba(168,85,247,0.45); color: #e9d5ff; font-weight: 700; padding: 10px 18px; border-radius: 12px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size: 40px;">\u26a0\ufe0f</div>
+    <h1>Google connection failed</h1>
+    <p>__MESSAGE__</p>
+    <button onclick="window.close()">Close this window</button>
+  </div>
+</body>
+</html>"""
+    safe_message = str(message or '').replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    return app.response_class(page.replace('__MESSAGE__', safe_message), status=400, mimetype='text/html')
+
+
 def current_user():
     header = request.headers.get('Authorization', '')
     if not header.startswith('Bearer '):
@@ -278,7 +369,13 @@ def _session_owner(requested=None):
     return owner, None
 
 
-def save_user_tokens(username, creds, display_name=None):
+def save_user_tokens(username, creds, display_name=None, google_email=None):
+    """Store Google credentials under the HDSFD account that owns them.
+
+    ``username`` is the session owner (a plain HDSFD username for a linked
+    account); ``google_email`` keeps the connected Google address for display
+    and support. Existing values are preserved when an argument is None.
+    """
     if not username or not creds:
         return
     token_str = creds.to_json() if hasattr(creds, 'to_json') else (json.dumps(creds) if isinstance(creds, dict) else str(creds))
@@ -287,23 +384,19 @@ def save_user_tokens(username, creds, display_name=None):
         conn.execute('ALTER TABLE user_tokens ADD COLUMN display_name TEXT')
     except Exception:
         pass
-    if display_name:
-        conn.execute('''
-            INSERT INTO user_tokens (username, token_json, display_name)
-            VALUES (?, ?, ?)
-            ON CONFLICT(username) DO UPDATE SET
-                token_json = excluded.token_json,
-                display_name = excluded.display_name,
-                updated_at = CURRENT_TIMESTAMP
-        ''', (username, token_str, display_name))
-    else:
-        conn.execute('''
-            INSERT INTO user_tokens (username, token_json)
-            VALUES (?, ?)
-            ON CONFLICT(username) DO UPDATE SET
-                token_json = excluded.token_json,
-                updated_at = CURRENT_TIMESTAMP
-        ''', (username, token_str))
+    try:
+        conn.execute('ALTER TABLE user_tokens ADD COLUMN google_email TEXT')
+    except Exception:
+        pass
+    conn.execute('''
+        INSERT INTO user_tokens (username, token_json, display_name, google_email)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(username) DO UPDATE SET
+            token_json = excluded.token_json,
+            display_name = COALESCE(excluded.display_name, user_tokens.display_name),
+            google_email = COALESCE(excluded.google_email, user_tokens.google_email),
+            updated_at = CURRENT_TIMESTAMP
+    ''', (username, token_str, display_name, google_email))
     conn.commit()
     conn.close()
 
@@ -370,6 +463,9 @@ def hdsfd_login():
         conn.close()
 
     token, expires = issue_session(username)
+    # Remember the signed-in account for the Google linking flow only. The cookie
+    # is signed by Flask and is never trusted as a bearer session.
+    session['hdsfd_owner'] = username
     return jsonify({
         'status': 'success',
         'username': username,
@@ -388,6 +484,7 @@ def hdsfd_logout():
         conn.execute('DELETE FROM sessions WHERE token_hash = ?', (token_hash,))
         conn.commit()
         conn.close()
+    session.pop('hdsfd_owner', None)
     return jsonify({'status': 'success'})
 
 
@@ -413,8 +510,9 @@ def health_check():
 
 @app.route('/api/google/status', methods=['GET'])
 def get_google_status():
-    requested_username = request.args.get('username') or request.args.get('email')
-    if not requested_username or requested_username.lower() in ['guest', 'user', 'null', 'undefined', '']:
+    # Session-scoped: a username in the query string cannot select another account.
+    requested_username = current_user()
+    if not requested_username:
         return jsonify({
             "connected": False,
             "email": None,
@@ -423,12 +521,13 @@ def get_google_status():
     
     conn = get_db()
     try:
-        row = conn.execute("SELECT username, display_name, updated_at FROM user_tokens WHERE username = ?", (requested_username,)).fetchone()
+        row = conn.execute("SELECT username, display_name, google_email, updated_at FROM user_tokens WHERE username = ?", (requested_username,)).fetchone()
     except Exception:
         row = conn.execute("SELECT username, updated_at FROM user_tokens WHERE username = ?", (requested_username,)).fetchone()
     conn.close()
     if row:
-        email = row['username']
+        linked_email = row['google_email'] if 'google_email' in row.keys() else None
+        email = linked_email or row['username']
         name_part = None
         if 'display_name' in row.keys() and row['display_name']:
             name_part = row['display_name']
@@ -1527,7 +1626,7 @@ def gemini_generate():
         "   - Audio Synthesizer with Rain, Brown Noise, and YouTube music player.\n"
         "   - Zen Mode with assistive floating touch controls and 3-second hold exit.\n\n"
         "6. GOOGLE DRIVE BACKUP (Tab 4):\n"
-        "   - Automatically backs up all notes as 'Notes.json' and full database as 'data.db' into the user's 'HDSFD Backup' Google Drive folder.\n\n"
+        "   - Backs up all notes as 'Notes.json' and the assistant's study context as 'ai.json' into the user's 'HDSFD Backup' Google Drive folder.\n\n"
         "CRITICAL RULES FOR STICKY NOTES:\n"
         "When asked to create a sticky note about a topic, you MUST generate REAL educational content, formulas, key definitions, and actionable study notes.\n"
         "NEVER just echo the user command. The 'text' field must contain structured synthesized knowledge.\n\n"
@@ -1588,12 +1687,17 @@ def gemini_generate():
                 bits.append('done' if t.get('completed') else 'open')
                 ctx_lines.append("  - " + " | ".join(bits))
 
-        notes = live_context.get('notes') or []
-        if notes:
-            ctx_lines.append(f"NOTES ({len(notes)} shown):")
-            for n in notes[:6]:
-                if isinstance(n, dict):
-                    ctx_lines.append("  - " + _clip_ctx(n.get('title') or n.get('text'), 110))
+        # Note text is opt-out: Settings sends include_notes=false when the user
+        # turns it off, and the server never adds notes in that case.
+        if data.get('include_notes') is not False:
+            notes = live_context.get('notes') or []
+            if notes:
+                ctx_lines.append(f"NOTES ({len(notes)} shown):")
+                for n in notes[:6]:
+                    if isinstance(n, dict):
+                        ctx_lines.append("  - " + _clip_ctx(n.get('title') or n.get('text'), 110))
+        else:
+            ctx_lines.append("NOTES: withheld by the user's privacy setting.")
 
         schedule = live_context.get('schedule') or []
         if schedule:
@@ -2199,7 +2303,6 @@ def get_oauth_redirect_uri():
 
 @app.route('/api/gdrive/auth', methods=['GET'])
 def gdrive_auth():
-    username = request.args.get('username', 'User')
     client_id = os.environ.get('GOOGLE_CLIENT_ID', '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com')
     creds_file = os.path.join(os.path.dirname(__file__), 'google_credentials.json')
     if os.path.exists(creds_file):
@@ -2219,8 +2322,16 @@ def gdrive_auth():
         'https://www.googleapis.com/auth/tasks'
     ]
     
-    import secrets
-    state_token = f"{secrets.token_urlsafe(12)}_{urllib.parse.quote(username)}"
+    # Linking is only for the HDSFD account proven by the signed session cookie;
+    # a username in the query string is never accepted as identity.
+    link_owner = session.get('hdsfd_owner') or None
+    if link_owner:
+        conn = get_db()
+        row = conn.execute('SELECT username FROM users WHERE username = ?', (link_owner,)).fetchone()
+        conn.close()
+        if not row:
+            link_owner = None
+    state_token = issue_oauth_state(link_owner)
     
     params = {
         'client_id': client_id,
@@ -2239,14 +2350,22 @@ def gdrive_auth():
 def gdrive_callback():
     code = request.args.get('code')
     raw_state = request.args.get('state') or ''
-    state_username = 'User'
-    if '_' in raw_state:
-        try:
-            state_username = urllib.parse.unquote(raw_state.split('_', 1)[1])
-        except Exception:
-            state_username = 'User'
-    elif request.args.get('username'):
-        state_username = request.args.get('username')
+    state_ok, link_owner = consume_oauth_state(raw_state)
+    if not state_ok:
+        return oauth_error_response(
+            'This Google connection link is invalid, expired or already used. '
+            'Return to HDSFD and press "Pair Google Account" again.'
+        )
+    if request.args.get('error'):
+        return oauth_error_response(
+            'Google did not grant access, so nothing was connected. '
+            'Return to HDSFD and try again if you want to link your account.'
+        )
+    if not code:
+        return oauth_error_response(
+            'Google did not return an authorization code. '
+            'Return to HDSFD and press "Pair Google Account" again.'
+        )
         
     client_id = os.environ.get('GOOGLE_CLIENT_ID', '121185670188-9tjuclccmbqiosbtia0pouoras1ligv7.apps.googleusercontent.com')
     client_secret = os.environ.get('GOOGLE_CLIENT_SECRET')
@@ -2265,6 +2384,8 @@ def gdrive_callback():
 
     user_email = ''
     user_name = ''
+    session_token = ''
+    session_expires = None
 
     if code and client_id and client_secret:
         try:
@@ -2314,7 +2435,16 @@ def gdrive_callback():
                     user_name = prefix.replace('.', ' ').replace('_', ' ').replace('-', ' ').title()
 
                 if user_email:
-                    save_user_tokens(user_email, token_data, user_name)
+                    # A signed-in HDSFD account keeps its session; Google is only
+                    # linked to it. Guests get a real HDSFD session from Google.
+                    save_user_tokens(
+                        link_owner or user_email,
+                        token_data,
+                        None if link_owner else user_name,
+                        google_email=user_email,
+                    )
+                    if not link_owner:
+                        session_token, session_expires = issue_session(user_email)
             else:
                 logger.error(f"Google token exchange failed: {token_resp.status_code} {token_resp.text}")
         except Exception as e:
@@ -2345,22 +2475,35 @@ def gdrive_callback():
   <script>
     const userEmail = {json.dumps(user_email)};
     const userName = {json.dumps(user_name or display_label)};
+    const sessionToken = {json.dumps(session_token or '')};
+    const sessionExpires = {json.dumps(session_expires.isoformat() if session_expires else '')};
+    const linkedExisting = {json.dumps(bool(link_owner))};
     
     if (userEmail && userEmail.indexOf('@') !== -1) {{
       localStorage.setItem('hdsfd_google_account', userEmail);
       localStorage.setItem('hdsfd_google_name', userName);
-      localStorage.setItem('hdsfd_user_name', userName);
+      if (!linkedExisting) {{
+        localStorage.setItem('hdsfd_user_name', userName);
+      }}
+      if (sessionToken) {{
+        localStorage.setItem('hdsfd_auth_token', sessionToken);
+        localStorage.setItem('hdsfd_auth_user', userEmail);
+        localStorage.setItem('hdsfd_auth_expires', sessionExpires);
+      }}
     }}
     
     const authData = {{
       type: 'gdrive_linked',
       username: userEmail,
-      name: userName
+      name: userName,
+      token: sessionToken,
+      expires_at: sessionExpires,
+      keep_session: linkedExisting
     }};
     
     if (window.opener && !window.opener.closed) {{
       try {{
-        window.opener.postMessage(authData, '*');
+        window.opener.postMessage(authData, window.location.origin);
       }} catch (e) {{}}
       setTimeout(() => {{ window.close(); }}, 1000);
     }} else {{
@@ -2376,7 +2519,9 @@ def gdrive_callback():
 @app.route('/api/gdrive/backup', methods=['POST'])
 def gdrive_backup():
     data = request.json or {}
-    username = data.get('username', 'GoogleUser')
+    username, error = _session_owner(data.get('username'))
+    if error:
+        return error
     notes = data.get('notes', [])
     
     backup_dir = os.path.join(os.path.dirname(__file__), 'backups')
@@ -2446,7 +2591,7 @@ def gdrive_backup():
         "status": "success",
         "drive_synced": drive_synced,
         "folder": "HDSFD Backup",
-        "files": ["Notes.json", "data.db", "ai.json"],
+        "files": ["Notes.json", "ai.json"],
         "message": f"Backup for {username} saved in isolated Google Drive folder 'HDSFD Backup'."
     })
 
@@ -2468,7 +2613,9 @@ def get_or_create_tasklist(service, folder_name):
 @app.route('/api/google/tasks', methods=['GET', 'POST'])
 def google_tasks_api():
     data = request.json or {} if request.method == 'POST' else {}
-    username = request.args.get('username') or data.get('username') or 'Guest'
+    username, error = _session_owner(request.args.get('username') or data.get('username'))
+    if error:
+        return error
     creds = get_google_credentials(username)
     
     if request.method == 'POST':
@@ -2535,7 +2682,9 @@ def google_tasks_api():
 @app.route('/api/google/tasks/<task_id>', methods=['PUT', 'PATCH', 'DELETE'])
 def update_google_task(task_id):
     data = request.json or {} if request.method in ['PUT', 'PATCH'] else {}
-    username = request.args.get('username') or data.get('username') or 'Guest'
+    username, error = _session_owner(request.args.get('username') or data.get('username'))
+    if error:
+        return error
     tasklist_id = request.args.get('tasklist_id') or data.get('tasklist_id')
     creds = get_google_credentials(username)
     
@@ -2581,7 +2730,9 @@ def update_google_task(task_id):
 
 @app.route('/api/google/tasklists', methods=['GET'])
 def get_google_tasklists():
-    username = request.args.get('username') or 'Guest'
+    username, error = _session_owner(request.args.get('username'))
+    if error:
+        return error
     creds = get_google_credentials(username)
     if creds:
         try:
@@ -2596,7 +2747,9 @@ def get_google_tasklists():
 @app.route('/api/google/calendar', methods=['GET', 'POST'])
 def google_calendar_api():
     data = request.json or {} if request.method == 'POST' else {}
-    username = request.args.get('username') or data.get('username') or 'Guest'
+    username, error = _session_owner(request.args.get('username') or data.get('username'))
+    if error:
+        return error
     creds = get_google_credentials(username)
     
     if request.method == 'POST':

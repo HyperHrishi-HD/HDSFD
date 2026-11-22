@@ -53,7 +53,7 @@
       </div>
       <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight">Privacy Policy & Terms of Service</h2>
       <p class="text-sm text-white/60">
-        <b>Effective Date:</b> August 11, 2026 | <b>Last Revised:</b> August 2026 | <b>Application:</b> HDSFD (HD Student Focus Dashboard)
+        <b>Effective Date:</b> August 11, 2026 | <b>Last Revised:</b> November 22, 2026 | <b>Application:</b> HDSFD (HD Student Focus Dashboard)
       </p>
     </div>
 
@@ -63,7 +63,7 @@
         <span>1.</span> <span>Overview & Purpose</span>
       </h3>
       <p class="text-sm text-slate-300">
-        Welcome to <b>HDSFD</b> (accessible at <a href="https://hdsfd.pythonanywhere.com" class="text-purple-400 underline">https://hdsfd.pythonanywhere.com</a>). HDSFD is an open, student-first productivity sanctuary designed to help learners track study sessions, organize assignments, sketch notes, and cultivate academic focus through a digital sanctuary environment.
+        Welcome to <b>HDSFD</b> (accessible at <a href="https://hdsfd.dpdns.org" class="text-purple-400 underline">https://hdsfd.dpdns.org</a>). HDSFD is an open, student-first productivity sanctuary designed to help learners track study sessions, organize assignments, sketch notes, and cultivate academic focus through a digital sanctuary environment.
       </p>
       <p class="text-sm text-slate-300">
         We respect your privacy and are committed to safeguarding your personal data. This document outlines our data practices, transparency commitments, and terms governing your use of HDSFD.
@@ -78,15 +78,22 @@
       <div class="space-y-3 text-sm text-slate-300">
         <p><b>A. User Account Information (When Signed In with Google):</b></p>
         <ul class="list-disc list-inside space-y-1.5 text-slate-400 pl-2">
-          <li><b>Google Profile & Email:</b> When you sign in via Google OAuth2, we receive your email address and public name to personalize your dashboard and authenticate your encrypted database partition.</li>
-          <li><b>Google Drive Access (<code class="text-purple-300 bg-white/5 px-1 py-0.5 rounded">drive.file</code>):</b> Used strictly to backup and sync your notes and database snapshot file (<code class="text-purple-300">Notes.json</code> and <code class="text-purple-300">data.db</code>) within your private <code class="text-purple-300">HDSFD Backup</code> folder. HDSFD cannot access any other files on your Google Drive.</li>
-          <li><b>Google Tasks & Calendar:</b> Used to synchronize your study assignments, deadlines, and class schedules directly with your personal calendar and task lists.</li>
+          <li><b>Google Profile &amp; Email:</b> When you connect Google, we receive your email address and public name to identify your HDSFD account, label the connected account in Settings, and associate your saved workspace with that email. This information is stored in HDSFD's application database and is not used for advertising or shared with other users.</li>
+          <li><b>Google Drive Access (<code class="text-purple-300 bg-white/5 px-1 py-0.5 rounded">drive.file</code>):</b> Used only to create or update a folder named <code class="text-purple-300">HDSFD Backup</code> in your Google Drive and the files inside it: <code class="text-purple-300">Notes.json</code> (your notes) and <code class="text-purple-300">ai.json</code> (the study context used by the in-app assistant). HDSFD can see only the files it creates in that folder and cannot access any other files in your Google Drive. HDSFD does not advertise from this data and does not send your Drive backup files to the AI assistant.</li>
+          <li><b>Google Tasks &amp; Calendar:</b> Used to read your task lists and primary-calendar events and to create, update, complete, or delete tasks and create class or study events you add in HDSFD. HDSFD stores the task and calendar identifiers needed to keep these items in sync; it does not copy your entire Google Calendar or task history into its database.</li>
         </ul>
 
         <p class="pt-2"><b>B. Local & Study Data (Guest & Signed-In Modes):</b></p>
         <ul class="list-disc list-inside space-y-1.5 text-slate-400 pl-2">
           <li><b>Focus Timers & Stats:</b> Chronometer logs, completed Pomodoro sessions, study streaks, and sanctuary tree evolution metrics.</li>
           <li><b>Notes & Vector Sketches:</b> Sticky notes, text formatting, and hand-drawn canvas drawings created in Tab 3.</li>
+        </ul>
+
+        <p class="pt-2"><b>C. AI Assistant (Google Gemini):</b></p>
+        <ul class="list-disc list-inside space-y-1.5 text-slate-400 pl-2">
+          <li><b>What is sent:</b> When you send a message to the in-app assistant, HDSFD sends your message plus a trimmed snapshot of your workspace &mdash; task titles, folders, due dates, class schedule, exam names and progress stats &mdash; to Google's Gemini API. Recent note titles and a short opening snippet of each note are included only while <b>Send note titles and short snippets to the AI assistant</b> is enabled in Settings; turning it off removes notes from every AI request.</li>
+          <li><b>How Google handles it:</b> Content sent through the Gemini API on its free tier may be used by Google to improve its products, under the <a href="https://ai.google.dev/gemini-api/terms" target="_blank" rel="noopener" class="text-purple-400 underline">Gemini API Additional Terms</a> and Google's Privacy Policy. HDSFD does not control Google's processing, so please do not send sensitive personal information to the assistant.</li>
+          <li><b>What is not sent:</b> Your Google Drive files and hand-drawn canvas sketches are never included in AI requests.</li>
         </ul>
       </div>
     </section>
@@ -102,21 +109,21 @@
       <ul class="list-disc list-inside space-y-2 text-sm text-slate-400 pl-2">
         <li><b>No Advertising or Monetization:</b> User data received through Google APIs is never used for serving advertisements, marketing, or retargeting campaigns.</li>
         <li><b>No Data Brokering / Selling:</b> We do not sell, rent, license, or transfer any user data to third-party data brokers or commercial entities.</li>
-        <li><b>No AI Training on Private Files:</b> Your personal Google Drive files and private notes are never used to train generalized artificial intelligence models.</li>
+        <li><b>No Model Training by HDSFD:</b> HDSFD does not use data received from Google APIs &mdash; or your notes &mdash; to train, develop or improve its own AI models, and does not sell or transfer that data for model training. Data you choose to send to the in-app assistant is processed by Google's Gemini API as described in Section 2C.</li>
       </ul>
     </section>
 
     <!-- Section 4: Data Security & Storage -->
     <section class="glass-card p-6 sm:p-8 rounded-3xl space-y-3">
       <h3 class="text-xl font-bold text-purple-300 flex items-center gap-2">
-        <span>4.</span> <span>Data Storage, Security & Encryption</span>
+        <span>4.</span> <span>Data Storage &amp; Security</span>
       </h3>
       <p class="text-sm text-slate-300">
-        HDSFD utilizes industry-standard cryptographic practices:
+        HDSFD protects data in transit and limits where account data is stored:
       </p>
       <ul class="list-disc list-inside space-y-1.5 text-sm text-slate-400 pl-2">
-        <li>All server communications occur exclusively over encrypted <b>HTTPS / TLS 1.3</b> connections.</li>
-        <li>OAuth refresh tokens and credentials are encrypted and stored in local server database records with strict session isolation.</li>
+        <li>All communications between your browser and HDSFD's server use encrypted <b>HTTPS/TLS</b> connections.</li>
+        <li><b>Google OAuth credentials:</b> The refresh token and the OAuth client credentials needed to call Google APIs are stored server-side in HDSFD's SQLite application database, keyed to your Google account email. They are not placed in browser storage and are not shared with other users. Disconnecting Google in Settings removes the account from this browser and stops the app from using it, but does not delete the stored authorization. You can revoke HDSFD's access in your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener" class="text-purple-400 underline">Google Account Permissions Manager</a>; to delete the stored record, email <a href="mailto:hdsystem29@gmail.com" class="text-purple-400 underline">hdsystem29@gmail.com</a>.</li>
         <li>Guest users enjoy full privacy: all guest data is retained strictly in the user's local browser storage (<code class="text-purple-300">localStorage</code>) and is never transmitted to any external server.</li>
       </ul>
     </section>
@@ -131,7 +138,7 @@
       </p>
       <ul class="list-disc list-inside space-y-1.5 text-sm text-slate-400 pl-2">
         <li><b>Disconnect Account:</b> You can disconnect your Google account at any time in Tab 4 (Settings) or revoke access directly via your <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener" class="text-purple-400 underline">Google Account Permissions Manager</a>.</li>
-        <li><b>Purge Data:</b> Clicking "Clear Chat History" or deleting tasks immediately purges records from the active session. To request a permanent server database wipe, contact us at the email below.</li>
+        <li><b>Purge Data:</b> Clicking "Clear Chat History" or deleting tasks immediately removes those records from the active session. To request deletion of your saved workspace or of the Google authorization stored on our server, email <a href="mailto:hdsystem29@gmail.com" class="text-purple-400 underline">hdsystem29@gmail.com</a>.</li>
       </ul>
     </section>
 
@@ -142,7 +149,7 @@
       </h3>
       <div class="space-y-2 text-sm text-slate-300">
         <p><b>Acceptable Use:</b> HDSFD is provided free of charge for students, educators, and self-directed learners. You agree not to misuse the service, launch automated denial-of-service scripts, or attempt unauthorized access to server infrastructure.</p>
-        <p><b>Disclaimer of Warranties:</b> HDSFD is provided on an "as-is" and "as-available" basis without warranties of any kind. While we maintain automated daily backups, users are encouraged to maintain independent records of critical academic schedules.</p>
+        <p><b>Disclaimer of Warranties:</b> HDSFD is provided on an "as-is" and "as-available" basis without warranties of any kind. While we aim to keep recent backups, we cannot guarantee their frequency or completeness; users should maintain independent records of critical academic schedules.</p>
         <p><b>Open Source:</b> Core client components of HDSFD are open-source and maintained with academic integrity for student learning.</p>
       </div>
     </section>
@@ -157,8 +164,8 @@
       </p>
       <div class="bg-black/30 p-4 rounded-2xl border border-white/10 text-xs space-y-1 text-slate-300">
         <p><b>Project:</b> HDSFD (HD Student Focus Dashboard)</p>
-        <p><b>Support &amp; Privacy Inquiries:</b> <a href="https://github.com/HyperHrishi-HD/HDSFD/issues" target="_blank" rel="noopener" class="text-purple-400 underline">GitHub Issue Tracker</a></p>
-        <p><b>Application URL:</b> <a href="https://hdsfd.pythonanywhere.com" class="text-purple-400 underline">https://hdsfd.pythonanywhere.com</a></p>
+        <p><b>Support &amp; Privacy Inquiries:</b> <a href="mailto:hdsystem29@gmail.com" class="text-purple-400 underline">hdsystem29@gmail.com</a> · <a href="https://github.com/HyperHrishi-HD/HDSFD/issues" target="_blank" rel="noopener" class="text-purple-400 underline">GitHub Issue Tracker</a></p>
+        <p><b>Application URL:</b> <a href="https://hdsfd.dpdns.org" class="text-purple-400 underline">https://hdsfd.dpdns.org</a></p>
         <p><b>YouTube Channel:</b> <a href="https://www.youtube.com/@HyperHrishiHD" target="_blank" rel="noopener" class="text-purple-400 underline">@HyperHrishiHD</a></p>
       </div>
     </section>

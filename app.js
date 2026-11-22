@@ -3,6 +3,7 @@
 let userName = localStorage.getItem('hdsfd_user_name') || null;
 let googleAccount = localStorage.getItem('hdsfd_google_account') || null;
 let googleAccountName = localStorage.getItem('hdsfd_google_name') || null;
+let googleNeedsReconnect = false;
 let activeTab = 'focus';
 let allData = [];
 let isLowPowerMode = localStorage.getItem('hdsfd_low_power') === 'true';
@@ -225,9 +226,10 @@ async function deleteData(id) {
   const googleOwner = googleAccount || userName || 'Guest';
   const targetItem = allData.find(d => d.id === id);
 
-  if (targetItem && targetItem.type === 'task' && !id.startsWith('task_') && !id.startsWith('item_')) {
+  if (googleAccount && targetItem && targetItem.type === 'task' && !id.startsWith('task_') && !id.startsWith('item_')) {
     fetch(`${API_BASE}/google/tasks/${encodeURIComponent(id)}?username=${encodeURIComponent(googleOwner)}&tasklist_id=${encodeURIComponent(targetItem.tasklist_id || '@default')}`, {
-      method: 'DELETE'
+      method: 'DELETE',
+      headers: hdsfdAuthHeaders()
     }).catch(err => console.warn('Google Task delete failed:', err));
   }
 
@@ -248,7 +250,16 @@ async function deleteData(id) {
 }
 
 function triggerGoogleBackup() {
-  const owner = googleAccount || userName || 'Guest';
+  const msgEl = document.getElementById('backup-msg');
+  if (!googleAccount) {
+    if (msgEl) {
+      msgEl.classList.remove('hidden');
+      msgEl.textContent = 'Connect Google to back up to Drive.';
+      setTimeout(() => msgEl.classList.add('hidden'), 3000);
+    }
+    return;
+  }
+  const owner = googleAccount;
   const notes = allData.filter(d => d.type === 'note');
   const tasks = allData.filter(d => d.type === 'task');
   const schedules = allData.filter(d => d.type === 'schedule_entry');
@@ -277,7 +288,6 @@ function triggerGoogleBackup() {
     app_info: 'HDSFD (HD Student Focus Dashboard) — Student Focus Sanctuary & Intelligent Workspace'
   };
 
-  const msgEl = document.getElementById('backup-msg');
   if (msgEl) {
     msgEl.classList.remove('hidden');
     msgEl.textContent = 'Saving backup to Google Drive (HDSFD Backup)...';
@@ -285,7 +295,7 @@ function triggerGoogleBackup() {
 
   fetch(`${API_BASE}/gdrive/backup`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       username: owner,
       notes: notes,
@@ -295,7 +305,7 @@ function triggerGoogleBackup() {
   .then(res => res.json())
   .then(res => {
     if (msgEl) {
-      msgEl.textContent = res.drive_synced ? 'Backup saved to Google Drive (Notes.json, data.db, ai.json).' : 'Saved locally.';
+      msgEl.textContent = res.drive_synced ? 'Backup saved to Google Drive (Notes.json, ai.json).' : 'Backup saved, but Drive sync failed.';
       setTimeout(() => msgEl.classList.add('hidden'), 4000);
     }
   })
@@ -313,26 +323,62 @@ async function checkGoogleStatus() {
   if (!savedAccount || !savedAccount.includes('@')) {
     googleAccount = null;
     googleAccountName = null;
+    googleNeedsReconnect = false;
+    hideGoogleReconnectPrompt();
     return;
   }
   googleAccount = savedAccount;
   googleAccountName = localStorage.getItem('hdsfd_google_name') || null;
+
+  // Google used to link without a bearer session. Those browsers have to
+  // reconnect once before Tasks, Calendar and Drive backup work again.
+  const authToken = localStorage.getItem('hdsfd_auth_token');
+  const authExpires = Date.parse(localStorage.getItem('hdsfd_auth_expires') || '');
+  if (!authToken || (!isNaN(authExpires) && authExpires <= Date.now())) {
+    googleNeedsReconnect = true;
+    showGoogleReconnectPrompt();
+    return;
+  }
+
   try {
-    const res = await fetch(`${API_BASE}/google/status?username=${encodeURIComponent(savedAccount)}`);
+    const res = await fetch(`${API_BASE}/google/status`, { headers: hdsfdAuthHeaders() });
     if (res.ok) {
       const data = await res.json();
       if (data.connected && data.email) {
+        googleNeedsReconnect = false;
+        hideGoogleReconnectPrompt();
         googleAccount = data.email;
         localStorage.setItem('hdsfd_google_account', data.email);
         if (data.name && !data.name.includes('PRIZW') && data.name !== 'User') {
           googleAccountName = data.name;
           localStorage.setItem('hdsfd_google_name', data.name);
         }
+      } else if (!data.connected) {
+        googleNeedsReconnect = true;
+        showGoogleReconnectPrompt();
       }
+    } else if (res.status === 401) {
+      googleNeedsReconnect = true;
+      showGoogleReconnectPrompt();
     }
   } catch (e) {
     console.warn('Google status check warning:', e);
   }
+}
+
+function showGoogleReconnectPrompt() {
+  const banner = document.getElementById('google-reconnect-banner');
+  if (banner) banner.classList.remove('hidden');
+}
+
+function hideGoogleReconnectPrompt() {
+  const banner = document.getElementById('google-reconnect-banner');
+  if (banner) banner.classList.add('hidden');
+}
+
+function dismissGoogleReconnectPrompt() {
+  googleNeedsReconnect = false;
+  hideGoogleReconnectPrompt();
 }
 
 async function checkFirstTimeUser() {
@@ -552,11 +598,12 @@ setInterval(() => triggerGlobalSync(), 60 * 60 * 1000);
 
 // ===== GOOGLE TASKS & CALENDAR SYNC =====
 function autoSyncGoogleTasksAndCalendar() {
-  const owner = googleAccount || userName || 'Guest';
-  
+  if (!googleAccount) return Promise.resolve();
+  const owner = googleAccount;
+
   fetchGoogleTaskLists();
 
-  const p1 = fetch(`${API_BASE}/google/tasks?username=${encodeURIComponent(owner)}`)
+  const p1 = fetch(`${API_BASE}/google/tasks?username=${encodeURIComponent(owner)}`, { headers: hdsfdAuthHeaders() })
     .then(res => res.json())
     .then(googleTasks => {
       if (Array.isArray(googleTasks)) {
@@ -598,7 +645,7 @@ function autoSyncGoogleTasksAndCalendar() {
     })
     .catch(err => console.warn('Google Tasks auto-sync warning:', err));
 
-  const p2 = fetch(`${API_BASE}/google/calendar?username=${encodeURIComponent(owner)}`)
+  const p2 = fetch(`${API_BASE}/google/calendar?username=${encodeURIComponent(owner)}`, { headers: hdsfdAuthHeaders() })
     .then(res => res.json())
     .then(events => {
       if (Array.isArray(events)) {
@@ -612,8 +659,9 @@ function autoSyncGoogleTasksAndCalendar() {
 }
 
 function fetchGoogleTaskLists() {
-  const owner = googleAccount || userName || 'Guest';
-  fetch(`${API_BASE}/google/tasklists?username=${encodeURIComponent(owner)}`)
+  if (!googleAccount) return;
+  const owner = googleAccount;
+  fetch(`${API_BASE}/google/tasklists?username=${encodeURIComponent(owner)}`, { headers: hdsfdAuthHeaders() })
     .then(res => res.json())
     .then(lists => {
       if (Array.isArray(lists)) {
@@ -1396,7 +1444,7 @@ function saveComprehensiveTask() {
 
   fetch(`${API_BASE}/google/tasks`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       username: currentOwner,
       title: title,
@@ -1720,7 +1768,7 @@ function saveQuickDayItem() {
     // Save to Google Tasks API
     fetch(`${API_BASE}/google/tasks`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         username: currentOwner,
         title: title,
@@ -1918,7 +1966,7 @@ function saveScheduleEntry() {
   // Sync to Google Calendar as recurring weekly class event
   fetch(`${API_BASE}/google/calendar`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       username: currentOwner,
       title: title,
@@ -2365,7 +2413,7 @@ function toggleTaskState(id) {
 
   fetch(`${API_BASE}/google/tasks/${encodeURIComponent(id)}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       username: currentOwner,
       tasklist_id: task.tasklist_id || '@default',
@@ -3718,11 +3766,34 @@ function hdsfdIcon(name, extraClass) {
 // Only the slice an answer can use: open work first, then a little recent
 // history. Keeps every request small so replies stay fast.
 const AI_CONTEXT_LIMITS = { openTasks: 12, doneTasks: 3, notes: 6, schedule: 8, exams: 5, folders: 10 };
+const AI_NOTES_CONTEXT_KEY = 'hdsfd_ai_notes_context';
+
+function aiNotesContextEnabled() {
+  return localStorage.getItem(AI_NOTES_CONTEXT_KEY) !== 'off';
+}
+
+function setAINotesContext(enabled) {
+  localStorage.setItem(AI_NOTES_CONTEXT_KEY, enabled ? 'on' : 'off');
+  const toggle = document.getElementById('ai-notes-context-toggle');
+  if (toggle) toggle.checked = !!enabled;
+  showInAppNotification(
+    enabled
+      ? 'AI note context on. Recent note titles and short snippets are sent with your AI messages.'
+      : 'AI note context off. Notes are left out of every AI request.',
+    { variant: enabled ? 'info' : 'success' }
+  );
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const toggle = document.getElementById('ai-notes-context-toggle');
+  if (toggle) toggle.checked = aiNotesContextEnabled();
+});
 
 function buildAIWorkspaceContext() {
   const clip = (value, limit) => String(value == null ? '' : value)
     .replace(/\s+/g, ' ').trim().slice(0, limit || 70);
 
+  const includeNotes = aiNotesContextEnabled();
   const tasks = allData.filter(d => d.type === 'task');
   const notes = allData.filter(d => d.type === 'note');
   const schedule = allData.filter(d => d.type === 'schedule_entry');
@@ -3759,7 +3830,16 @@ function buildAIWorkspaceContext() {
       due: clip(t.due || t.deadline, 26),
       completed: !!t.completed
     })),
-    notes: notes.slice(-AI_CONTEXT_LIMITS.notes).map(n => ({ title: clip(n.title || n.content, 80) })),
+    notes: includeNotes ? notes.slice(-AI_CONTEXT_LIMITS.notes).map((n) => {
+      const entry = { title: clip(n.title || n.content, 60) };
+      // A short opening snippet, only when it adds something the title lacks.
+      if (n.title) {
+        const snippet = clip(n.content, 80);
+        if (snippet) entry.snippet = snippet;
+      }
+      return entry;
+    }) : [],
+    notes_included: includeNotes,
     schedule: schedule.slice(-AI_CONTEXT_LIMITS.schedule).map(s => ({
       title: clip(s.title, 60),
       days: Array.isArray(s.days) ? s.days : [],
@@ -3773,7 +3853,7 @@ function buildAIWorkspaceContext() {
     })),
     counts: {
       open_tasks: openTasks.length,
-      notes: notes.length,
+      notes: includeNotes ? notes.length : 0,
       classes: schedule.length,
       exams: exams.length
     },
@@ -3795,9 +3875,12 @@ function updateAIContextBadge(context) {
   if (!badge || !context) return;
   const counts = context.counts || {};
   const pick = (key, fallback) => (typeof counts[key] === 'number' ? counts[key] : fallback);
+  const notesPart = context.notes_included === false
+    ? 'notes off'
+    : `${pick('notes', (context.notes || []).length)} notes`;
   const parts = [
     `${pick('open_tasks', (context.tasks || []).length)} open`,
-    `${pick('notes', (context.notes || []).length)} notes`,
+    notesPart,
     `${pick('classes', (context.schedule || []).length)} classes`,
     `${pick('exams', (context.exams || []).length)} exams`
   ];
@@ -3867,7 +3950,8 @@ async function sendGeminiAgentMessage(optPrompt) {
         prompt: text,
         username: currentOwner,
         api_key: savedApiKey,
-        context: aiContext
+        context: aiContext,
+        include_notes: aiNotesContextEnabled()
       })
     });
 
@@ -7671,14 +7755,13 @@ function saveNameFromSettings() {
 }
 
 function connectGoogleAccount() {
-  const owner = userName || 'User';
   const width = 520;
   const height = 650;
   const left = (window.screen.width / 2) - (width / 2);
   const top = (window.screen.height / 2) - (height / 2);
 
   const authWindow = window.open(
-    `${API_BASE}/gdrive/auth?username=${encodeURIComponent(owner)}`,
+    `${API_BASE}/gdrive/auth`,
     'GoogleOAuthWindow',
     `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=yes`
   );
@@ -7687,15 +7770,31 @@ function connectGoogleAccount() {
 }
 
 window.addEventListener('message', (event) => {
+  if (event.origin !== window.location.origin) return;
   if (event.data && (event.data.type === 'gdrive_linked' || event.data.username)) {
+    const keepSession = !!event.data.keep_session;
     const rawEmail = (event.data.username || '').trim();
     if (rawEmail && rawEmail.includes('@')) {
       googleAccount = rawEmail;
       localStorage.setItem('hdsfd_google_account', googleAccount);
     }
 
+    if (event.data.token && event.data.token !== '') {
+      localStorage.setItem('hdsfd_auth_token', event.data.token);
+      localStorage.setItem('hdsfd_auth_user', googleAccount || rawEmail || '');
+            localStorage.setItem('hdsfd_auth_expires', event.data.expires_at || '');
+    }
+
+    // Runs on both paths: a guest who signed in with Google gets a new token,
+    // an existing HDSFD account that just linked Google keeps its session.
+    hideGoogleReconnectPrompt();
+    updateSchoolAccountUI();
+    refreshSchoolStatus();
+
     const rawName = (event.data.name || '').trim();
-    if (rawName && !rawName.includes('PRIZW') && rawName !== 'User') {
+    if (keepSession) {
+      // Google is linked to the existing HDSFD account; keep its display name.
+    } else if (rawName && !rawName.includes('PRIZW') && rawName !== 'User') {
       googleAccountName = rawName;
       localStorage.setItem('hdsfd_google_name', googleAccountName);
       userName = googleAccountName;
@@ -7732,6 +7831,7 @@ window.addEventListener('message', (event) => {
 });
 
 function disconnectGoogleAccount() {
+  hideGoogleReconnectPrompt();
   googleAccount = null;
   googleAccountName = null;
   localStorage.removeItem('hdsfd_google_account');
@@ -8488,7 +8588,7 @@ function saveExamEntry() {
   // Sync to Google Calendar as Exam Event
   fetch(`${API_BASE}/google/calendar`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: hdsfdAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       username: currentOwner,
       title: `EXAM: ${title}`,

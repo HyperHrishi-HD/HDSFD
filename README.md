@@ -48,7 +48,7 @@
 ## 🔒 Security & Local-First Resiliency
 - **Security Headers Active**: `X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, `X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`.
 - **Zero-Error Local Fallback**: When offline or in Guest Mode, HDSFD functions completely offline using `localStorage` and SQLite fallback without throwing errors.
-- **Automated Google Drive Backup**: Automatically backups all notes (`Notes.json`) and database (`data.db`) into the dedicated `HDSFD Backup` folder in Google Drive.
+- **Google Drive Backup**: Backs up all notes (`Notes.json`) and the assistant's study context (`ai.json`) into the dedicated `HDSFD Backup` folder in Google Drive.
 
 ---
 
