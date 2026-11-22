@@ -458,7 +458,7 @@ function initializeUserSession() {
   applyLowPowerState();
   startClockWithSeconds();
   renderYTHistory();
-  initZenAssistiveTouch();
+  initZenOrbitDock();
   initSplitResizer();
   fetchData().then(() => {
     autoSyncGoogleTasksAndCalendar();
@@ -2250,7 +2250,7 @@ function renderHomeStarredTasks() {
   if (tasks.length === 0) {
     const emptyMsg = '<p class="text-white/40 text-[11px] italic text-center py-8">No starred tasks! Click the star on any task in Tasks tab to pin here.</p>';
     if (listEl) listEl.innerHTML = emptyMsg;
-    if (zenListEl) zenListEl.innerHTML = '<span class="text-[10px] text-white/40 italic">No starred tasks</span>';
+    if (zenListEl) zenListEl.innerHTML = '<span class="zen-orbit-empty">No starred tasks</span>';
     return;
   }
 
@@ -2291,10 +2291,11 @@ function renderHomeStarredTasks() {
     `;
 
     zenHtml += groupTasks.map(t => `
-      <div class="flex items-center justify-between text-[10px] py-0.5">
-        <span class="${t.completed ? 'line-through text-white/30' : 'text-white'} truncate">• ${t.title}</span>
-        <span class="text-[8px] text-purple-300">${folderName}</span>
-      </div>
+      <button type="button" class="zen-orbit-task ${t.completed ? 'is-done' : ''}" onclick="toggleTaskState('${t.id}')" title="${t.completed ? 'Mark as not done' : 'Mark done'}">
+        <span class="zen-orbit-task-check">${hdsfdIcon(t.completed ? 'check' : 'circle')}</span>
+        <span class="zen-orbit-task-title">${t.title}</span>
+        <span class="zen-orbit-task-folder">${folderName}</span>
+      </button>
     `).join('');
   }
 
@@ -3126,38 +3127,65 @@ function updatePostItColor(id, newColor) {
 }
 
 // ===== TAB NAVIGATION =====
-function moveLiquidNavDrop() {
+// The switcher's glass lens is sized and placed from the active tab. Moving it
+// stretches the lens from the side it left (transform-origin) and the CSS
+// animation squashes it once on arrival, exactly like the switcher model.
+function moveLiquidNavLens(suppressMotion) {
   const nav = document.getElementById('hdsfd-liquid-nav');
-  const drop = document.getElementById('hdsfd-nav-drop');
-  if (!nav || !drop) return;
+  const lens = document.getElementById('hdsfd-nav-lens');
+  if (!nav || !lens) return;
   const active = nav.querySelector('.nav-btn.is-active');
   if (!active) return;
   const navRect = nav.getBoundingClientRect();
   const rect = active.getBoundingClientRect();
   if (!rect.width) return;
-  drop.style.width = `${rect.width.toFixed(2)}px`;
-  drop.style.transform = `translate3d(${(rect.left - navRect.left).toFixed(2)}px, 0, 0)`;
+
+  const index = Array.prototype.indexOf.call(nav.querySelectorAll('.nav-btn'), active);
+  const previous = nav.dataset.lensIndex === undefined ? null : Number(nav.dataset.lensIndex);
+
+  if (suppressMotion) nav.classList.add('is-lens-init');
+  lens.style.width = `${rect.width.toFixed(2)}px`;
+  lens.style.transform = `translate3d(${(rect.left - navRect.left).toFixed(2)}px, 0, 0)`;
+
+  if (!suppressMotion && previous !== null && previous !== index) {
+    lens.style.transformOrigin = index > previous ? 'left center' : 'right center';
+    lens.classList.remove('is-morphing');
+    void lens.offsetWidth;
+    lens.classList.add('is-morphing');
+  }
+  nav.dataset.lensIndex = String(index);
+
+  if (suppressMotion) {
+    // A timeout, not requestAnimationFrame: a background tab never paints, and
+    // the lens must still be in place the moment the tab is shown again.
+    clearTimeout(nav._lensInitTimer);
+    nav._lensInitTimer = setTimeout(() => nav.classList.remove('is-lens-init'), 80);
+  }
 }
 
 function initLiquidNav() {
   const nav = document.getElementById('hdsfd-liquid-nav');
-  if (!nav || nav.dataset.bound === '1') return;
+  const lens = document.getElementById('hdsfd-nav-lens');
+  if (!nav || !lens || nav.dataset.bound === '1') return;
   nav.dataset.bound = '1';
-  nav.addEventListener('pointerdown', event => {
-    const button = event.target.closest('.nav-btn');
-    if (!button) return;
-    const navRect = nav.getBoundingClientRect();
-    const ripple = document.createElement('span');
-    ripple.className = 'nav-ripple';
-    ripple.style.left = `${event.clientX - navRect.left}px`;
-    ripple.style.top = `${event.clientY - navRect.top}px`;
-    nav.appendChild(ripple);
-    setTimeout(() => ripple.remove(), 680);
-  }, { passive: true });
-  window.addEventListener('resize', moveLiquidNavDrop, { passive: true });
-  if (window.visualViewport) window.visualViewport.addEventListener('resize', moveLiquidNavDrop, { passive: true });
-  requestAnimationFrame(moveLiquidNavDrop);
-  setTimeout(moveLiquidNavDrop, 260);
+  lens.addEventListener('animationend', () => lens.classList.remove('is-morphing'));
+
+  const settle = () => moveLiquidNavLens(true);
+  window.addEventListener('resize', settle, { passive: true });
+  window.addEventListener('orientationchange', settle, { passive: true });
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', settle, { passive: true });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(settle).catch(() => {});
+  // Fonts, scrollbars and breakpoint changes all resize the rail without a
+  // window resize; the observer keeps the lens exactly on the active tab.
+  if (window.ResizeObserver) {
+    try { new ResizeObserver(settle).observe(nav); } catch (e) { /* older engines */ }
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) settle(); });
+
+  settle();
+  requestAnimationFrame(settle);
+  setTimeout(settle, 260);
+  setTimeout(settle, 900);
 }
 
 function switchTab(tab) {
@@ -3175,8 +3203,9 @@ function switchTab(tab) {
     if (selected) btn.setAttribute('aria-current', 'page');
     else btn.removeAttribute('aria-current');
   });
-  moveLiquidNavDrop();
-  requestAnimationFrame(moveLiquidNavDrop);
+  // One call only: re-measuring with motion suppressed right after this would
+  // snap the lens to its destination and kill the slide.
+  moveLiquidNavLens();
 
   renderCurrentTab();
 }
@@ -4029,6 +4058,7 @@ const musicState = {
   lastPlayedId: null,
   countedPlayId: null,
   entitled: null,
+  ad: false,
   error: ''
 };
 
@@ -4510,7 +4540,7 @@ function musicRefreshEntitlement() {
   if (sub) {
     sub.textContent = signedIn
       ? 'Search anything • ad-free audio • smart radio'
-      : 'Guest mode · YouTube player · ads & low quality';
+      : 'Guest mode · plays in your browser · ads';
   }
   if (!signedIn) {
     musicState.feed = [];
@@ -4538,6 +4568,103 @@ function musicEmbedPost(func, args) {
   } catch (e) { /* the embed may not be ready yet */ }
 }
 
+// The embed only answers commands, and only reports state, once it has been told
+// that the host is listening. Without this handshake every play/pause command
+// and every progress update silently went nowhere.
+function musicEmbedHandshake(frame) {
+  const target = frame || musicEmbedFrame;
+  if (!target || !target.contentWindow) return;
+  const send = () => {
+    if (!musicEmbedFrame || musicEmbedFrame !== target) return;
+    try {
+      target.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: 'hdsfd-embed', channel: 'widget' }), '*');
+    } catch (e) { /* the embed may not be ready yet */ }
+  };
+  send();
+  [240, 640, 1200, 2200, 3600].forEach(delay => setTimeout(send, delay));
+}
+
+// Guests hear the official YouTube player as audio only: the iframe that owns
+// playback lives in its own fixed-size, invisible host outside the sheet, so the
+// video is never shown, the sheet can close, and the element is never moved or
+// hidden (both of which reload or pause an embed).
+function musicGuestHost() {
+  let host = document.getElementById('music-guest-host');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'music-guest-host';
+    host.setAttribute('aria-hidden', 'true');
+    host.setAttribute('inert', '');
+    document.body.appendChild(host);
+  }
+  return host;
+}
+
+// Signed in, playback is ad-free audio, and the official embed is only the
+// recovery player when the relay is unavailable. That recovery player stays a
+// real, visible player exactly as before, so signing in changes nothing.
+function musicEmbedStageShow() {
+  const stage = document.getElementById('music-embed-stage');
+  if (!stage) return;
+  const item = musicState.current;
+  const open = document.getElementById('music-embed-open-top');
+  if (open && item) open.href = item.url || `https://www.youtube.com/watch?v=${item.id}`;
+  const state = document.getElementById('music-embed-state');
+  if (state) {
+    state.textContent = 'YouTube player';
+    state.classList.remove('is-ad');
+  }
+  stage.classList.remove('hidden');
+}
+
+function musicEmbedStageHide() {
+  const stage = document.getElementById('music-embed-stage');
+  if (stage) stage.classList.add('hidden');
+}
+
+// Ads run on the official player. There is no ad event in the iframe API, so the
+// ad is recognised from what the player reports: a different video id while it
+// plays, or a run time far shorter than the track we asked for.
+function musicDetectEmbedAd(info) {
+  if (!info || musicState.engine !== 'youtube') return false;
+  const currentId = musicState.current ? musicState.current.id : '';
+  const videoId = info.videoData && info.videoData.video_id;
+  const duration = Number(info.duration) || 0;
+  const known = Number(musicState.current && musicState.current.seconds) || 0;
+  const state = Number(info.playerState);
+  // A different video id is only an ad when it is short; a related video that
+  // the embed auto-plays after a song is a full-length track, not an ad.
+  if (videoId && currentId && videoId !== currentId) return state === 1 && duration > 0 && duration <= 120;
+  if (known > 40 && duration > 0 && duration < known - 12 && (state === 1 || state === 3)) return true;
+  return false;
+}
+
+function musicSetGuestAd(active) {
+  const on = !!active;
+  if (musicState.ad === on) return;
+  musicState.ad = on;
+
+  const chip = document.getElementById('music-embed-ad');
+  if (chip) chip.classList.toggle('hidden', !on);
+  const state = document.getElementById('music-embed-state');
+  if (state) {
+    state.textContent = on ? 'Ad playing' : 'YouTube player';
+    state.classList.toggle('is-ad', on);
+  }
+  musicSetEngineBadge(on ? 'Ad' : (musicGuestMode() ? 'Guest · YouTube' : 'YouTube embed'), 'youtube');
+
+  const title = document.getElementById('music-np-title');
+  const channel = document.getElementById('music-np-channel');
+  if (on) {
+    if (title) title.textContent = 'Ad';
+    if (channel) channel.textContent = 'Your track resumes after the ad';
+  } else {
+    musicRenderNowPlaying();
+  }
+  const seek = document.getElementById('music-seek');
+  if (seek) seek.disabled = on;
+}
+
 function musicEmbedBindMessages() {
   if (musicEmbedBound) return;
   musicEmbedBound = true;
@@ -4547,8 +4674,38 @@ function musicEmbedBindMessages() {
     if (typeof data === 'string') {
       try { data = JSON.parse(data); } catch (e) { return; }
     }
-    if (!data || data.event !== 'infoDelivery' || !data.info) return;
+    if (!data) return;
+    if (data.event === 'onReady') {
+      musicEmbedHandshake();
+      musicEmbedPost('setVolume', [Math.round(musicState.volume * 100)]);
+      return;
+    }
+    if (data.event !== 'infoDelivery' || !data.info) return;
     const info = data.info;
+    const ad = musicDetectEmbedAd(info);
+    if (ad !== musicState.ad) musicSetGuestAd(ad);
+    if (ad) {
+      // The ad is real playback, so it also satisfies the started watchdog.
+      musicEmbedStarted = true;
+      musicEmbedClearWatchdog();
+      musicEmbedHideFallback();
+      // Keep the transport honest about what is actually playing, without
+      // treating the ad as the song (no seek, no track-ended handling).
+      if (info.duration != null) musicEmbedDuration = Number(info.duration) || 0;
+      if (info.currentTime != null) {
+        musicEmbedTime = Number(info.currentTime) || 0;
+        musicUpdateProgress();
+      }
+      if (info.playerState !== undefined) {
+        const adPlaying = Number(info.playerState) === 1;
+        if (adPlaying !== isYTPlaying) {
+          isYTPlaying = adPlaying;
+          updateYTButtonState(adPlaying);
+          musicSetPlayingUI(adPlaying);
+        }
+      }
+      return;
+    }
     // A replaced embed can still emit one last state for the old video; ignore
     // it so hitting next quickly never skips the newly selected track.
     const eventVideoId = info.videoData && info.videoData.video_id;
@@ -4573,7 +4730,14 @@ function musicEmbedBindMessages() {
       ytSavedTime = musicEmbedTime;
       musicUpdateProgress();
     }
-    if (info.duration != null) musicEmbedDuration = Number(info.duration) || 0;
+    if (info.duration != null) {
+      musicEmbedDuration = Number(info.duration) || 0;
+      // Remember the real length of a track the backend had no duration for, so
+      // a later ad break is recognised by its much shorter run time.
+      if (musicEmbedDuration > 20 && musicState.current && !musicState.current.seconds) {
+        musicState.current.seconds = Math.round(musicEmbedDuration);
+      }
+    }
     if (info.videoData && info.videoData.title) updateYTTrackTitle(info.videoData.title);
   });
 }
@@ -4618,22 +4782,18 @@ function musicEmbedRetry() {
   if (!item) return;
   musicEmbedHideFallback();
   musicEmbedClearWatchdog();
-  // Reload inside the existing iframe instead of tearing it down; replacing
-  // the element can make embedded players churn during their own teardown.
-  if (musicEmbedFrame) {
-    try { musicEmbedFrame.src = 'about:blank'; } catch (e) { /* noop */ }
-  }
-  setTimeout(() => {
-    if (!musicState.current || musicState.current.id !== item.id) return;
-    if (musicState.engine !== 'youtube') return;
-    musicEmbedPlay(item, musicGuestMode() ? undefined : 'YouTube embed', musicGuestMode() ? undefined : false);
-  }, 180);
+  // Keep the player element and reload only its source. Tearing the iframe down
+  // and building a new one makes the embed reload twice and can stall the tab.
+  if (musicState.engine === 'youtube') musicState.engine = 'idle';
+  musicEmbedPlay(item, musicGuestMode() ? undefined : 'YouTube embed', musicGuestMode() ? undefined : false);
   showInAppNotification('Retrying YouTube player', { variant: 'info' });
 }
 
 function musicEmbedStop() {
   musicEmbedClearWatchdog();
   musicEmbedHideFallback();
+  musicSetGuestAd(false);
+  musicEmbedStageHide();
   if (!musicEmbedFrame) {
     isYTPlaying = false;
     return;
@@ -4648,6 +4808,7 @@ function musicEmbedStop() {
 function musicEmbedPlay(item, label, lowQuality) {
   if (!item || !item.id) return;
   musicEmbedBindMessages();
+  musicSetGuestAd(false);
   const audio = musicAudioEl();
   if (audio) {
     try {
@@ -4657,21 +4818,32 @@ function musicEmbedPlay(item, label, lowQuality) {
     } catch (e) { /* noop */ }
   }
 
+  // Guests never see a video; their engine lives in the invisible host. A
+  // signed-in recovery player is visible, inside the sheet, as it always was.
+  const guest = musicGuestMode();
+  if (guest) musicEmbedStageHide();
+  else musicEmbedStageShow();
+
   if (!musicEmbedFrame) {
     const frame = document.createElement('iframe');
     frame.id = 'music-embed-frame';
     frame.title = 'YouTube player';
     frame.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture');
     frame.setAttribute('allowfullscreen', '');
-    frame.style.cssText = 'position:fixed;left:-9999px;top:0;width:320px;height:180px;border:0;opacity:0;pointer-events:none;';
-    document.body.appendChild(frame);
+    frame.style.cssText = 'display:block;width:100%;height:100%;border:0;';
+    const screen = guest ? null : document.getElementById('music-embed-screen');
+    if (screen) screen.insertBefore(frame, screen.firstChild);
+    else musicGuestHost().appendChild(frame);
     musicEmbedFrame = frame;
+    frame.addEventListener('load', () => musicEmbedHandshake(frame));
   }
 
   const params = new URLSearchParams({
     autoplay: '1',
-    controls: '0',
-    disablekb: '1',
+    // The official player keeps its own controls for guests: that is the one
+    // guaranteed way to start playback (and show ads) on every device.
+    controls: '1',
+    disablekb: '0',
     enablejsapi: '1',
     fs: '0',
     modestbranding: '1',
@@ -4687,6 +4859,7 @@ function musicEmbedPlay(item, label, lowQuality) {
   const openLink = document.getElementById('music-embed-open');
   if (openLink) openLink.href = item.url || `https://www.youtube.com/watch?v=${item.id}`;
   musicEmbedFrame.src = `https://www.youtube.com/embed/${encodeURIComponent(item.id)}?${params.toString()}`;
+  musicEmbedHandshake();
 
   musicState.engine = 'youtube';
   musicState.resolving = false;
@@ -4703,6 +4876,7 @@ function musicEmbedPlay(item, label, lowQuality) {
   updateYTButtonState(true);
   musicSetPlayingUI(true);
   setTimeout(() => musicEmbedPost('playVideo'), 700);
+  setTimeout(() => musicEmbedPost('playVideo'), 1500);
   setTimeout(() => musicEmbedPost('setVolume', [Math.round(musicState.volume * 100)]), 900);
   musicUpdateProgress();
   musicSyncPlayControls();
@@ -5554,6 +5728,19 @@ function musicPrev() {
 }
 
 function musicHandleEnded() {
+  // An ad break reports its own "ended"; never treat that as the track ending.
+  if (musicState.ad) return;
+  if (musicState.engine === 'youtube' && musicEmbedFrame) {
+    // A blocked, blocked-by-adblock or still-loading embed also reports "ended"
+    // the instant it loads. Only a song that actually played can be finished;
+    // otherwise autoplay skipped (and reloaded the embed) through the whole
+    // queue in a loop, which froze the player.
+    if (!musicEmbedStarted || musicEmbedTime <= 3) {
+      musicEmbedClearWatchdog();
+      musicEmbedShowFallback();
+      return;
+    }
+  }
   musicEmbedClearWatchdog();
   musicEmbedHideFallback();
   if (musicState.current) musicTasteCountPlay(musicState.current);
@@ -5577,6 +5764,7 @@ function musicHandleEnded() {
 
 function musicSeek(percent) {
   const value = Number(percent) || 0;
+  if (musicState.ad) return;
   if (musicState.engine === 'youtube' && musicEmbedFrame) {
     const duration = musicEmbedDuration || musicKnownDuration();
     if (duration > 0) {
@@ -5864,6 +6052,7 @@ async function musicStartMoreRadio(fromEnded) {
 function musicRenderNowPlaying() {
   const item = musicState.current;
   const thumb = document.getElementById('music-np-thumb');
+  const thumbWrap = document.getElementById('music-np-thumb-wrap');
   const title = document.getElementById('music-np-title');
   const channel = document.getElementById('music-np-channel');
   const mini = document.getElementById('music-mini');
@@ -5873,9 +6062,14 @@ function musicRenderNowPlaying() {
   const likeBtn = document.getElementById('music-np-like');
 
   if (item) {
-    if (thumb) thumb.src = item.thumbnail;
-    if (title) title.textContent = item.title || 'Unknown track';
-    if (channel) channel.textContent = item.channel || 'YouTube';
+    if (thumb) {
+      thumb.onload = () => { if (thumbWrap && thumb.getAttribute('src')) thumbWrap.classList.add('has-art'); };
+      thumb.onerror = () => { if (thumbWrap) thumbWrap.classList.remove('has-art'); };
+      thumb.src = item.thumbnail;
+      if (thumbWrap) thumbWrap.classList.add('has-art');
+    }
+    if (title) title.textContent = musicState.ad ? 'Ad' : (item.title || 'Unknown track');
+    if (channel) channel.textContent = musicState.ad ? 'Your track resumes after the ad' : (item.channel || 'YouTube');
     if (mini) mini.classList.add('is-visible');
     if (miniThumb) miniThumb.src = item.thumbnail;
     if (miniTitle) miniTitle.textContent = item.title || 'Unknown track';
@@ -5886,6 +6080,12 @@ function musicRenderNowPlaying() {
     }
     updateYTTrackTitle(item.title || '');
   } else {
+    if (thumb) {
+      thumb.onload = null;
+      thumb.onerror = null;
+      thumb.removeAttribute('src');
+    }
+    if (thumbWrap) thumbWrap.classList.remove('has-art');
     if (title) title.textContent = 'Nothing playing';
     if (channel) channel.textContent = 'Pick a track to start';
     if (mini) mini.classList.remove('is-visible');
@@ -6777,6 +6977,9 @@ function enterZenMode() {
   const holdMsg = document.getElementById('zen-hold-msg');
   if (zenOverlay) zenOverlay.classList.remove('hidden');
   renderHomeStarredTasks();
+  closeZenOrbitPanel();
+  setZenOrbitOpen(false);
+  applyZenOrbitPosition();
   zenStartTime = Date.now();
 
   if (holdMsg) {
@@ -6794,9 +6997,8 @@ function enterZenMode() {
 
 function exitZenMode() {
   const zenOverlay = document.getElementById('zen-overlay');
-  const popover = document.getElementById('zen-assistive-popover');
   if (zenOverlay) zenOverlay.classList.add('hidden');
-  if (popover) popover.classList.add('hidden');
+  closeZenOrbitAll();
   clearTimeout(zenFadeTimeout);
 
   if (zenStartTime) {
@@ -6816,7 +7018,7 @@ function exitZenMode() {
 }
 
 function onZenScreenTouch(e) {
-  if (e && e.target && (e.target.closest('#zen-assistive-ball') || e.target.closest('#zen-assistive-popover'))) return;
+  if (e && e.target && (e.target.closest('#zen-orbit') || e.target.closest('#zen-orbit-panel'))) return;
   
   const holdMsg = document.getElementById('zen-hold-msg');
   if (holdMsg) {
@@ -6828,82 +7030,375 @@ function onZenScreenTouch(e) {
   }
 }
 
-function toggleZenAssistiveMenu(e) {
-  if (e) e.stopPropagation();
-  const popover = document.getElementById('zen-assistive-popover');
-  const ball = document.getElementById('zen-assistive-ball');
-  if (!popover || !ball) return;
+// ===== ZEN ORBIT DOCK =====
+// A movable radial dock that replaces the old quick-controls card. The action
+// set is zen-only: ambient sound, music, starred tasks, a quick note, and exit.
+const ZEN_ORBIT_ACTIONS = [
+  { key: 'sound', label: 'Ambient sound', icon: 'volume-2' },
+  { key: 'music', label: 'Music', icon: 'music' },
+  { key: 'tasks', label: 'Starred tasks', icon: 'star' },
+  { key: 'note', label: 'Quick note', icon: 'sticky-note' },
+  { key: 'exit', label: 'Exit Zen Mode', icon: 'x' }
+];
+const ZEN_ORBIT_PANEL_TITLES = { sound: 'Ambient sound', tasks: 'Starred tasks', note: 'Quick note' };
+const ZEN_ORBIT_POS_KEY = 'hdsfd_zen_orbit_pos';
+const zenOrbitState = {
+  x: 0, y: 0, size: 56,
+  bound: false, dragging: false, moved: false, justDragged: false,
+  pointerId: null, startX: 0, startY: 0, originX: 0, originY: 0
+};
 
-  if (popover.classList.contains('hidden')) {
-    const rect = ball.getBoundingClientRect();
-    if (rect.left > window.innerWidth / 2) {
-      popover.style.left = `${Math.max(10, rect.left - 295)}px`;
+function zenOrbitClamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function zenOrbitBounds() {
+  const size = zenOrbitState.size;
+  return {
+    minX: 12,
+    maxX: Math.max(12, window.innerWidth - size - 12),
+    minY: 12,
+    maxY: Math.max(12, window.innerHeight - size - 12)
+  };
+}
+
+function zenOrbitLayoutFan() {
+  const dock = document.getElementById('zen-orbit');
+  if (!dock) return;
+  const items = dock.querySelectorAll('.zen-orbit-item');
+  if (!items.length) return;
+
+  const cx = zenOrbitState.x + zenOrbitState.size / 2;
+  const cy = zenOrbitState.y + zenOrbitState.size / 2;
+  const right = cx > window.innerWidth / 2;
+  const bottom = cy > window.innerHeight / 2;
+  const start = right ? 180 : 0;
+  const end = right ? (bottom ? 90 : 270) : (bottom ? 90 : -90);
+  const radius = 110;
+  dock.dataset.side = `${right ? 'right' : 'left'}-${bottom ? 'bottom' : 'top'}`;
+
+  items.forEach((item, index) => {
+    const angle = start + (end - start) * (items.length === 1 ? 0.5 : index / (items.length - 1));
+    const rad = (angle * Math.PI) / 180;
+    item.style.setProperty('--x', (Math.cos(rad) * radius).toFixed(1) + 'px');
+    item.style.setProperty('--y', (-Math.sin(rad) * radius).toFixed(1) + 'px');
+  });
+}
+
+function applyZenOrbitPosition() {
+  const dock = document.getElementById('zen-orbit');
+  if (!dock) return;
+  const bounds = zenOrbitBounds();
+  zenOrbitState.x = zenOrbitClamp(zenOrbitState.x, bounds.minX, bounds.maxX);
+  zenOrbitState.y = zenOrbitClamp(zenOrbitState.y, bounds.minY, bounds.maxY);
+  dock.style.transform = `translate3d(${zenOrbitState.x.toFixed(1)}px, ${zenOrbitState.y.toFixed(1)}px, 0)`;
+  zenOrbitLayoutFan();
+}
+
+function saveZenOrbitPosition() {
+  const bounds = zenOrbitBounds();
+  const nx = (zenOrbitState.x - bounds.minX) / Math.max(1, bounds.maxX - bounds.minX);
+  const ny = (zenOrbitState.y - bounds.minY) / Math.max(1, bounds.maxY - bounds.minY);
+  try { localStorage.setItem(ZEN_ORBIT_POS_KEY, JSON.stringify({ nx, ny })); } catch (e) { /* private mode */ }
+}
+
+function zenOrbitIsOpen() {
+  const dock = document.getElementById('zen-orbit');
+  return !!dock && dock.classList.contains('is-open');
+}
+
+function zenOrbitPanelIsOpen() {
+  const panel = document.getElementById('zen-orbit-panel');
+  return !!panel && !panel.classList.contains('hidden');
+}
+
+function setZenOrbitOpen(open) {
+  const dock = document.getElementById('zen-orbit');
+  const trigger = document.getElementById('zen-orbit-trigger');
+  if (!dock || !trigger) return;
+  if (open) zenOrbitLayoutFan();
+  dock.classList.toggle('is-open', !!open);
+  trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  // A closed fan is decorative: keep its buttons out of the tab order and the
+  // accessibility tree until the dock is actually open.
+  dock.querySelectorAll('.zen-orbit-item').forEach(item => {
+    if (open) {
+      item.removeAttribute('aria-hidden');
+      item.removeAttribute('tabindex');
     } else {
-      popover.style.left = `${Math.min(window.innerWidth - 300, rect.right + 10)}px`;
+      item.setAttribute('aria-hidden', 'true');
+      item.setAttribute('tabindex', '-1');
     }
-    popover.style.top = `${Math.max(10, Math.min(window.innerHeight - 380, rect.top - 20))}px`;
-    popover.classList.remove('hidden');
+  });
+}
+
+function toggleZenOrbit() {
+  if (zenOrbitIsOpen()) {
+    setZenOrbitOpen(false);
+    closeZenOrbitPanel();
   } else {
-    popover.classList.add('hidden');
+    closeZenOrbitPanel();
+    setZenOrbitOpen(true);
   }
 }
 
-function initZenAssistiveTouch() {
-  const ball = document.getElementById('zen-assistive-ball');
-  if (!ball) return;
+function closeZenOrbitAll() {
+  setZenOrbitOpen(false);
+  closeZenOrbitPanel();
+}
 
-  let isDragging = false;
-  let startX, startY, initialLeft, initialTop;
+function positionZenOrbitPanel() {
+  const panel = document.getElementById('zen-orbit-panel');
+  if (!panel || panel.classList.contains('hidden')) return;
+  const pad = 12;
+  const gap = 12;
+  const pw = panel.offsetWidth;
+  const ph = panel.offsetHeight;
+  const dockLeft = zenOrbitState.x;
+  const dockTop = zenOrbitState.y;
+  const dockRight = dockLeft + zenOrbitState.size;
+  const dockBottom = dockTop + zenOrbitState.size;
+  let left = null;
+  let top = null;
 
-  function onPointerDown(e) {
-    isDragging = false;
-    startX = e.clientX || (e.touches && e.touches[0].clientX);
-    startY = e.clientY || (e.touches && e.touches[0].clientY);
-    const rect = ball.getBoundingClientRect();
-    initialLeft = rect.left;
-    initialTop = rect.top;
+  if (dockRight + gap + pw <= window.innerWidth - pad) left = dockRight + gap;
+  else if (dockLeft - gap - pw >= pad) left = dockLeft - gap - pw;
 
-    document.addEventListener('pointermove', onPointerMove);
-    document.addEventListener('pointerup', onPointerUp);
+  if (left === null) {
+    left = Math.max(pad, Math.min(dockLeft + zenOrbitState.size / 2 - pw / 2, window.innerWidth - pw - pad));
+    top = dockBottom + gap + ph <= window.innerHeight - pad ? dockBottom + gap : dockTop - gap - ph;
+  } else {
+    top = dockTop + zenOrbitState.size / 2 - ph / 2;
   }
 
-  function onPointerMove(e) {
-    const curX = e.clientX || (e.touches && e.touches[0].clientX);
-    const curY = e.clientY || (e.touches && e.touches[0].clientY);
-    const dx = curX - startX;
-    const dy = curY - startY;
+  top = Math.max(pad, Math.min(top, window.innerHeight - ph - pad));
+  panel.style.left = left.toFixed(1) + 'px';
+  panel.style.top = top.toFixed(1) + 'px';
+}
 
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-      isDragging = true;
-      ball.style.left = `${initialLeft + dx}px`;
-      ball.style.top = `${initialTop + dy}px`;
-      ball.style.right = 'auto';
+function zenOrbitSyncSound() {
+  const rain = document.getElementById('vol-rain');
+  const noise = document.getElementById('vol-noise');
+  const zenRain = document.getElementById('zen-rain-slider');
+  const zenNoise = document.getElementById('zen-noise-slider');
+  if (rain && zenRain) zenRain.value = rain.value;
+  if (noise && zenNoise) zenNoise.value = noise.value;
+  const rainLabel = document.getElementById('zen-val-rain');
+  const noiseLabel = document.getElementById('zen-val-noise');
+  if (rainLabel && rain) rainLabel.textContent = Math.round(parseFloat(rain.value) * 100) + '%';
+  if (noiseLabel && noise) noiseLabel.textContent = Math.round(parseFloat(noise.value) * 100) + '%';
+  const toggle = document.getElementById('zen-sound-toggle');
+  if (toggle) toggle.innerHTML = isPlayingSoundscape
+    ? hdsfdIcon('pause') + ' Stop soundscape'
+    : hdsfdIcon('play') + ' Play soundscape';
+}
+
+function toggleZenSoundscape() {
+  toggleSoundscape();
+  zenOrbitSyncSound();
+}
+
+function zenSetSound(kind, value) {
+  const numeric = Math.max(0, Math.min(1, parseFloat(value) || 0));
+  const main = document.getElementById(kind === 'rain' ? 'vol-rain' : 'vol-noise');
+  const label = document.getElementById(kind === 'rain' ? 'zen-val-rain' : 'zen-val-noise');
+  if (main) main.value = numeric;
+  if (label) label.textContent = Math.round(numeric * 100) + '%';
+  // The noise source keeps running at zero gain when the mix is stopped, so a
+  // volume move must store the level without un-muting a paused soundscape.
+  if (kind === 'noise' && !isPlayingSoundscape) return;
+  updateMixerVolume();
+}
+
+function saveZenQuickNote() {
+  const input = document.getElementById('zen-quick-note-input');
+  const text = input ? input.value.trim() : '';
+  if (!text) { if (input) input.focus(); return; }
+  const owner = googleAccount || userName || 'Guest';
+  const firstLine = text.split('\n')[0].trim().slice(0, 48) || 'Quick Note';
+  createData({
+    id: 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    type: 'note',
+    content: text,
+    title: firstLine,
+    color: 'purple',
+    tab: activeTab || 'notes',
+    width: 175,
+    height: 175,
+    rotation: parseFloat((Math.random() * 3.6 - 1.8).toFixed(1)),
+    xPct: 20 + Math.random() * 40,
+    yPct: 20 + Math.random() * 35,
+    drawMode: false,
+    paths: [],
+    created_at: new Date().toISOString(),
+    username: owner
+  });
+  if (input) input.value = '';
+  renderPhysicsPostIts();
+  awardActivityCoins(5, 'Sticky Note Created');
+  closeZenOrbitPanel();
+  showInAppNotification('Quick note saved');
+}
+
+function openZenOrbitPanel(kind) {
+  const panel = document.getElementById('zen-orbit-panel');
+  const title = document.getElementById('zen-orbit-panel-title');
+  if (!panel || !ZEN_ORBIT_PANEL_TITLES[kind]) return;
+  panel.querySelectorAll('[data-zen-panel]').forEach(section => {
+    section.classList.toggle('hidden', section.dataset.zenPanel !== kind);
+  });
+  if (title) title.textContent = ZEN_ORBIT_PANEL_TITLES[kind];
+  if (kind === 'sound') zenOrbitSyncSound();
+  if (kind === 'tasks') renderHomeStarredTasks();
+  panel.classList.remove('hidden');
+  positionZenOrbitPanel();
+  if (kind === 'note') {
+    setTimeout(() => {
+      const input = document.getElementById('zen-quick-note-input');
+      if (input) input.focus();
+    }, 80);
+  }
+}
+
+function closeZenOrbitPanel() {
+  const panel = document.getElementById('zen-orbit-panel');
+  if (panel) panel.classList.add('hidden');
+}
+
+function zenOrbitAction(key) {
+  setZenOrbitOpen(false);
+  if (key === 'music') { closeZenOrbitPanel(); openMusicPlayer(); return; }
+  if (key === 'exit') { closeZenOrbitPanel(); exitZenMode(); return; }
+  openZenOrbitPanel(key);
+}
+
+function zenOrbitPointerDown(event) {
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  zenOrbitState.dragging = true;
+  zenOrbitState.moved = false;
+  zenOrbitState.justDragged = false;
+  zenOrbitState.pointerId = event.pointerId;
+  zenOrbitState.startX = event.clientX;
+  zenOrbitState.startY = event.clientY;
+  zenOrbitState.originX = zenOrbitState.x;
+  zenOrbitState.originY = zenOrbitState.y;
+  try { event.currentTarget.setPointerCapture(event.pointerId); } catch (e) { /* synthetic pointers */ }
+  event.stopPropagation();
+}
+
+function zenOrbitPointerMove(event) {
+  if (!zenOrbitState.dragging || event.pointerId !== zenOrbitState.pointerId) return;
+  const dx = event.clientX - zenOrbitState.startX;
+  const dy = event.clientY - zenOrbitState.startY;
+  if (!zenOrbitState.moved && Math.hypot(dx, dy) > 5) {
+    zenOrbitState.moved = true;
+    closeZenOrbitPanel();
+  }
+  if (!zenOrbitState.moved) return;
+
+  const dock = document.getElementById('zen-orbit');
+  const bounds = zenOrbitBounds();
+  zenOrbitState.x = zenOrbitClamp(zenOrbitState.originX + dx, bounds.minX, bounds.maxX);
+  zenOrbitState.y = zenOrbitClamp(zenOrbitState.originY + dy, bounds.minY, bounds.maxY);
+  if (dock) {
+    dock.classList.add('is-dragging');
+    dock.style.transform = `translate3d(${zenOrbitState.x.toFixed(1)}px, ${zenOrbitState.y.toFixed(1)}px, 0)`;
+  }
+  zenOrbitLayoutFan();
+  event.preventDefault();
+}
+
+function zenOrbitPointerUp(event) {
+  if (!zenOrbitState.dragging || event.pointerId !== zenOrbitState.pointerId) return;
+  zenOrbitState.dragging = false;
+  const dock = document.getElementById('zen-orbit');
+  if (dock) dock.classList.remove('is-dragging');
+  try { event.currentTarget.releasePointerCapture(event.pointerId); } catch (e) { /* already released */ }
+  if (zenOrbitState.moved) {
+    zenOrbitState.justDragged = true;
+    saveZenOrbitPosition();
+    if (zenOrbitPanelIsOpen()) positionZenOrbitPanel();
+  }
+}
+
+function initZenOrbitDock() {
+  const dock = document.getElementById('zen-orbit');
+  const trigger = document.getElementById('zen-orbit-trigger');
+  const fan = document.getElementById('zen-orbit-fan');
+  if (!dock || !trigger || !fan) return;
+
+  if (!dock.dataset.built) {
+    ZEN_ORBIT_ACTIONS.forEach((action, index) => {
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'zen-orbit-item';
+      item.dataset.zenAction = action.key;
+      item.title = action.label;
+      item.setAttribute('aria-label', action.label);
+      item.setAttribute('aria-hidden', 'true');
+      item.setAttribute('tabindex', '-1');
+      item.style.setProperty('--d', (index * 32) + 'ms');
+      item.innerHTML = `<span class="zen-orbit-glyph">${hdsfdIcon(action.icon)}</span><span class="zen-orbit-label">${action.label}</span>`;
+      item.addEventListener('click', event => {
+        event.stopPropagation();
+        zenOrbitAction(action.key);
+      });
+      fan.appendChild(item);
+    });
+    dock.dataset.built = '1';
+  }
+
+  if (zenOrbitState.bound) {
+    applyZenOrbitPosition();
+    return;
+  }
+  zenOrbitState.bound = true;
+
+  const bounds = zenOrbitBounds();
+  zenOrbitState.x = bounds.maxX;
+  zenOrbitState.y = bounds.minY;
+  try {
+    const saved = JSON.parse(localStorage.getItem(ZEN_ORBIT_POS_KEY) || 'null');
+    if (saved && Number.isFinite(saved.nx) && Number.isFinite(saved.ny)) {
+      zenOrbitState.x = bounds.minX + saved.nx * (bounds.maxX - bounds.minX);
+      zenOrbitState.y = bounds.minY + saved.ny * (bounds.maxY - bounds.minY);
     }
-  }
+  } catch (e) { /* ignore a corrupt saved position */ }
+  applyZenOrbitPosition();
 
-  function onPointerUp() {
-    document.removeEventListener('pointermove', onPointerMove);
-    document.removeEventListener('pointerup', onPointerUp);
+  trigger.addEventListener('pointerdown', zenOrbitPointerDown);
+  trigger.addEventListener('pointermove', zenOrbitPointerMove);
+  trigger.addEventListener('pointerup', zenOrbitPointerUp);
+  trigger.addEventListener('pointercancel', zenOrbitPointerUp);
+  trigger.addEventListener('click', () => {
+    // The browser still emits a click after a drag; swallow that one instead of
+    // toggling the fan. A fresh pointerdown clears the flag for the next tap.
+    if (zenOrbitState.justDragged) { zenOrbitState.justDragged = false; return; }
+    toggleZenOrbit();
+  });
 
-    if (isDragging) {
-      const rect = ball.getBoundingClientRect();
-      const snapX = rect.left < window.innerWidth / 2 ? 16 : window.innerWidth - 64;
-      const clampedY = Math.max(16, Math.min(window.innerHeight - 64, rect.top));
-
-      ball.style.transition = 'left 0.3s ease, top 0.3s ease';
-      ball.style.left = `${snapX}px`;
-      ball.style.top = `${clampedY}px`;
-      setTimeout(() => { ball.style.transition = ''; }, 300);
-    }
-  }
-
-  ball.addEventListener('pointerdown', onPointerDown);
+  dock.addEventListener('click', event => event.stopPropagation());
+  document.addEventListener('pointerdown', event => {
+    if (!zenOrbitIsOpen() && !zenOrbitPanelIsOpen()) return;
+    if (event.target.closest('#zen-orbit') || event.target.closest('#zen-orbit-panel')) return;
+    closeZenOrbitAll();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape') return;
+    if (zenOrbitPanelIsOpen()) { closeZenOrbitPanel(); return; }
+    if (zenOrbitIsOpen()) setZenOrbitOpen(false);
+  });
+  window.addEventListener('resize', () => {
+    applyZenOrbitPosition();
+    if (zenOrbitPanelIsOpen()) positionZenOrbitPanel();
+  }, { passive: true });
 }
 
 // Hold Spacebar to exit Zen Mode
 document.addEventListener('keydown', (e) => {
   const zenOverlay = document.getElementById('zen-overlay');
   if (zenOverlay && !zenOverlay.classList.contains('hidden')) {
+    if (e.target && e.target.closest('input, textarea, select, [contenteditable="true"]')) return;
     onZenScreenTouch();
     if (e.code === 'Space' || e.key === ' ') {
       e.preventDefault();
@@ -6941,7 +7436,7 @@ const zenOverlayEl = document.getElementById('zen-overlay');
 if (zenOverlayEl) {
   let touchHoldTimer = null;
   zenOverlayEl.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#zen-assistive-ball') || e.target.closest('#zen-assistive-popover')) return;
+    if (e.target.closest('#zen-orbit') || e.target.closest('#zen-orbit-panel')) return;
     onZenScreenTouch(e);
     zenHoldProgress = 0;
     touchHoldTimer = setInterval(() => {
