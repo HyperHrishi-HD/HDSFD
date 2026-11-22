@@ -6976,6 +6976,7 @@ function enterZenMode() {
   const zenOverlay = document.getElementById('zen-overlay');
   const holdMsg = document.getElementById('zen-hold-msg');
   if (zenOverlay) zenOverlay.classList.remove('hidden');
+  document.body.classList.add('zen-active');
   renderHomeStarredTasks();
   closeZenOrbitPanel();
   setZenOrbitOpen(false);
@@ -6998,6 +6999,7 @@ function enterZenMode() {
 function exitZenMode() {
   const zenOverlay = document.getElementById('zen-overlay');
   if (zenOverlay) zenOverlay.classList.add('hidden');
+  document.body.classList.remove('zen-active');
   closeZenOrbitAll();
   clearTimeout(zenFadeTimeout);
 
