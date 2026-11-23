@@ -3094,6 +3094,21 @@ _MUSIC_TRENDING_ROTATION = [
     ['trending music', 'most played songs', 'global top songs', 'charts this week'],
 ]
 
+# Guests are search-only: no relay, no ad-free audio. Their Home tab still gets
+# a real feed, alternating between a study mix and a trending mix.
+_MUSIC_GUEST_ROTATION = [
+    {
+        'queries': ['study music playlist', 'lofi study beats', 'focus music'],
+        'title': 'Study & focus',
+        'subtitle': 'Search-only picks — sign in for ad-free audio',
+    },
+    {
+        'queries': ['top hits this week', 'trending songs', 'popular songs right now'],
+        'title': 'Trending now',
+        'subtitle': 'Search-only picks — sign in for ad-free audio',
+    },
+]
+
 
 def _music_normalize(item):
     """Return a clean, client-shaped track or None."""
@@ -3651,10 +3666,19 @@ def _music_feed_payload(profile, limit=18, allow_relay=True, seeds=None):
         title = 'Made for you'
         subtitle = f'Built from {len(artists)} artist{"s" if len(artists) != 1 else ""} you play'
     else:
-        queries = list(_MUSIC_TRENDING_ROTATION[day % len(_MUSIC_TRENDING_ROTATION)])
-        cache_key = ('t', day, limit, allow_relay)
-        title = 'Trending now'
-        subtitle = 'The biggest tracks everyone is playing'
+        if not allow_relay:
+            # A signed-out listener still deserves a feed; build it only from
+            # public search so guest mode never depends on the relay.
+            guest_pick = _MUSIC_GUEST_ROTATION[day % len(_MUSIC_GUEST_ROTATION)]
+            queries = list(guest_pick['queries'])
+            cache_key = ('g', day, limit)
+            title = guest_pick['title']
+            subtitle = guest_pick['subtitle']
+        else:
+            queries = list(_MUSIC_TRENDING_ROTATION[day % len(_MUSIC_TRENDING_ROTATION)])
+            cache_key = ('t', day, limit, allow_relay)
+            title = 'Trending now'
+            subtitle = 'The biggest tracks everyone is playing'
 
     now = _time.time()
     with _MUSIC_LOCK:
@@ -3813,6 +3837,11 @@ _MUSIC_DISCOVER_TAGS = {
     'r&b': ('rnb', 'r&b songs', 'R&B'),
 }
 
+# Last.fm's community tags are noisy for a few moods: "phonk" also catches
+# K-pop, "lofi" catches indie ballads, "nature" catches new-age albums. For
+# these, the matching search leads and the tag graph enriches it.
+_MUSIC_NOISY_DISCOVER_TAGS = {'phonk', 'lofi', 'nature'}
+
 
 def _music_discover_payload(tag, limit=15, allow_relay=True):
     """Curated tag radio for the genre pills, with or without Last.fm."""
@@ -3843,12 +3872,16 @@ def _music_discover_payload(tag, limit=15, allow_relay=True):
         logger.info(f'YT Music discovery unavailable for {query}: {exc}')
     search_items = _music_search(query, limit, allow_relay=allow_relay)
 
-    # Last.fm tags are broad ("phonk" also catches K-pop), so YouTube Music's
-    # matching search leads and the tag graph plus cached search enrich it.
-    pool = _music_dedupe(ytm_items + lastfm_items + search_items)
-    source = '+'.join(name for name, present in (
-        ('ytmusic', ytm_items), ('lastfm', lastfm_items), ('search', search_items)
-    ) if present) or 'none'
+    # Noisy tags lead with the actual search for the tag; trusted tags keep
+    # Last.fm's similarity graph in front. YouTube Music leads both when it is
+    # reachable.
+    if lastfm_tag in _MUSIC_NOISY_DISCOVER_TAGS:
+        pool = _music_dedupe(ytm_items + search_items + lastfm_items)
+        order = (('ytmusic', ytm_items), ('search', search_items), ('lastfm', lastfm_items))
+    else:
+        pool = _music_dedupe(ytm_items + lastfm_items + search_items)
+        order = (('ytmusic', ytm_items), ('lastfm', lastfm_items), ('search', search_items))
+    source = '+'.join(name for name, present in order if present) or 'none'
     payload = {'tag': raw, 'label': label, 'source': source, 'results': pool[:limit]}
     _music_cache_write(_MUSIC_RADIO_CACHE, key, {'payload': payload}, _MUSIC_RADIO_TTL)
     return payload
@@ -3954,7 +3987,11 @@ def music_feed():
     else:
         limit = request.args.get('limit', 18, type=int) or 18
     try:
-        payload = _music_feed_payload(profile, limit, allow_relay=bool(current_user()), seeds=seeds)
+        signed_in = bool(current_user())
+        # Guest Home is search-only: never build a station from client seeds.
+        payload = _music_feed_payload(
+            profile, limit, allow_relay=signed_in, seeds=seeds if signed_in else []
+        )
         response = jsonify({'status': 'success', **payload})
         response.headers['Cache-Control'] = 'no-store'
         return response

@@ -4782,17 +4782,23 @@ function musicRefreshEntitlement() {
       : 'Guest mode · plays in your browser · ads';
   }
   if (!signedIn) {
+    // Guests get a real search-only feed, not a placeholder. Drop any
+    // signed-in personalisation and reload the guest mix.
+    if (musicState.feedMode !== 'guest') {
+      musicState.feed = [];
+      musicState.feedSignature = '';
+      musicState.feedStale = false;
+      musicState.feedMode = 'guest';
+      musicState.feedTitle = 'Trending now';
+      musicState.feedSubtitle = 'Loading search-only picks…';
+      if (modal && !modal.classList.contains('hidden')) musicLoadFeed(false);
+    }
+  } else if (musicState.feedMode === 'guest') {
     musicState.feed = [];
-    musicState.feedMode = 'guest';
-    musicState.feedTitle = 'Guest mode';
-    musicState.feedSubtitle = 'Search to start — YouTube player, ads and low quality';
-    musicState.feedLoading = false;
-    } else if (musicState.feedMode === 'guest') {
-    musicState.feed = [];
+    musicState.feedSignature = '';
     musicState.feedMode = 'trending';
     musicState.feedTitle = 'Trending now';
     musicState.feedSubtitle = 'What everyone is playing right now';
-    const modal = document.getElementById('music-modal');
     if (modal && !modal.classList.contains('hidden')) musicLoadFeed(false);
   }
 
@@ -5464,11 +5470,6 @@ function musicFeedCacheSet(signature, payload) {
 
 function musicEnsureFeed() {
   if (musicState.feedLoading) return;
-  if (musicGuestMode()) {
-    if (musicState.feedMode !== 'guest') musicRefreshEntitlement();
-    else musicRenderFeed();
-    return;
-  }
   const signature = musicFeedSignature(musicProfile());
   const cached = musicFeedCacheGet(signature);
   if (cached) {
@@ -5487,23 +5488,17 @@ function musicFeedSignature(profile) {
     a: profile.artists.slice(0, 6),
     t: profile.terms.slice(0, 6),
     p: Math.min(50, profile.plays),
-    s: musicSeedTracks().map(seed => seed.videoId)
+    s: musicGuestMode() ? [] : musicSeedTracks().map(seed => seed.videoId),
+    g: musicGuestMode()
   });
 }
 
 async function musicLoadFeed(force) {
   if (musicState.feedLoading) return;
-  if (musicGuestMode()) {
-    musicState.feed = [];
-    musicState.feedMode = 'guest';
-    musicState.feedTitle = 'Guest mode';
-    musicState.feedSubtitle = 'Search to start — YouTube player, ads and low quality';
-    musicState.feedLoading = false;
-    musicRenderFeed();
-    return;
-  }
+  const guest = musicGuestMode();
   const profile = musicProfile();
-  const seeds = musicSeedTracks();
+  // Seeded stations are for signed-in listeners; guest Home is search-only.
+  const seeds = guest ? [] : musicSeedTracks();
   const signature = musicFeedSignature(profile);
   const cached = !force && musicFeedCacheGet(signature);
   if (cached) {
@@ -5522,41 +5517,70 @@ async function musicLoadFeed(force) {
     const results = musicUniqueTracks(data.results || [], { limit: 18 });
     if (!results.length) throw new Error('empty_feed');
     const payload = {
-      mode: data.mode === 'personalized' ? 'personalized' : 'trending',
-      title: data.title || (data.mode === 'personalized' ? 'Made for you' : 'Trending now'),
-      subtitle: data.subtitle || (data.mode === 'personalized'
-        ? 'Built from what you play, skip and like'
-        : 'What everyone is playing right now'),
+      mode: guest ? 'guest' : (data.mode === 'personalized' ? 'personalized' : 'trending'),
+      title: data.title || (guest
+        ? 'Trending now'
+        : (data.mode === 'personalized' ? 'Made for you' : 'Trending now')),
+      subtitle: data.subtitle || (guest
+        ? 'Search-only picks — sign in for ad-free audio'
+        : (data.mode === 'personalized'
+          ? 'Built from what you play, skip and like'
+          : 'What everyone is playing right now')),
       results
     };
     musicFeedCacheSet(signature, payload);
     musicApplyFeed(payload);
   } catch (err) {
-    // Relay-only fallback so the Home tab still fills when the app server is down.
-    try {
-      const queries = seeds.length
-        ? seeds.filter(seed => seed.channel).slice(0, 2).map(seed => `${seed.channel} radio`)
-        : (musicHasTaste(profile)
-          ? profile.artists.slice(0, 2).map(name => `${name} songs`)
-          : ['top hits this week', 'trending music']);
-      if (!queries.length) queries.push('top hits this week');
+    // Keep Home useful when the app server is down. Guests stay search-only;
+    // signed-in listeners can fall back to the relay.
+    let recovered = false;
+    if (guest) {
+      const queries = musicHasTaste(profile)
+        ? profile.artists.slice(0, 2).map(name => `${name} songs`)
+        : ['study music playlist', 'top hits this week'];
       const lists = [];
-      for (const query of queries) lists.push(await musicRelaySearch(query, 10));
+      for (const query of queries) {
+        try {
+          const data = await musicFetchJson(`${API_BASE}/music/search?q=${encodeURIComponent(query)}&limit=10`, {}, 12000);
+          lists.push(Array.isArray(data.results) ? data.results : []);
+        } catch (e) { /* try the next query */ }
+      }
       const results = musicUniqueTracks([].concat.apply([], lists), { limit: 18 });
       if (results.length) {
+        recovered = true;
         musicApplyFeed({
-          mode: musicHasTaste(profile) ? 'personalized' : 'trending',
-          title: musicHasTaste(profile) ? 'Made for you' : 'Trending now',
-          subtitle: 'Fresh picks while the server catches up',
+          mode: 'guest',
+          title: musicHasTaste(profile) ? 'Made for you' : 'Study & focus',
+          subtitle: 'Search-only picks — sign in for ad-free audio',
           results
         });
-      } else {
-        musicState.feed = [];
-        musicState.feedMode = 'trending';
-        musicState.feedTitle = 'Trending now';
-        musicState.feedSubtitle = 'The feed could not load — search anything above';
       }
-    } catch (e) {
+    } else {
+      try {
+        const queries = seeds.length
+          ? seeds.filter(seed => seed.channel).slice(0, 2).map(seed => `${seed.channel} radio`)
+          : (musicHasTaste(profile)
+            ? profile.artists.slice(0, 2).map(name => `${name} songs`)
+            : ['top hits this week', 'trending music']);
+        if (!queries.length) queries.push('top hits this week');
+        const lists = [];
+        for (const query of queries) lists.push(await musicRelaySearch(query, 10));
+        const results = musicUniqueTracks([].concat.apply([], lists), { limit: 18 });
+        if (results.length) {
+          recovered = true;
+          musicApplyFeed({
+            mode: musicHasTaste(profile) ? 'personalized' : 'trending',
+            title: musicHasTaste(profile) ? 'Made for you' : 'Trending now',
+            subtitle: 'Fresh picks while the server catches up',
+            results
+          });
+        }
+      } catch (e) { /* fall through to the empty state */ }
+    }
+    if (!recovered) {
+      musicState.feed = [];
+      musicState.feedMode = guest ? 'guest' : 'trending';
+      musicState.feedTitle = guest ? 'Guest picks' : 'Trending now';
       musicState.feedSubtitle = 'The feed could not load — search anything above';
     }
   } finally {
@@ -5567,7 +5591,9 @@ async function musicLoadFeed(force) {
 
 function musicApplyFeed(payload) {
   musicState.feed = Array.isArray(payload.results) ? payload.results : [];
-  musicState.feedMode = payload.mode === 'personalized' ? 'personalized' : 'trending';
+  musicState.feedMode = payload.mode === 'personalized'
+    ? 'personalized'
+    : (payload.mode === 'guest' ? 'guest' : 'trending');
   musicState.feedTitle = payload.title || (musicState.feedMode === 'personalized' ? 'Made for you' : 'Trending now');
   musicState.feedSubtitle = payload.subtitle || '';
   musicRenderFeed();
@@ -5603,11 +5629,11 @@ function musicRenderFeed() {
     container.innerHTML = `
       <div class="music-empty">
         <div class="music-empty-icon">${hdsfdIcon(guest ? 'headphones' : 'flame')}</div>
-        <div class="music-empty-title">${guest ? 'Guest mode' : 'Nothing here yet'}</div>
+        <div class="music-empty-title">${guest ? 'Guest picks unavailable' : 'Nothing here yet'}</div>
         <div class="music-empty-sub">${guest
-          ? 'Search above to play through YouTube. Guests get ads and low-quality audio; sign in for the ad-free player.'
+          ? 'The search-only feed could not load. Try again, or search above. Guests get ads and low-quality audio.'
           : 'Search for a track, or pull the feed again.'}</div>
-        <button type="button" class="music-retry-btn" onclick="${guest ? "document.getElementById('music-search-input').focus()" : 'musicLoadFeed(true)'}">${guest ? 'Search now' : 'Load the feed'}</button>
+        <button type="button" class="music-retry-btn" onclick="musicLoadFeed(true)">${guest ? 'Try again' : 'Load the feed'}</button>
       </div>`;
     return;
   }
