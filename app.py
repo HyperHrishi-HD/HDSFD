@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify, send_from_directory, redirect, session
 import sqlite3
 import os
+import sys
 import json
 import logging
 import urllib.parse
@@ -2295,11 +2296,31 @@ def save_gdrive_credentials():
         json.dump({"client_id": client_id, "client_secret": client_secret}, f)
     return jsonify({"status": "success", "message": "Google Client Credentials saved successfully!"})
 
+def _request_public_origin():
+    """Origin the browser used, honouring the headers a reverse proxy sets.
+
+    A Cloudflare Worker in front of PythonAnywhere terminates TLS and reaches the
+    app over plain HTTP, so request.scheme/request.host alone would build an
+    http://<internal> callback that Google rejects as unregistered.
+    """
+    proto = request.headers.get('X-Forwarded-Proto', '').split(',')[0].strip().lower()
+    host = request.headers.get('X-Forwarded-Host', '').split(',')[0].strip()
+    # A host header is only a hostname[:port]; reject anything that could bend
+    # the callback path or inject credentials.
+    if any(ch in host for ch in '/\\@?# '):
+        host = ''
+    scheme = proto if proto in ('http', 'https') else request.scheme
+    return f"{scheme}://{host or request.host}"
+
+
 def get_oauth_redirect_uri():
-    redirect_uri = request.url_root.rstrip('/') + '/api/gdrive/callback'
-    if 'pythonanywhere.com' in redirect_uri and redirect_uri.startswith('http://'):
-        redirect_uri = 'https://' + redirect_uri[7:]
-    return redirect_uri
+    # PUBLIC_BASE_URL pins the exact origin registered with Google; set it when
+    # the proxy in front is not trusted to report its own public origin.
+    configured = os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')
+    base = configured or _request_public_origin()
+    if not configured and 'pythonanywhere.com' in base and base.startswith('http://'):
+        base = 'https://' + base[7:]
+    return base + '/api/gdrive/callback'
 
 @app.route('/api/gdrive/auth', methods=['GET'])
 def gdrive_auth():
@@ -3230,19 +3251,356 @@ def _music_parallel_search(queries, per_query=10, allow_relay=True):
     return merged
 
 
-def _music_feed_payload(profile, limit=18, allow_relay=True):
-    """Trending for a new listener, personalised once taste exists."""
+# ---- Last.fm + YouTube Music similarity -----------------------------------
+# Last.fm supplies a curated "sounds like" graph; ytmusicapi turns those names
+# into playable video ids and provides YouTube Music's own watch-playlist radio.
+# Both are optional: an empty LASTFM_API_KEY, a missing ytmusicapi or a failed
+# request all fall back to the search-based ranking below, so playback never
+# depends on either service.
+LASTFM_API_KEY = (os.environ.get('LASTFM_API_KEY') or '').strip()
+LASTFM_API_ROOT = 'https://ws.audioscrobbler.com/2.0/'
+_MUSIC_LASTFM_CACHE = {}
+_MUSIC_LASTFM_TTL = 6 * 60 * 60
+_MUSIC_YTM_CACHE = {}
+_MUSIC_YTM_TTL = 30 * 60
+_MUSIC_YTM_STATE = {'checked': False, 'available': False}
+_MUSIC_YTM_LOCK = _threading.Lock()
+_MUSIC_YTM_LOCAL = _threading.local()
+
+# ytmusicapi is vendored so PythonAnywhere's free tier needs no pip step.
+_VENDOR_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'vendor')
+if os.path.isdir(_VENDOR_DIR) and _VENDOR_DIR not in sys.path:
+    sys.path.append(_VENDOR_DIR)
+
+
+def _music_cache_read(cache, key):
+    now = _time.time()
+    with _MUSIC_LOCK:
+        entry = cache.get(key)
+    if entry and entry.get('expires', 0) > now:
+        return entry
+    return None
+
+
+def _music_cache_write(cache, key, value, ttl, cap=300):
+    with _MUSIC_LOCK:
+        if len(cache) > cap:
+            cache.clear()
+        value = dict(value)
+        value['expires'] = _time.time() + ttl
+        cache[key] = value
+
+
+def _lastfm_call(method, **params):
+    """One Last.fm API call. Returns None when unconfigured or unavailable."""
+    if not LASTFM_API_KEY:
+        return None
+    query = {'method': method, 'api_key': LASTFM_API_KEY, 'format': 'json', 'autocorrect': 1}
+    query.update({name: value for name, value in params.items() if value not in (None, '')})
+    try:
+        import requests as _requests
+        response = _requests.get(
+            LASTFM_API_ROOT,
+            params=query,
+            headers={'User-Agent': _YT_UA, 'Accept': 'application/json'},
+            timeout=6,
+        )
+        if response.status_code != 200:
+            logger.info(f'Last.fm {method} returned HTTP {response.status_code}')
+            return None
+        data = response.json()
+        if not isinstance(data, dict) or data.get('error'):
+            logger.info(f"Last.fm {method} failed: {(data or {}).get('message', 'invalid response')}")
+            return None
+        return data
+    except Exception as exc:
+        logger.info(f'Last.fm {method} unreachable: {exc}')
+        return None
+
+
+def _lastfm_list(value):
+    if isinstance(value, list):
+        return value
+    return [value] if isinstance(value, dict) else []
+
+
+def _lastfm_similar_tracks(artist, title, limit=12):
+    artist, title = _music_clean(artist), _music_clean(title)
+    if not LASTFM_API_KEY or not artist or not title:
+        return []
+    key = ('similar', artist.lower(), title.lower(), int(limit))
+    cached = _music_cache_read(_MUSIC_LASTFM_CACHE, key)
+    if cached is not None:
+        return cached['results']
+    data = _lastfm_call('track.getsimilar', artist=artist, track=title, limit=int(limit))
+    rows = ((data or {}).get('similartracks') or {}).get('track')
+    results = []
+    for row in _lastfm_list(rows)[:int(limit)]:
+        if not isinstance(row, dict):
+            continue
+        name = _music_clean(row.get('name'))
+        row_artist = row.get('artist')
+        if isinstance(row_artist, dict):
+            row_artist = _music_clean(row_artist.get('name'))
+        else:
+            row_artist = _music_clean(row_artist)
+        if not name or not row_artist:
+            continue
+        try:
+            match = float(row.get('match') or 0)
+        except (TypeError, ValueError):
+            match = 0.0
+        results.append({'title': name, 'artist': row_artist, 'match': match})
+    _music_cache_write(_MUSIC_LASTFM_CACHE, key, {'results': results}, _MUSIC_LASTFM_TTL)
+    return results
+
+
+def _lastfm_tag_top_tracks(tag, limit=15):
+    tag = _music_clean(tag)
+    if not LASTFM_API_KEY or not tag:
+        return []
+    key = ('tag', tag.lower(), int(limit))
+    cached = _music_cache_read(_MUSIC_LASTFM_CACHE, key)
+    if cached is not None:
+        return cached['results']
+    data = _lastfm_call('tag.gettoptracks', tag=tag, limit=int(limit))
+    rows = ((data or {}).get('tracks') or {}).get('track')
+    results = []
+    for row in _lastfm_list(rows)[:int(limit)]:
+        if not isinstance(row, dict):
+            continue
+        name = _music_clean(row.get('name'))
+        row_artist = row.get('artist')
+        if isinstance(row_artist, dict):
+            row_artist = _music_clean(row_artist.get('name'))
+        else:
+            row_artist = _music_clean(row_artist)
+        if name and row_artist:
+            results.append({'title': name, 'artist': row_artist, 'match': 0.0})
+    _music_cache_write(_MUSIC_LASTFM_CACHE, key, {'results': results}, _MUSIC_LASTFM_TTL)
+    return results
+
+
+def _ytmusic_supported():
+    """True when the optional ytmusicapi package can be imported."""
+    with _MUSIC_YTM_LOCK:
+        if not _MUSIC_YTM_STATE['checked']:
+            _MUSIC_YTM_STATE['checked'] = True
+            try:
+                import ytmusicapi  # noqa: F401
+                _MUSIC_YTM_STATE['available'] = True
+            except Exception as exc:
+                logger.info(f'ytmusicapi not installed; using search radio: {exc}')
+                _MUSIC_YTM_STATE['available'] = False
+        return bool(_MUSIC_YTM_STATE['available'])
+
+
+def _ytmusic_client():
+    """A per-thread client; YTMusic sessions are not shared across threads."""
+    if not _ytmusic_supported():
+        return None
+    client = getattr(_MUSIC_YTM_LOCAL, 'client', None)
+    if client is not None:
+        return client
+    try:
+        from ytmusicapi import YTMusic
+        client = YTMusic()
+    except Exception as exc:
+        logger.info(f'ytmusicapi client unavailable: {exc}')
+        client = None
+    _MUSIC_YTM_LOCAL.client = client
+    return client
+
+
+def _ytmusic_normalize(item):
+    if not isinstance(item, dict) or item.get('isAvailable') is False:
+        return None
+    vid = str(item.get('videoId') or '').strip()
+    if not _MUSIC_VIDEO_ID.match(vid):
+        return None
+    names = []
+    for artist in _lastfm_list(item.get('artists')):
+        name = artist.get('name') if isinstance(artist, dict) else artist
+        name = _music_clean(name)
+        if name and name not in names:
+            names.append(name)
+    channel = ', '.join(names[:2]) or _music_clean(item.get('author')) or 'YouTube Music'
+    duration = _music_clean(item.get('duration') or item.get('length'))
+    seconds = item.get('duration_seconds') or _music_duration_seconds(duration)
+    thumb = ''
+    thumbs = item.get('thumbnail') or item.get('thumbnails')
+    if isinstance(thumbs, list) and thumbs:
+        largest = thumbs[-1]
+        if isinstance(largest, dict):
+            thumb = largest.get('url') or ''
+    return _music_normalize({
+        'id': vid,
+        'title': item.get('title'),
+        'channel': channel,
+        'duration': duration,
+        'seconds': seconds,
+        'views': item.get('views'),
+        'thumbnail': thumb or f'https://i.ytimg.com/vi/{vid}/mqdefault.jpg',
+    })
+
+
+def _ytmusic_search_songs(query, limit=15):
+    query = _music_clean(query)[:160]
+    if not query or not _ytmusic_supported():
+        return []
+    key = ('search', query.lower(), int(limit))
+    cached = _music_cache_read(_MUSIC_YTM_CACHE, key)
+    if cached is not None:
+        return cached['results']
+    client = _ytmusic_client()
+    results = []
+    if client is not None:
+        try:
+            rows = client.search(query, filter='songs', limit=int(limit)) or []
+            results = [track for track in (_ytmusic_normalize(row) for row in rows) if track][:int(limit)]
+        except Exception as exc:
+            logger.info(f'YT Music search failed for {query!r}: {exc}')
+    _music_cache_write(_MUSIC_YTM_CACHE, key, {'results': results}, _MUSIC_YTM_TTL)
+    return results
+
+
+def _ytmusic_search_track(artist, title):
+    """Resolve one Last.fm track name to a playable YouTube Music song."""
+    artist, title = _music_clean(artist), _music_clean(title)
+    if not artist or not title or not _ytmusic_supported():
+        return None
+    key = ('track', artist.lower(), title.lower())
+    cached = _music_cache_read(_MUSIC_YTM_CACHE, key)
+    if cached is not None:
+        return cached['track']
+    found = None
+    client = _ytmusic_client()
+    if client is not None:
+        try:
+            rows = client.search(f'{artist} {title}', filter='songs', limit=3) or []
+        except Exception as exc:
+            logger.info(f'YT Music resolve failed for {artist} - {title}: {exc}')
+            rows = []
+        for row in rows:
+            found = _ytmusic_normalize(row)
+            if found:
+                break
+    _music_cache_write(_MUSIC_YTM_CACHE, key, {'track': found}, _MUSIC_YTM_TTL)
+    return found
+
+
+def _music_resolve_lastfm_tracks(rows, limit=8):
+    """Resolve Last.fm names in parallel so a radio request stays responsive."""
+    if not _ytmusic_supported():
+        return []
+    pairs = []
+    seen = set()
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        artist, title = _music_clean(row.get('artist')), _music_clean(row.get('title'))
+        pair = (artist, title)
+        if not artist or not title or pair[0].lower() + '|' + pair[1].lower() in seen:
+            continue
+        seen.add(pair[0].lower() + '|' + pair[1].lower())
+        pairs.append(pair)
+        if len(pairs) >= max(1, int(limit)):
+            break
+    if not pairs:
+        return []
+
+    def resolve(pair):
+        try:
+            return _ytmusic_search_track(pair[0], pair[1])
+        except Exception:
+            return None
+
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=min(6, len(pairs))) as pool:
+            resolved = list(pool.map(resolve, pairs))
+    except Exception:
+        resolved = [resolve(pair) for pair in pairs]
+    return [track for track in resolved if track]
+
+
+def _lastfm_radio(artist, title, limit=8):
+    rows = _lastfm_similar_tracks(artist, title, limit=max(int(limit), 12))
+    return _music_resolve_lastfm_tracks(rows, limit=limit)
+
+
+def _ytmusic_watch_playlist(video_id, limit=20):
+    video_id = str(video_id or '').strip()
+    if not _MUSIC_VIDEO_ID.match(video_id) or not _ytmusic_supported():
+        return []
+    limit = max(1, min(50, int(limit or 20)))
+    key = ('watch', video_id, limit)
+    cached = _music_cache_read(_MUSIC_YTM_CACHE, key)
+    if cached is not None:
+        return cached['results']
+    results = []
+    client = _ytmusic_client()
+    if client is not None:
+        try:
+            data = client.get_watch_playlist(videoId=video_id, limit=limit) or {}
+            rows = data.get('tracks') or []
+            results = [track for track in (_ytmusic_normalize(row) for row in rows) if track][:limit]
+        except Exception as exc:
+            logger.info(f'YT Music watch playlist failed for {video_id}: {exc}')
+    _music_cache_write(_MUSIC_YTM_CACHE, key, {'results': results}, _MUSIC_YTM_TTL)
+    return results
+
+
+def _music_seed_tracks(seeds):
+    """Accept the client's top saved/played tracks as station seeds."""
+    output = []
+    for raw in (seeds or [])[:3]:
+        if not isinstance(raw, dict):
+            continue
+        vid = str(raw.get('videoId') or raw.get('id') or '').strip()
+        if not _MUSIC_VIDEO_ID.match(vid):
+            continue
+        if any(entry['id'] == vid for entry in output):
+            continue
+        output.append({
+            'id': vid,
+            'title': _music_clean(raw.get('title')) or 'Saved track',
+            'channel': _music_clean(raw.get('channel') or raw.get('artist')),
+        })
+    return output
+
+
+def _music_feed_payload(profile, limit=18, allow_relay=True, seeds=None):
+    """My Mix for a listener with taste, trending for a brand-new guest."""
     profile = profile if isinstance(profile, dict) else {}
     allow_relay = bool(allow_relay)
     limit = max(6, min(30, int(limit or 18)))
+    seed_tracks = _music_seed_tracks(seeds)
     artists = [str(name).strip()[:60] for name in (profile.get('artists') or []) if str(name).strip()][:6]
     terms = [str(term).strip()[:40] for term in (profile.get('terms') or []) if str(term).strip()][:6]
     plays = int(profile.get('plays') or 0)
     disliked = set(str(value) for value in (profile.get('disliked') or [])[:60])
-    personalized = len(artists) >= 2 or plays >= 4
+    personalized = bool(seed_tracks) or len(artists) >= 2 or plays >= 4
     day = int(_time.time() // 86400)
 
-    if personalized:
+    if seed_tracks:
+        # Seed from the exact tracks the listener saved or played most, so the
+        # first card in My Mix sounds like their library, not a generic chart.
+        queries = []
+        for seed in seed_tracks:
+            if seed['channel']:
+                queries.append(f"{seed['channel']} radio")
+                queries.append(f"{seed['channel']} songs")
+            words = ' '.join(_music_tokens(seed['title'])[:3])
+            if words:
+                queries.append(words)
+            if len(queries) >= 5:
+                break
+        queries.append('new music this week')
+        cache_key = ('m', tuple(seed['id'] for seed in seed_tracks), day, limit, allow_relay)
+        title = 'My Mix'
+        subtitle = 'A station built from your saved and most-played tracks'
+    elif personalized:
         queries = [f'{artist} songs' for artist in artists[:3]]
         queries += [f'{term} mix' for term in terms[:2]]
         queries.append('new music this week')
@@ -3264,6 +3622,18 @@ def _music_feed_payload(profile, limit=18, allow_relay=True):
             return {'mode': 'personalized' if personalized else 'trending', 'title': title,
                     'subtitle': subtitle, 'results': cached_results}
 
+    station = []
+    if seed_tracks:
+        try:
+            station.extend(_ytmusic_watch_playlist(seed_tracks[0]['id'], limit=22))
+        except Exception as exc:
+            logger.info(f'My Mix watch playlist unavailable: {exc}')
+        if LASTFM_API_KEY and seed_tracks[0]['channel']:
+            try:
+                station = _lastfm_radio(seed_tracks[0]['channel'], seed_tracks[0]['title'], limit=8) + station
+            except Exception as exc:
+                logger.info(f'My Mix Last.fm seed unavailable: {exc}')
+
     items = _music_parallel_search(queries, per_query=10, allow_relay=allow_relay)
     items = _music_dedupe(items)
     affinity = {_music_channel_key(name): max(1.0, 7.0 - index * 1.2) for index, name in enumerate(artists)}
@@ -3281,7 +3651,8 @@ def _music_feed_payload(profile, limit=18, allow_relay=True):
         return value
 
     items.sort(key=score, reverse=True)
-    results = [item for item in items if item['id'] not in disliked][:limit]
+    pooled = _music_dedupe(station + items)
+    results = [item for item in pooled if item['id'] not in disliked][:limit]
     with _MUSIC_LOCK:
         if len(_MUSIC_FEED_CACHE) > 100:
             _MUSIC_FEED_CACHE.clear()
@@ -3297,18 +3668,40 @@ def _music_radio_payload(payload, limit=12, allow_relay=True):
     seed_id = str(payload.get('videoId') or '').strip()
     title = _music_clean(payload.get('title'))
     channel = _music_clean(payload.get('channel'))
+    artist = _music_clean(payload.get('artist')) or channel
     artists = [str(name).strip()[:60] for name in (payload.get('artists') or []) if str(name).strip()][:6]
     exclude = set(str(value) for value in (payload.get('exclude') or [])[:120])
     if seed_id:
         exclude.add(seed_id)
 
-    cache_key = (seed_id or _music_title_key(title + ' ' + channel), allow_relay)
+    cache_key = (seed_id or _music_title_key(title + ' ' + channel), allow_relay, bool(LASTFM_API_KEY))
     now = _time.time()
     with _MUSIC_LOCK:
         cached = _MUSIC_RADIO_CACHE.get(cache_key)
+    source = 'search'
     if cached and cached.get('expires', 0) > now:
         pool = cached['results']
+        source = cached.get('source') or source
     else:
+        # Layer 1: Last.fm's scrobble graph finds the closest *songs*, which
+        # then resolve to playable ids through YouTube Music.
+        lastfm_items = []
+        if LASTFM_API_KEY and title and (artist or channel):
+            try:
+                lastfm_items = _lastfm_radio(artist or channel, title, limit=8)
+            except Exception as exc:
+                logger.info(f'Last.fm radio unavailable: {exc}')
+
+        # Layer 2: YouTube Music's own watch-playlist radio. This is what keeps
+        # niche uploads, remixes and empty-key installs populated.
+        watch_items = []
+        if seed_id:
+            try:
+                watch_items = _ytmusic_watch_playlist(seed_id, limit=22)
+            except Exception as exc:
+                logger.info(f'YT Music radio unavailable: {exc}')
+
+        # Layer 3: the existing cached search ranking, always as backfill.
         words = [word for word in _music_tokens(title) if word not in ('topic',)][:3]
         queries = []
         if channel:
@@ -3341,14 +3734,78 @@ def _music_radio_payload(payload, limit=12, allow_relay=True):
             return value
 
         items.sort(key=score, reverse=True)
-        pool = items[:40]
+        heuristic = items[:40]
+        pool = _music_dedupe(lastfm_items + watch_items + heuristic)[:70]
+        source = '+'.join(name for name, present in (
+            ('lastfm', lastfm_items), ('ytmusic', watch_items), ('search', heuristic)
+        ) if present) or 'search'
         with _MUSIC_LOCK:
             if len(_MUSIC_RADIO_CACHE) > 120:
                 _MUSIC_RADIO_CACHE.clear()
-            _MUSIC_RADIO_CACHE[cache_key] = {'results': pool, 'expires': now + _MUSIC_RADIO_TTL}
+            _MUSIC_RADIO_CACHE[cache_key] = {'results': pool, 'expires': now + _MUSIC_RADIO_TTL, 'source': source}
 
     results = [item for item in pool if item['id'] not in exclude][:limit]
-    return {'mode': 'radio', 'seed': seed_id, 'results': results}
+    return {'mode': 'radio', 'seed': seed_id, 'source': source, 'results': results}
+
+
+_MUSIC_DISCOVER_TAGS = {
+    'lo-fi': ('lofi', 'lofi study beats', 'Lo-fi'),
+    'lofi': ('lofi', 'lofi study beats', 'Lo-fi'),
+    'study': ('study', 'study music playlist', 'Study'),
+    'hip hop': ('hip hop', 'hip hop hits', 'Hip hop'),
+    'hip-hop': ('hip hop', 'hip hop hits', 'Hip hop'),
+    'classical': ('classical', 'classical piano', 'Classical'),
+    'jazz': ('jazz', 'jazz', 'Jazz'),
+    'k-pop': ('k-pop', 'k-pop', 'K-pop'),
+    'kpop': ('k-pop', 'k-pop', 'K-pop'),
+    'phonk': ('phonk', 'phonk', 'Phonk'),
+    'nature': ('nature', 'nature sounds', 'Nature'),
+    'rock': ('rock', 'rock songs', 'Rock'),
+    'pop': ('pop', 'pop hits', 'Pop'),
+    'indie': ('indie', 'indie songs', 'Indie'),
+    'edm': ('electronic', 'edm', 'EDM'),
+    'electronic': ('electronic', 'electronic music', 'Electronic'),
+    'rnb': ('rnb', 'r&b songs', 'R&B'),
+    'r&b': ('rnb', 'r&b songs', 'R&B'),
+}
+
+
+def _music_discover_payload(tag, limit=15, allow_relay=True):
+    """Curated tag radio for the genre pills, with or without Last.fm."""
+    raw = _music_clean(tag)[:40]
+    if not raw:
+        return {'tag': '', 'label': '', 'source': 'none', 'results': []}
+    lastfm_tag, query, label = _MUSIC_DISCOVER_TAGS.get(
+        raw.lower(), (raw.lower(), f'{raw} music', raw.title())
+    )
+    limit = max(6, min(24, int(limit or 15)))
+    key = ('discover', lastfm_tag, limit, allow_relay, bool(LASTFM_API_KEY))
+    cached = _music_cache_read(_MUSIC_RADIO_CACHE, key)
+    if cached is not None:
+        return cached['payload']
+
+    lastfm_items = []
+    if LASTFM_API_KEY:
+        try:
+            lastfm_items = _music_resolve_lastfm_tracks(_lastfm_tag_top_tracks(lastfm_tag, 15), limit=8)
+        except Exception as exc:
+            logger.info(f'Last.fm tag discovery unavailable for {lastfm_tag}: {exc}')
+    ytm_items = []
+    try:
+        ytm_items = _ytmusic_search_songs(query, limit=limit)
+    except Exception as exc:
+        logger.info(f'YT Music discovery unavailable for {query}: {exc}')
+    search_items = _music_search(query, limit, allow_relay=allow_relay)
+
+    # Last.fm tags are broad ("phonk" also catches K-pop), so YouTube Music's
+    # matching search leads and the tag graph plus cached search enrich it.
+    pool = _music_dedupe(ytm_items + lastfm_items + search_items)
+    source = '+'.join(name for name, present in (
+        ('ytmusic', ytm_items), ('lastfm', lastfm_items), ('search', search_items)
+    ) if present) or 'none'
+    payload = {'tag': raw, 'label': label, 'source': source, 'results': pool[:limit]}
+    _music_cache_write(_MUSIC_RADIO_CACHE, key, {'payload': payload}, _MUSIC_RADIO_TTL)
+    return payload
 
 
 # ---- Music relay -----------------------------------------------------------
@@ -3429,11 +3886,14 @@ def music_search():
 def music_feed():
     """Trending for a new listener, personalised once the taste summary has weight."""
     profile = {}
+    seeds = []
     limit = 18
     if request.method == 'POST':
         body = request.get_json(silent=True) or {}
         if isinstance(body.get('profile'), dict):
             profile = body['profile']
+        if isinstance(body.get('seeds'), list):
+            seeds = body['seeds'][:3]
         try:
             limit = int(body.get('limit') or limit)
         except (TypeError, ValueError):
@@ -3441,7 +3901,7 @@ def music_feed():
     else:
         limit = request.args.get('limit', 18, type=int) or 18
     try:
-        payload = _music_feed_payload(profile, limit, allow_relay=bool(current_user()))
+        payload = _music_feed_payload(profile, limit, allow_relay=bool(current_user()), seeds=seeds)
         response = jsonify({'status': 'success', **payload})
         response.headers['Cache-Control'] = 'no-store'
         return response
@@ -3463,6 +3923,7 @@ def music_radio():
             'videoId': request.args.get('videoId') or request.args.get('id') or '',
             'title': request.args.get('title') or '',
             'channel': request.args.get('channel') or '',
+            'artist': request.args.get('artist') or '',
             'limit': request.args.get('limit', 12, type=int) or 12,
         }
     try:
@@ -3471,8 +3932,30 @@ def music_radio():
         response.headers['Cache-Control'] = 'no-store'
         return response
     except Exception as exc:
+        # Radio is an enhancement: a failure here must never break playback.
         logger.warning(f'Music radio failed: {exc}')
-        return jsonify({'status': 'error', 'message': 'Radio unavailable', 'results': []}), 502
+        response = jsonify({'status': 'degraded', 'message': 'Radio unavailable', 'results': []})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+
+@app.route('/api/music/discover', methods=['GET'])
+def music_discover():
+    """Genre-pill radio: Last.fm tags when configured, YT Music and search otherwise."""
+    tag = (request.args.get('tag') or '').strip()
+    if not tag:
+        return jsonify({'status': 'error', 'message': 'No tag provided', 'results': []}), 400
+    limit = request.args.get('limit', 15, type=int) or 15
+    try:
+        payload = _music_discover_payload(tag, limit, allow_relay=bool(current_user()))
+        response = jsonify({'status': 'success', **payload})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+    except Exception as exc:
+        logger.warning(f'Music discover failed for {tag!r}: {exc}')
+        response = jsonify({'status': 'degraded', 'tag': tag, 'label': tag, 'source': 'none', 'results': []})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
 
 # ===== YOUTUBE SEARCH ENDPOINT (kept for backwards compatibility) =====

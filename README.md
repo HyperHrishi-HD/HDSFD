@@ -77,8 +77,19 @@ The app runs without any credentials; Google Drive/Tasks/Calendar, the shared AI
   playback runs in the browser against the relay in `relay/` (a Cloudflare Worker); see
   `relay/wrangler.toml` for deploying your own. Without it, search still works and play falls
   back to the official YouTube embed.
+- `LASTFM_API_KEY` — optional Last.fm API key for the similarity graph behind smart radio and
+  the genre pills. Without it, radio still returns a full queue from YouTube Music's watch
+  playlist and the cached search ranking, and discovery uses YouTube Music search. The
+  `ytmusicapi` client is vendored in `vendor/ytmusicapi` (MIT), so the free PythonAnywhere
+  install needs no extra pip step; `requirements.txt` installs it for normal local setups.
 
 In production set `FLASK_SECRET_KEY` to a long random value; the app refuses to start without it when `FLASK_ENV=production`.
+
+The Google OAuth callback is built from the public origin, so a reverse proxy (for example a
+Cloudflare Worker in front of PythonAnywhere) needs no code changes: the app honours
+`X-Forwarded-Host` and `X-Forwarded-Proto`. Set `PUBLIC_BASE_URL` (e.g.
+`https://hdsfd.dpdns.org`) to pin the exact origin registered with Google instead of trusting
+those headers.
 
 ---
 

@@ -4206,7 +4206,10 @@ const musicState = {
   feedTitle: 'Trending now',
   feedSubtitle: 'What everyone is playing right now',
   feedLoading: false,
+  feedSignature: '',
+  feedStale: false,
   query: '',
+  resultsTitle: '',
   view: 'home',
   volume: (() => {
     const stored = parseFloat(musicStoreGet(MUSIC_KEYS.volume));
@@ -4314,7 +4317,7 @@ function musicTasteArtist(name, create) {
 function musicTasteCountPlay(item) {
   if (!item || !item.id) return;
   if (musicState.current && musicState.current.id !== item.id) return;
-  // The 16 s timer and the "ended" event can both land; one listen is one play.
+  // The 15 s timer and the "ended" event can both land; one listen is one play.
   if (musicState.countedPlayId === item.id) return;
   musicState.countedPlayId = item.id;
   const now = Date.now();
@@ -4338,7 +4341,9 @@ function musicTasteCountPlay(item) {
 
 function musicTasteMaybeSkip(item) {
   if (!item || !item.id) return;
-  if (!musicState.playStartedAt || Date.now() - musicState.playStartedAt > 15000) return;
+  // A skip is leaving inside the first 10 s: that is a real rejection, not a
+  // listener who simply moved on after hearing most of the track.
+  if (!musicState.playStartedAt || Date.now() - musicState.playStartedAt > 10000) return;
   if (!musicState.current || musicState.current.id !== item.id) return;
   clearTimeout(musicCountTimer);
   const now = Date.now();
@@ -4359,7 +4364,7 @@ function musicTasteListenStart(item) {
   if (!item || !item.id) return;
   musicCountTimer = setTimeout(() => {
     if (musicState.current && musicState.current.id === item.id) musicTasteCountPlay(item);
-  }, 16000);
+  }, 15000);
 }
 
 function musicIsLiked(id) {
@@ -4410,6 +4415,9 @@ function musicToggleLikeById(id) {
   }
   musicTasteSave();
   musicPersistSaved();
+  // A new star should reshape My Mix on the next visit, not a session later.
+  musicState.feedStale = true;
+  musicStoreRemove(MUSIC_KEYS.feed);
   musicRenderResults();
   musicRenderFeed();
   musicRenderSaved();
@@ -4445,7 +4453,35 @@ function musicProfile() {
 
 function musicHasTaste(profile) {
   const data = profile || musicProfile();
-  return data.artists.length >= 2 || data.plays >= 4;
+  return data.artists.length >= 2 || data.plays >= 4 || musicState.saved.length >= 3;
+}
+
+function musicSeedTracks() {
+  // The top three saved or most-played tracks that seed My Mix.
+  const picks = [];
+  const add = item => {
+    const track = musicNormalizeTrack(item);
+    if (!track || picks.some(entry => entry.id === track.id)) return;
+    picks.push(track);
+  };
+  // Saved songs are explicit, high-weight taste; plays are implicit weight.
+  musicState.saved.forEach(add);
+  Object.keys(musicTaste.plays)
+    .map(id => ({ id: id, record: musicTaste.plays[id] || {} }))
+    .sort((a, b) => (Number(b.record.count) || 0) - (Number(a.record.count) || 0)
+      || (Number(b.record.last) || 0) - (Number(a.record.last) || 0))
+    .forEach(entry => {
+      add(musicFindTrackById(entry.id) || {
+        id: entry.id,
+        title: entry.record.title || 'Saved track',
+        channel: entry.record.channel || 'YouTube'
+      });
+    });
+  return picks.slice(0, 3).map(track => ({
+    videoId: track.id,
+    title: track.title,
+    channel: track.channel
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -4501,6 +4537,39 @@ function musicQueueKeys() {
 
 function musicQueueIds() {
   return new Set(musicState.queue.map(item => item.id).filter(Boolean));
+}
+
+const MUSIC_REPLAY_WINDOW_MS = 60 * 60 * 1000;
+const MUSIC_SKIP_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
+
+function musicRecentIds() {
+  const now = Date.now();
+  const ids = new Set();
+  (musicState.recent || []).forEach(entry => {
+    if (!entry || !entry.id) return;
+    if (now - (Number(entry.played_at) || 0) < MUSIC_REPLAY_WINDOW_MS) ids.add(entry.id);
+  });
+  return ids;
+}
+
+function musicSkipBlockedIds() {
+  const now = Date.now();
+  return Object.keys(musicTaste.skips).filter(id => {
+    const record = musicTaste.skips[id] || {};
+    return Number(record.count) >= 2 && now - (Number(record.last) || 0) < MUSIC_SKIP_WINDOW_MS;
+  });
+}
+
+function musicRadioFilter(list, extraIds) {
+  // Never queue what just played, what is already queued, or a track this
+  // listener rejected twice. Radio that loops is worse than no radio.
+  const blocked = new Set(musicRecentIds());
+  musicQueueIds().forEach(id => blocked.add(id));
+  (extraIds || []).forEach(id => blocked.add(id));
+  const skipped = new Set(musicSkipBlockedIds());
+  return (Array.isArray(list) ? list : []).filter(item => (
+    !!item && !!item.id && !blocked.has(item.id) && !skipped.has(item.id)
+  ));
 }
 
 function musicFindTrackById(id) {
@@ -5154,6 +5223,7 @@ function musicClearSearch(focus) {
   if (musicSearchAbort) musicSearchAbort.abort();
   musicState.results = [];
   musicState.query = '';
+  musicState.resultsTitle = '';
   musicState.loading = false;
   musicState.searchBusy = false;
   musicSetView('home', { focus: false });
@@ -5166,6 +5236,7 @@ async function musicSearch(query, autoPlay) {
   if (!cleaned) return;
   const token = ++musicSearchToken;
   musicState.query = cleaned;
+  musicState.resultsTitle = '';
   musicState.loading = true;
   musicState.searchBusy = true;
   musicState.results = [];
@@ -5237,6 +5308,56 @@ async function musicSearch(query, autoPlay) {
   }
 }
 
+// Genre pills: curated tag radio from the server, with the old search query as
+// a safety net if discovery is unavailable.
+async function musicDiscover(tag, autoPlay) {
+  const label = String(tag || '').trim();
+  if (!label) return;
+  const token = ++musicSearchToken;
+  musicState.query = label;
+  musicState.resultsTitle = `${label} mix`;
+  musicState.loading = true;
+  musicState.searchBusy = true;
+  musicState.results = [];
+  musicState.error = '';
+  musicSetView('results', { focus: false });
+  musicRenderResults();
+  musicRenderSearchButton();
+
+  let results = [];
+  try {
+    const data = await musicFetchJson(
+      `${API_BASE}/music/discover?tag=${encodeURIComponent(label)}&limit=18`,
+      { headers: hdsfdAuthHeaders() },
+      16000
+    );
+    results = Array.isArray(data.results) ? data.results : [];
+  } catch (e) {
+    results = [];
+  }
+  if (token !== musicSearchToken) return;
+
+  musicState.loading = false;
+  musicState.searchBusy = false;
+  musicState.results = musicUniqueTracks(results, { limit: 18 });
+  if (!musicState.results.length) {
+    musicState.resultsTitle = '';
+    musicSearch(musicDiscoverFallbackQuery(label), autoPlay !== false);
+    return;
+  }
+  musicRenderResults();
+  if (autoPlay !== false) musicPlayResult(0);
+}
+
+function musicDiscoverFallbackQuery(label) {
+  const fallbacks = {
+    'lo-fi': 'lofi study beats', 'study': 'study music playlist', 'hip hop': 'hip hop hits',
+    'classical': 'classical piano', 'jazz': 'jazz', 'k-pop': 'k-pop', 'phonk': 'phonk',
+    'nature': 'nature sounds'
+  };
+  return fallbacks[String(label || '').toLowerCase()] || `${label} music`;
+}
+
 async function musicRelaySearch(query, limit) {
   if (musicGuestMode()) return [];
   const base = await musicRelayBaseUrl();
@@ -5262,7 +5383,10 @@ function musicRenderResults() {
   if (!container) return;
   musicRenderSearchButton();
   const title = document.getElementById('music-results-title');
-  if (title) title.textContent = musicState.query ? `Results for “${musicState.query}”` : 'Search results';
+  if (title) {
+    title.textContent = musicState.resultsTitle
+      || (musicState.query ? `Results for “${musicState.query}”` : 'Search results');
+  }
 
   if (musicState.loading && !musicState.results.length) {
     container.innerHTML = Array.from({ length: 6 }).map(() => `
@@ -5348,17 +5472,22 @@ function musicEnsureFeed() {
   const signature = musicFeedSignature(musicProfile());
   const cached = musicFeedCacheGet(signature);
   if (cached) {
+    musicState.feedSignature = signature;
     musicApplyFeed(cached);
     return;
   }
-  if (!musicState.feed.length) musicLoadFeed(false);
+  if (!musicState.feed.length || musicState.feedSignature !== signature || musicState.feedStale) {
+    musicState.feedStale = false;
+    musicLoadFeed(false);
+  }
 }
 
 function musicFeedSignature(profile) {
   return JSON.stringify({
     a: profile.artists.slice(0, 6),
     t: profile.terms.slice(0, 6),
-    p: Math.min(50, profile.plays)
+    p: Math.min(50, profile.plays),
+    s: musicSeedTracks().map(seed => seed.videoId)
   });
 }
 
@@ -5374,17 +5503,22 @@ async function musicLoadFeed(force) {
     return;
   }
   const profile = musicProfile();
+  const seeds = musicSeedTracks();
   const signature = musicFeedSignature(profile);
   const cached = !force && musicFeedCacheGet(signature);
   if (cached) {
+    musicState.feedSignature = signature;
+    musicState.feedStale = false;
     musicApplyFeed(cached);
     return;
   }
 
   musicState.feedLoading = true;
+  musicState.feedSignature = signature;
+  musicState.feedStale = false;
   musicRenderFeed();
   try {
-    const data = await musicPostJson(`${API_BASE}/music/feed`, { profile: profile, limit: 18 }, 18000);
+    const data = await musicPostJson(`${API_BASE}/music/feed`, { profile: profile, seeds: seeds, limit: 18 }, 18000);
     const results = musicUniqueTracks(data.results || [], { limit: 18 });
     if (!results.length) throw new Error('empty_feed');
     const payload = {
@@ -5400,9 +5534,12 @@ async function musicLoadFeed(force) {
   } catch (err) {
     // Relay-only fallback so the Home tab still fills when the app server is down.
     try {
-      const queries = musicHasTaste(profile)
-        ? profile.artists.slice(0, 2).map(name => `${name} songs`)
-        : ['top hits this week', 'trending music'];
+      const queries = seeds.length
+        ? seeds.filter(seed => seed.channel).slice(0, 2).map(seed => `${seed.channel} radio`)
+        : (musicHasTaste(profile)
+          ? profile.artists.slice(0, 2).map(name => `${name} songs`)
+          : ['top hits this week', 'trending music']);
+      if (!queries.length) queries.push('top hits this week');
       const lists = [];
       for (const query of queries) lists.push(await musicRelaySearch(query, 10));
       const results = musicUniqueTracks([].concat.apply([], lists), { limit: 18 });
@@ -6128,8 +6265,10 @@ async function musicLoadRadio(options) {
   musicRadioPromise = (async () => {
     const profile = musicProfile();
     const exclude = Array.from(new Set(
-      Array.from(musicQueueIds()).concat(musicState.recent.map(entry => entry.id))
-    )).slice(0, 80);
+      Array.from(musicQueueIds())
+        .concat(Array.from(musicRecentIds()))
+        .concat(musicSkipBlockedIds())
+    )).slice(0, 120);
 
     let candidates = [];
     try {
@@ -6159,7 +6298,7 @@ async function musicLoadRadio(options) {
       }
     }
 
-    return musicUniqueTracks(candidates, {
+    return musicUniqueTracks(musicRadioFilter(candidates, exclude), {
       excludeIds: new Set(exclude),
       excludeKeys: musicQueueKeys(),
       limit: 10
@@ -6167,7 +6306,9 @@ async function musicLoadRadio(options) {
   })();
 
   try {
-    const fresh = await musicRadioPromise;
+    // Playback may have moved while the request was in flight; filter the
+    // result against the queue as it is now, not as it was when we asked.
+    const fresh = musicRadioFilter(await musicRadioPromise);
     fresh.forEach(item => musicState.queue.push(item));
     if (fresh.length) {
       musicPersistState();
@@ -6191,7 +6332,8 @@ function musicUpdateFeedNote(count) {
 function musicMaybeExtendQueue() {
   if (musicGuestMode() || !musicState.radio || !musicState.current || musicState.radioLoading) return;
   const remaining = musicState.queue.length - musicState.index - 1;
-  if (remaining > 2) return;
+  // Keep at least two tracks ahead; refill before the queue actually runs dry.
+  if (remaining >= 2) return;
   musicLoadRadio().catch(() => {});
 }
 

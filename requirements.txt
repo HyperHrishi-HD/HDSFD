@@ -5,4 +5,5 @@ google-auth-oauthlib>=1.2.0
 google-api-python-client>=2.125.0
 cryptography>=42.0.0
 requests
+ytmusicapi>=1.10.3
 # Music playback runs in the browser against the music relay; no media extractor is needed here.

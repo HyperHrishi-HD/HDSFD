@@ -37,6 +37,12 @@ RUNTIME_FILES = (
     "vendor/quick-liquid/chunk-4TLGP4GF.mjs",
 )
 
+# Directories shipped whole: the vendored YT Music client is pure Python, so it
+# travels with the app and PythonAnywhere never needs a pip step for it.
+RUNTIME_DIRS = (
+    "vendor/ytmusicapi",
+)
+
 
 def read_token():
     token = (os.environ.get("PA_API_TOKEN") or "").strip()
@@ -55,7 +61,15 @@ def read_token():
 def main():
     headers = {"Authorization": f"Token {read_token()}"}
 
-    for rel_path in RUNTIME_FILES:
+    files = list(RUNTIME_FILES)
+    for rel_dir in RUNTIME_DIRS:
+        for root, _dirs, names in os.walk(os.path.join(ROOT_DIR, rel_dir)):
+            for name in sorted(names):
+                if name.endswith('.pyc') or '__pycache__' in root:
+                    continue
+                files.append(os.path.relpath(os.path.join(root, name), ROOT_DIR).replace(os.sep, '/'))
+
+    for rel_path in files:
         local_path = os.path.join(ROOT_DIR, rel_path)
         if not os.path.exists(local_path):
             sys.exit(f"Missing local file: {rel_path}")

@@ -4452,14 +4452,14 @@
             <button id="music-search-btn" type="button" class="music-search-btn" onclick="musicSearch(document.getElementById('music-search-input').value, false)">Search</button>
           </div>
           <div class="music-chips">
-            <button type="button" onclick="musicSearch('lofi study beats', true)" class="music-chip">Lo-fi</button>
-            <button type="button" onclick="musicSearch('study music playlist', true)" class="music-chip">Study</button>
-            <button type="button" onclick="musicSearch('hip hop hits', true)" class="music-chip">Hip hop</button>
-            <button type="button" onclick="musicSearch('classical piano', true)" class="music-chip">Classical</button>
-            <button type="button" onclick="musicSearch('jazz', true)" class="music-chip">Jazz</button>
-            <button type="button" onclick="musicSearch('k-pop', true)" class="music-chip">K-pop</button>
-            <button type="button" onclick="musicSearch('phonk', true)" class="music-chip">Phonk</button>
-            <button type="button" onclick="musicSearch('nature sounds', true)" class="music-chip">Nature</button>
+            <button type="button" onclick="musicDiscover('Lo-fi')" class="music-chip">Lo-fi</button>
+            <button type="button" onclick="musicDiscover('Study')" class="music-chip">Study</button>
+            <button type="button" onclick="musicDiscover('Hip hop')" class="music-chip">Hip hop</button>
+            <button type="button" onclick="musicDiscover('Classical')" class="music-chip">Classical</button>
+            <button type="button" onclick="musicDiscover('Jazz')" class="music-chip">Jazz</button>
+            <button type="button" onclick="musicDiscover('K-pop')" class="music-chip">K-pop</button>
+            <button type="button" onclick="musicDiscover('Phonk')" class="music-chip">Phonk</button>
+            <button type="button" onclick="musicDiscover('Nature')" class="music-chip">Nature</button>
           </div>
           <div id="music-guest-note" class="music-guest-note" aria-live="polite">
             <svg class="hdsfd-icon"><use href="#i-triangle-alert"></use></svg>
@@ -4611,7 +4611,7 @@
       <button onclick="dismissGoogleReconnectPrompt()" class="text-white/40 hover:text-white text-sm leading-none" aria-label="Dismiss">&#10005;</button>
     </div>
 
-    <script src="app.js?v=6.4"></script>
+    <script src="app.js?v=6.5"></script>
   <script src="hdsfd-ui.js?v=2"></script>
   <script type="module" src="liquid-glass.js?v=1"></script>
   </body>
