@@ -69,7 +69,7 @@ python app.py
 Access the local server at `http://localhost:5050/`.
 
 ### Optional integrations (bring your own keys)
-The app runs without any credentials; Google Drive/Tasks/Calendar, the shared AI pool and the music resolver stay disabled until you supply them.
+The app runs without any credentials; Google Drive/Tasks/Calendar and the shared AI pool stay disabled until you supply them. Music recommendations are keyless.
 
 - `google_credentials.json` — OAuth client for Google sign-in, Drive backup, Tasks and Calendar.
 - `secrets_config.json` — `{"gemini_api_keys": ["..."]}` for the shared AI pool (or `GEMINI_API_KEY`).
@@ -77,13 +77,13 @@ The app runs without any credentials; Google Drive/Tasks/Calendar, the shared AI
   playback runs in the browser against the relay in `relay/` (a Cloudflare Worker); see
   `relay/wrangler.toml` for deploying your own. Without it, search still works and play falls
   back to the official YouTube embed.
-- `LASTFM_API_KEY` — optional Last.fm API key for the similarity graph behind smart radio and
-  the genre pills. Without it, radio still returns a full queue from YouTube Music's watch
-  playlist and the cached search ranking, and discovery uses YouTube Music search. The
-  `ytmusicapi` client is vendored in `vendor/ytmusicapi` (MIT), so the free PythonAnywhere
-  install needs no extra pip step; `requirements.txt` installs it for normal local setups.
-  Where a host blocks `music.youtube.com`, Last.fm names resolve through the relay or the
-  cached search instead, so radio and the genre pills keep working.
+- **Music recommendations are keyless.** Smart radio uses YouTube Music's watch playlist,
+  genre pills use its song search and mood playlists, and Trending uses its charts, with the
+  existing relay/local search ranking as an automatic fallback. No external API key, paid
+  service or other credential is required. The `ytmusicapi` client is vendored in `vendor/ytmusicapi`
+  (MIT), so the free PythonAnywhere install needs no extra pip step; `requirements.txt` installs
+  it for normal local setups. Where a host blocks `music.youtube.com`, radio and discovery
+  fall back to the cached search path, so playback and the pills keep working.
 
 In production set `FLASK_SECRET_KEY` to a long random value; the app refuses to start without it when `FLASK_ENV=production`.
 

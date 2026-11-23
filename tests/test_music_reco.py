@@ -5,6 +5,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app as hdsfd  # noqa: E402
 
+# Keep these unit tests offline: the keyless YT Music layer is optional and is
+# covered separately in test_music_radio_engine.py.
+hdsfd._MUSIC_YTM_STATE['blocked_until'] = 0
+hdsfd._ytmusic_watch_playlist = lambda *args, **kwargs: []
+hdsfd._ytmusic_artist_mix = lambda *args, **kwargs: []
+hdsfd._ytmusic_charts = lambda *args, **kwargs: []
+hdsfd._ytmusic_search_songs = lambda *args, **kwargs: []
+
 
 def track(vid, title, channel, views='1M views', duration='3:00'):
     return {
@@ -125,6 +133,10 @@ res = client.post('/api/music/radio', json={
 })
 assert res.status_code == 200, res.status_code
 assert 'ddddddddddd' not in [item['id'] for item in res.get_json()['results']]
+
+res = client.get('/api/music/trending?limit=6')
+assert res.status_code == 200, res.status_code
+assert res.get_json()['status'] == 'success'
 
 res = client.get('/api/music/search')
 assert res.status_code == 400

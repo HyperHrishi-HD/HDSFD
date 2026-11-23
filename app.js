@@ -4250,20 +4250,66 @@ let musicRadioPromise = null;
 // Taste memory
 // ---------------------------------------------------------------------------
 const musicTaste = (() => {
-  const base = { version: 1, artists: {}, terms: {}, plays: {}, skips: {}, likes: {}, dislikes: {}, updated: 0 };
+  const base = { version: 2, artistAffinity: {}, terms: {}, plays: {}, skips: {}, likes: {}, dislikes: {}, updated: 0 };
   const saved = musicSafeParse(musicStoreGet(MUSIC_KEYS.taste) || '{}', {});
   if (!saved || typeof saved !== 'object') return base;
+  const normalizePlays = source => {
+    const output = {};
+    Object.keys(source && typeof source === 'object' ? source : {}).forEach(id => {
+      const record = source[id] || {};
+      output[id] = {
+        videoId: id,
+        title: String(record.title || ''),
+        artist: String(record.artist || record.channel || ''),
+        thumbnail: String(record.thumbnail || ''),
+        count: Math.max(0, Number(record.count) || 0),
+        lastPlayed: Math.max(0, Number(record.lastPlayed || record.last) || 0)
+      };
+    });
+    return output;
+  };
+  const normalizeSkips = source => {
+    const output = {};
+    Object.keys(source && typeof source === 'object' ? source : {}).forEach(id => {
+      const record = source[id] || {};
+      output[id] = {
+        videoId: id,
+        count: Math.max(0, Number(record.count) || 0),
+        lastSkipped: Math.max(0, Number(record.lastSkipped || record.last) || 0)
+      };
+    });
+    return output;
+  };
+  const savedAffinity = saved.artistAffinity && typeof saved.artistAffinity === 'object'
+    ? saved.artistAffinity
+    : (saved.artists && typeof saved.artists === 'object' ? saved.artists : {});
+  const affinity = {};
+  Object.keys(savedAffinity).forEach(key => {
+    const record = savedAffinity[key];
+    if (!record || typeof record !== 'object') return;
+    affinity[key] = {
+      name: String(record.name || '').slice(0, 80),
+      plays: Math.max(0, Number(record.plays) || 0),
+      skips: Math.max(0, Number(record.skips) || 0),
+      likes: Math.max(0, Number(record.likes) || 0),
+      last: Math.max(0, Number(record.last) || 0)
+    };
+  });
   return {
-    version: 1,
-    artists: saved.artists && typeof saved.artists === 'object' ? saved.artists : {},
+    version: 2,
+    artistAffinity: affinity,
     terms: saved.terms && typeof saved.terms === 'object' ? saved.terms : {},
-    plays: saved.plays && typeof saved.plays === 'object' ? saved.plays : {},
-    skips: saved.skips && typeof saved.skips === 'object' ? saved.skips : {},
+    plays: normalizePlays(saved.plays),
+    skips: normalizeSkips(saved.skips),
     likes: saved.likes && typeof saved.likes === 'object' ? saved.likes : {},
     dislikes: saved.dislikes && typeof saved.dislikes === 'object' ? saved.dislikes : {},
     updated: Number(saved.updated) || 0
   };
 })();
+
+// Write the normalized play/skip schema back on load, so an old v1 profile
+// does not linger in localStorage after the upgrade.
+musicTasteSave();
 
 const MUSIC_STOP_WORDS = new Set(('the a an and or of to in on for with from by at is it this that ' +
   'official video audio lyrics lyric music song songs ft feat featuring remix version live ' +
@@ -4292,10 +4338,10 @@ function musicTastePrune() {
     if (keys.length <= max) return;
     keys.sort(compare).slice(0, keys.length - max).forEach(key => { delete object[key]; });
   };
-  trim(musicTaste.artists, 120, (a, b) => (Number(musicTaste.artists[a].plays) || 0) - (Number(musicTaste.artists[b].plays) || 0));
+  trim(musicTaste.artistAffinity, 120, (a, b) => (Number(musicTaste.artistAffinity[a].plays) || 0) - (Number(musicTaste.artistAffinity[b].plays) || 0));
   trim(musicTaste.terms, 220, (a, b) => (musicTaste.terms[a] || 0) - (musicTaste.terms[b] || 0));
-  trim(musicTaste.plays, 400, (a, b) => (musicTaste.plays[a].last || 0) - (musicTaste.plays[b].last || 0));
-  trim(musicTaste.skips, 250, (a, b) => (musicTaste.skips[a].last || 0) - (musicTaste.skips[b].last || 0));
+  trim(musicTaste.plays, 400, (a, b) => (musicTaste.plays[a].lastPlayed || 0) - (musicTaste.plays[b].lastPlayed || 0));
+  trim(musicTaste.skips, 250, (a, b) => (musicTaste.skips[a].lastSkipped || 0) - (musicTaste.skips[b].lastSkipped || 0));
 }
 
 function musicTasteSave() {
@@ -4307,11 +4353,11 @@ function musicTasteSave() {
 function musicTasteArtist(name, create) {
   const key = musicNormChannel(name);
   if (!key) return null;
-  if (!musicTaste.artists[key]) {
+  if (!musicTaste.artistAffinity[key]) {
     if (!create) return null;
-    musicTaste.artists[key] = { name: String(name).trim().slice(0, 80), plays: 0, skips: 0, likes: 0, last: 0 };
+    musicTaste.artistAffinity[key] = { name: String(name).trim().slice(0, 80), plays: 0, skips: 0, likes: 0, last: 0 };
   }
-  return musicTaste.artists[key];
+  return musicTaste.artistAffinity[key];
 }
 
 function musicTasteCountPlay(item) {
@@ -4321,11 +4367,12 @@ function musicTasteCountPlay(item) {
   if (musicState.countedPlayId === item.id) return;
   musicState.countedPlayId = item.id;
   const now = Date.now();
-  const record = musicTaste.plays[item.id] || { count: 0, last: 0, title: item.title || '', channel: item.channel || '' };
+  const record = musicTaste.plays[item.id] || { videoId: item.id, title: '', artist: '', thumbnail: '', count: 0, lastPlayed: 0 };
   record.count = Math.min(999, (Number(record.count) || 0) + 1);
-  record.last = now;
+  record.lastPlayed = now;
   record.title = item.title || record.title;
-  record.channel = item.channel || record.channel;
+  record.artist = item.channel || record.artist;
+  record.thumbnail = item.thumbnail || record.thumbnail;
   musicTaste.plays[item.id] = record;
 
   const artist = musicTasteArtist(item.channel, true);
@@ -4347,9 +4394,9 @@ function musicTasteMaybeSkip(item) {
   if (!musicState.current || musicState.current.id !== item.id) return;
   clearTimeout(musicCountTimer);
   const now = Date.now();
-  const record = musicTaste.skips[item.id] || { count: 0, last: 0 };
+  const record = musicTaste.skips[item.id] || { videoId: item.id, count: 0, lastSkipped: 0 };
   record.count = Math.min(99, (Number(record.count) || 0) + 1);
-  record.last = now;
+  record.lastSkipped = now;
   musicTaste.skips[item.id] = record;
   const artist = musicTasteArtist(item.channel, true);
   if (artist) artist.skips = Math.min(99, (Number(artist.skips) || 0) + 1);
@@ -4427,7 +4474,7 @@ function musicToggleLikeById(id) {
 }
 
 function musicProfile() {
-  const artists = Object.values(musicTaste.artists)
+  const artists = Object.values(musicTaste.artistAffinity)
     .filter(entry => entry && entry.name)
     .map(entry => ({
       name: entry.name,
@@ -4469,12 +4516,13 @@ function musicSeedTracks() {
   Object.keys(musicTaste.plays)
     .map(id => ({ id: id, record: musicTaste.plays[id] || {} }))
     .sort((a, b) => (Number(b.record.count) || 0) - (Number(a.record.count) || 0)
-      || (Number(b.record.last) || 0) - (Number(a.record.last) || 0))
+      || (Number(b.record.lastPlayed) || 0) - (Number(a.record.lastPlayed) || 0))
     .forEach(entry => {
       add(musicFindTrackById(entry.id) || {
         id: entry.id,
         title: entry.record.title || 'Saved track',
-        channel: entry.record.channel || 'YouTube'
+        channel: entry.record.artist || 'YouTube',
+        thumbnail: entry.record.thumbnail || ''
       });
     });
   return picks.slice(0, 3).map(track => ({
@@ -4497,7 +4545,7 @@ function musicNormalizeTrack(item) {
   return {
     id: item.id,
     title: title,
-    channel: String(item.channel || item.author || 'YouTube').trim(),
+    channel: String(item.channel || item.author || item.artist || 'YouTube').trim(),
     thumbnail: item.thumbnail || `https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`,
     url: item.url || `https://www.youtube.com/watch?v=${item.id}`,
     duration: item.duration || '',
@@ -4556,7 +4604,7 @@ function musicSkipBlockedIds() {
   const now = Date.now();
   return Object.keys(musicTaste.skips).filter(id => {
     const record = musicTaste.skips[id] || {};
-    return Number(record.count) >= 2 && now - (Number(record.last) || 0) < MUSIC_SKIP_WINDOW_MS;
+    return Number(record.count) >= 2 && now - (Number(record.lastSkipped) || 0) < MUSIC_SKIP_WINDOW_MS;
   });
 }
 
@@ -5357,7 +5405,7 @@ async function musicDiscover(tag, autoPlay) {
 
 function musicDiscoverFallbackQuery(label) {
   const fallbacks = {
-    'lo-fi': 'lofi study beats', 'study': 'study music playlist', 'hip hop': 'hip hop hits',
+    'lo-fi': 'lofi', 'study': 'focus music', 'hip hop': 'hip hop',
     'classical': 'classical piano', 'jazz': 'jazz', 'k-pop': 'k-pop', 'phonk': 'phonk',
     'nature': 'nature sounds'
   };
@@ -5535,10 +5583,16 @@ async function musicLoadFeed(force) {
     // signed-in listeners can fall back to the relay.
     let recovered = false;
     if (guest) {
+      const lists = [];
+      try {
+        // The dedicated Trending route is chart-backed on the server; it is a
+        // useful fallback when the personalised feed request itself fails.
+        const trend = await musicFetchJson(`${API_BASE}/music/trending?limit=18`, {}, 12000);
+        lists.push(Array.isArray(trend.results) ? trend.results : []);
+      } catch (e) { /* fall through to search */ }
       const queries = musicHasTaste(profile)
         ? profile.artists.slice(0, 2).map(name => `${name} songs`)
-        : ['study music playlist', 'top hits this week'];
-      const lists = [];
+        : ['focus music', 'top hits 2026'];
       for (const query of queries) {
         try {
           const data = await musicFetchJson(`${API_BASE}/music/search?q=${encodeURIComponent(query)}&limit=10`, {}, 12000);
@@ -5561,9 +5615,15 @@ async function musicLoadFeed(force) {
           ? seeds.filter(seed => seed.channel).slice(0, 2).map(seed => `${seed.channel} radio`)
           : (musicHasTaste(profile)
             ? profile.artists.slice(0, 2).map(name => `${name} songs`)
-            : ['top hits this week', 'trending music']);
-        if (!queries.length) queries.push('top hits this week');
+            : ['top hits 2026', 'trending music']);
+        if (!queries.length) queries.push('top hits 2026');
         const lists = [];
+        if (!seeds.length && !musicHasTaste(profile)) {
+          try {
+            const trend = await musicFetchJson(`${API_BASE}/music/trending?limit=18`, {}, 12000);
+            lists.push(Array.isArray(trend.results) ? trend.results : []);
+          } catch (e) { /* relay search below */ }
+        }
         for (const query of queries) lists.push(await musicRelaySearch(query, 10));
         const results = musicUniqueTracks([].concat.apply([], lists), { limit: 18 });
         if (results.length) {
