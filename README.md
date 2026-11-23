@@ -82,6 +82,8 @@ The app runs without any credentials; Google Drive/Tasks/Calendar, the shared AI
   playlist and the cached search ranking, and discovery uses YouTube Music search. The
   `ytmusicapi` client is vendored in `vendor/ytmusicapi` (MIT), so the free PythonAnywhere
   install needs no extra pip step; `requirements.txt` installs it for normal local setups.
+  Where a host blocks `music.youtube.com`, Last.fm names resolve through the relay or the
+  cached search instead, so radio and the genre pills keep working.
 
 In production set `FLASK_SECRET_KEY` to a long random value; the app refuses to start without it when `FLASK_ENV=production`.
 

@@ -3489,10 +3489,40 @@ def _ytmusic_search_track(artist, title):
     return found
 
 
-def _music_resolve_lastfm_tracks(rows, limit=8):
+_MUSIC_LOW_QUALITY_MATCHES = (
+    'cover', 'tutorial', 'instrumental', 'karaoke', 'slowed', 'reverb', 'nightcore',
+    'reaction', 'lesson', 'lyrics', '8d audio', 'remake', 'ai cover',
+)
+
+
+def _music_match_score(artist, title, item):
+    """How close a search hit is to the Last.fm artist/title we asked for."""
+    wanted = set(_music_tokens(title))
+    found = set(_music_tokens(item.get('title')))
+    score = 4.0 * len(wanted & found) / max(1, len(wanted))
+    artist_key = _music_channel_key(artist)
+    channel_key = _music_channel_key(item.get('channel'))
+    if artist_key and artist_key == channel_key:
+        score += 3.0
+    elif artist_key and (artist_key in channel_key or channel_key in artist_key):
+        score += 1.5
+    text = (str(item.get('title') or '') + ' ' + str(item.get('channel') or '')).lower()
+    if any(word in text for word in _MUSIC_LOW_QUALITY_MATCHES):
+        score -= 4.0
+    return score
+
+
+def _music_pick_match(artist, title, candidates):
+    """Choose the closest search result, not simply the first one."""
+    pool = [item for item in (candidates or []) if isinstance(item, dict)]
+    if not pool:
+        return None
+    ranked = sorted(pool, key=lambda item: _music_match_score(artist, title, item), reverse=True)
+    return ranked[0]
+
+
+def _music_resolve_lastfm_tracks(rows, limit=8, allow_relay=True):
     """Resolve Last.fm names in parallel so a radio request stays responsive."""
-    if not _ytmusic_supported():
-        return []
     pairs = []
     seen = set()
     for row in rows or []:
@@ -3511,9 +3541,22 @@ def _music_resolve_lastfm_tracks(rows, limit=8):
 
     def resolve(pair):
         try:
-            return _ytmusic_search_track(pair[0], pair[1])
+            found = _ytmusic_search_track(pair[0], pair[1])
         except Exception:
-            return None
+            found = None
+        if found:
+            return found
+        # Some hosts (PythonAnywhere included) cannot reach music.youtube.com.
+        # Resolve through the relay/local search instead of dropping the track.
+        # Metadata may use the relay even for guests: the browser never learns
+        # its origin, and this keeps recommendations useful on blocked hosts.
+        try:
+            fallback = _music_safe_search(
+                f'{pair[0]} {pair[1]}', 5, allow_relay=allow_relay or bool(MUSIC_RELAY_BASE)
+            )
+        except Exception:
+            fallback = []
+        return _music_pick_match(pair[0], pair[1], fallback)
 
     try:
         from concurrent.futures import ThreadPoolExecutor
@@ -3524,9 +3567,9 @@ def _music_resolve_lastfm_tracks(rows, limit=8):
     return [track for track in resolved if track]
 
 
-def _lastfm_radio(artist, title, limit=8):
+def _lastfm_radio(artist, title, limit=8, allow_relay=True):
     rows = _lastfm_similar_tracks(artist, title, limit=max(int(limit), 12))
-    return _music_resolve_lastfm_tracks(rows, limit=limit)
+    return _music_resolve_lastfm_tracks(rows, limit=limit, allow_relay=allow_relay)
 
 
 def _ytmusic_watch_playlist(video_id, limit=20):
@@ -3630,7 +3673,8 @@ def _music_feed_payload(profile, limit=18, allow_relay=True, seeds=None):
             logger.info(f'My Mix watch playlist unavailable: {exc}')
         if LASTFM_API_KEY and seed_tracks[0]['channel']:
             try:
-                station = _lastfm_radio(seed_tracks[0]['channel'], seed_tracks[0]['title'], limit=8) + station
+                station = _lastfm_radio(seed_tracks[0]['channel'], seed_tracks[0]['title'], limit=8,
+                                        allow_relay=allow_relay) + station
             except Exception as exc:
                 logger.info(f'My Mix Last.fm seed unavailable: {exc}')
 
@@ -3688,7 +3732,7 @@ def _music_radio_payload(payload, limit=12, allow_relay=True):
         lastfm_items = []
         if LASTFM_API_KEY and title and (artist or channel):
             try:
-                lastfm_items = _lastfm_radio(artist or channel, title, limit=8)
+                lastfm_items = _lastfm_radio(artist or channel, title, limit=8, allow_relay=allow_relay)
             except Exception as exc:
                 logger.info(f'Last.fm radio unavailable: {exc}')
 
@@ -3787,7 +3831,9 @@ def _music_discover_payload(tag, limit=15, allow_relay=True):
     lastfm_items = []
     if LASTFM_API_KEY:
         try:
-            lastfm_items = _music_resolve_lastfm_tracks(_lastfm_tag_top_tracks(lastfm_tag, 15), limit=8)
+            lastfm_items = _music_resolve_lastfm_tracks(
+                _lastfm_tag_top_tracks(lastfm_tag, 15), limit=8, allow_relay=allow_relay
+            )
         except Exception as exc:
             logger.info(f'Last.fm tag discovery unavailable for {lastfm_tag}: {exc}')
     ytm_items = []
@@ -3857,6 +3903,13 @@ def music_config():
         'relay_base': relay_base or None,
         'engine': 'innertube-relay' if relay_base else ('youtube-embed' if not signed_in else 'unconfigured'),
         'quality': 'tiny' if not signed_in else 'best',
+        # Booleans only: enough to diagnose the recommendation layers without
+        # ever exposing a key or the relay origin to a guest.
+        'radio': {
+            'lastfm': bool(LASTFM_API_KEY),
+            'ytmusic': _ytmusic_supported(),
+            'relay': bool(MUSIC_RELAY_BASE),
+        },
     })
     response.headers['Cache-Control'] = 'no-store'
     return response

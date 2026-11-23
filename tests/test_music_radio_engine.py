@@ -44,7 +44,7 @@ hdsfd.LASTFM_API_KEY = ''
 reset()
 hdsfd._music_parallel_search = fake_search
 hdsfd._ytmusic_watch_playlist = lambda video_id, limit=20: [dict(WATCH_TRACK), dict(SEED_TRACK)]
-hdsfd._lastfm_radio = lambda artist, title, limit=8: (_ for _ in ()).throw(AssertionError('no key should not call Last.fm'))
+hdsfd._lastfm_radio = lambda artist, title, limit=8, **kwargs: (_ for _ in ()).throw(AssertionError('no key should not call Last.fm'))
 
 radio = hdsfd._music_radio_payload({
     'videoId': SEED, 'title': 'Seed Song', 'channel': 'Seed Artist',
@@ -58,7 +58,7 @@ assert SEED not in ids
 # --- radio with a key: Last.fm leads, watch playlist and search supplement ---
 hdsfd.LASTFM_API_KEY = 'test-key'
 reset()
-hdsfd._lastfm_radio = lambda artist, title, limit=8: [dict(LASTFM_TRACK)]
+hdsfd._lastfm_radio = lambda artist, title, limit=8, **kwargs: [dict(LASTFM_TRACK)]
 radio = hdsfd._music_radio_payload({
     'videoId': SEED, 'title': 'Seed Song', 'artist': 'Seed Artist',
     'exclude': [SEED], 'limit': 10,
@@ -91,7 +91,7 @@ assert [item['id'] for item in discover['results']] == ['watchwatchw', 'searchse
 hdsfd.LASTFM_API_KEY = 'test-key'
 reset()
 hdsfd._lastfm_tag_top_tracks = lambda tag, limit=15: [{'artist': 'Similar Artist', 'title': 'Last.fm Pick'}]
-hdsfd._music_resolve_lastfm_tracks = lambda rows, limit=8: [dict(LASTFM_TRACK)]
+hdsfd._music_resolve_lastfm_tracks = lambda rows, limit=8, **kwargs: [dict(LASTFM_TRACK)]
 discover = hdsfd._music_discover_payload('Lo-fi', 15)
 assert 'lastfm' in discover['source'], discover['source']
 assert discover['results'][0]['id'] == 'watchwatchw', discover['results']

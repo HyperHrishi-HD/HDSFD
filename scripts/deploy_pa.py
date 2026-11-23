@@ -9,6 +9,7 @@ Token: PA_API_TOKEN in the environment, or a local .pa-token file (gitignored).
 
 import os
 import sys
+import time
 
 import requests
 
@@ -74,15 +75,31 @@ def main():
         if not os.path.exists(local_path):
             sys.exit(f"Missing local file: {rel_path}")
         with open(local_path, "rb") as handle:
+            payload = handle.read()
+        response = None
+        for attempt in range(8):
             response = requests.post(
                 f"{API}/files/path{REMOTE_DIR}/{rel_path}",
                 headers=headers,
-                files={"content": (os.path.basename(rel_path), handle, "application/octet-stream")},
+                files={"content": (os.path.basename(rel_path), payload, "application/octet-stream")},
                 timeout=120,
             )
+            if response.status_code != 429:
+                break
+            # PythonAnywhere throttles bursts of file uploads; honour its hint.
+            wait = 25
+            marker = "available in "
+            if marker in response.text:
+                try:
+                    wait = int(response.text.split(marker, 1)[1].split(" ", 1)[0]) + 2
+                except ValueError:
+                    pass
+            print(f"rate limited on {rel_path}; waiting {wait}s")
+            time.sleep(wait)
         if response.status_code not in (200, 201):
             sys.exit(f"Upload failed for {rel_path}: HTTP {response.status_code} {response.text[:200]}")
         print(f"uploaded {rel_path}")
+        time.sleep(1.2)
 
     response = requests.post(f"{API}/webapps/{DOMAIN}/reload/", headers=headers, timeout=120)
     if response.status_code != 200:
