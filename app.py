@@ -3383,7 +3383,7 @@ def _ytmusic_client():
         # Keep a blocked network from eating a PythonAnywhere worker: the
         # keyless search fallback is ready as soon as this short call fails.
         session = _requests.Session()
-        session.request = functools.partial(session.request, timeout=1.2)
+        session.request = functools.partial(session.request, timeout=0.9)
         client = YTMusic(requests_session=session)
     except Exception as exc:
         _ytmusic_record_failure(exc)
