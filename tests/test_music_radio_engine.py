@@ -31,7 +31,14 @@ CHART_TRACK = track('chartchart1', 'Chart Pick', 'Chart Artist')
 YTM_TRACK = track('ytmusic0001', 'Trending Search', 'Trending Artist')
 MOOD_TRACK = track('moodmood001', 'Mood Pick', 'Chill Artist')
 SEED_TRACK = track(SEED, 'Seed Song', 'Seed Artist')
-
+JUNK_TRACK = {
+    'id': 'junkjunkjun',
+    'title': 'Search filters',
+    'channel': 'YouTube',
+    'duration': '',
+    'seconds': 0,
+    'views': '',
+}
 
 def reset():
     hdsfd._MUSIC_RADIO_CACHE.clear()
@@ -40,12 +47,34 @@ def reset():
     hdsfd._MUSIC_YTM_STATE['blocked_until'] = 0
 
 
+# Search-page furniture and unlabelled scrape rows are not tracks.
+assert hdsfd._music_normalize(JUNK_TRACK) is None
+assert hdsfd._music_normalize(track('realtrack01', 'Search filters', 'Real Artist')) is None
+assert hdsfd._music_normalize(dict(SEARCH_TRACK))['id'] == 'searchsearc'
+assert not hasattr(hdsfd, '_ytmusic_search_track')
+
+# A stale cached junk row must trigger a fresh search, not enter the queue.
+reset()
+with hdsfd._MUSIC_LOCK:
+    hdsfd._MUSIC_RESULT_CACHE.clear()
+    hdsfd._MUSIC_RESULT_CACHE[('rick astley radio', 10, True)] = {
+        'results': [dict(JUNK_TRACK)], 'expires': hdsfd._time.time() + 60,
+    }
+refetch = []
+hdsfd._music_relay_search = lambda query, limit=14: (
+    refetch.append(query) or [dict(SEARCH_TRACK)]
+)
+cached_search = hdsfd._music_search('Rick Astley radio', 10)
+assert refetch == ['Rick Astley radio'], refetch
+assert [item['id'] for item in cached_search] == ['searchsearc']
+
+
 # --- radio: the watch playlist leads, artist mix and search supplement -----
 reset()
 watch_calls = []
 artist_calls = []
 hdsfd._ytmusic_watch_playlist = lambda video_id, limit=20: (
-    watch_calls.append(video_id) or [dict(WATCH_TRACK), dict(SEED_TRACK)]
+    watch_calls.append(video_id) or [dict(WATCH_TRACK), dict(SEED_TRACK), dict(JUNK_TRACK)]
 )
 hdsfd._ytmusic_artist_mix = lambda artist, limit=8: (
     artist_calls.append(artist) or [dict(ARTIST_TRACK)]
@@ -60,6 +89,7 @@ ids = [item['id'] for item in radio['results']]
 assert radio['source'] == 'ytmusic+artist+search', radio['source']
 assert ids[0] == 'watchwatchw', ids
 assert SEED not in ids
+assert 'junkjunkjun' not in ids
 assert watch_calls == [SEED], watch_calls
 assert artist_calls == ['Seed Artist'], artist_calls
 

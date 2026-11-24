@@ -3059,7 +3059,10 @@ def _youtube_search_results(query, limit=14):
             if len(results) >= limit * 2:
                 break
 
-    results = [item for item in results if not item.get('live')][:limit]
+    results = [
+        item for item in results
+        if not item.get('live') and not _music_is_junk_track(item)
+    ][:limit]
     with _MUSIC_LOCK:
         _MUSIC_SEARCH_CACHE[cache_key] = {'results': results, 'expires': now + _MUSIC_SEARCH_TTL}
     return results
@@ -3117,6 +3120,9 @@ def _music_normalize(item):
     vid = str(item.get('id') or '').strip()
     if not _MUSIC_VIDEO_ID.match(vid):
         return None
+    title = _music_clean(item.get('title')) or 'Untitled'
+    if _music_is_junk_track(dict(item, title=title)):
+        return None
     duration = str(item.get('duration') or '').strip()
     seconds = item.get('seconds')
     if not seconds:
@@ -3125,7 +3131,7 @@ def _music_normalize(item):
     return {
         'id': vid,
         'videoId': vid,
-        'title': _music_clean(item.get('title')) or 'Untitled',
+        'title': title,
         'channel': channel,
         'artist': channel,
         'duration': duration,
@@ -3151,6 +3157,30 @@ def _music_channel_key(text):
     import re as _re
     value = _re.sub(r'\s*-\s*topic$', '', str(text or '').lower())
     return _re.sub(r'[^a-z0-9]+', ' ', value).strip()[:80]
+
+
+_MUSIC_JUNK_TITLES = {'search filters', 'filters', 'shorts', 'playlists', 'community'}
+
+
+def _music_is_junk_track(item):
+    """Reject search-page furniture and unlabelled scrape leftovers."""
+    if not isinstance(item, dict):
+        return True
+    title_key = _music_title_key(item.get('title'))
+    if not title_key or title_key in _MUSIC_JUNK_TITLES:
+        return True
+    channel_key = _music_channel_key(item.get('channel'))
+    duration = str(item.get('duration') or '').strip()
+    try:
+        seconds = int(item.get('seconds') or 0)
+    except (TypeError, ValueError):
+        seconds = 0
+    # The regex fallback in _youtube_search_results used to emit the page's
+    # "Search filters" header as a track with a bare YouTube channel. Treat
+    # that shape as unusable instead of letting it enter radio or the queue.
+    if channel_key in ('', 'youtube') and not duration and not seconds:
+        return True
+    return False
 
 
 def _music_views_number(value):
@@ -3228,7 +3258,12 @@ def _music_search(query, limit=14, allow_relay=True):
     with _MUSIC_LOCK:
         cached = _MUSIC_RESULT_CACHE.get(cache_key)
     if cached and cached.get('expires', 0) > now:
-        return cached['results']
+        cached_results = [
+            item for item in cached.get('results', [])
+            if not _music_is_junk_track(item)
+        ]
+        if cached_results:
+            return cached_results
 
     # Metadata may use the relay even for guests: its origin never leaves the
     # server, and this keeps recommendations populated when YouTube's public
@@ -3442,31 +3477,6 @@ def _ytmusic_search_songs(query, limit=15):
             _ytmusic_record_failure(exc)
     _music_cache_write(_MUSIC_YTM_CACHE, key, {'results': results}, _MUSIC_YTM_TTL)
     return results
-
-
-def _ytmusic_search_track(artist, title):
-    """Resolve an artist/title pair to a playable YouTube Music song."""
-    artist, title = _music_clean(artist), _music_clean(title)
-    if not artist or not title or not _ytmusic_supported() or _ytmusic_blocked():
-        return None
-    key = ('track', artist.lower(), title.lower())
-    cached = _music_cache_read(_MUSIC_YTM_CACHE, key)
-    if cached is not None:
-        return cached['track']
-    found = None
-    client = _ytmusic_client()
-    if client is not None:
-        try:
-            rows = client.search(f'{artist} {title}', filter='songs', limit=3) or []
-        except Exception as exc:
-            _ytmusic_record_failure(exc)
-            rows = []
-        for row in rows:
-            found = _ytmusic_normalize(row)
-            if found:
-                break
-    _music_cache_write(_MUSIC_YTM_CACHE, key, {'track': found}, _MUSIC_YTM_TTL)
-    return found
 
 
 _MUSIC_LOW_QUALITY_MATCHES = (

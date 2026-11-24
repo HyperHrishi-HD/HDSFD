@@ -4542,14 +4542,21 @@ function musicValidId(id) {
 function musicNormalizeTrack(item) {
   if (!item || !musicValidId(item.id)) return null;
   const title = String(item.title || 'Untitled').trim();
+  const channel = String(item.channel || item.author || item.artist || 'YouTube').trim();
+  const duration = item.duration || '';
+  const seconds = Number(item.seconds) || 0;
+  // Old search-page artifacts ("Search filters", bare YouTube rows) must not
+  // survive in a restored queue or be added by a recommendation.
+  if (/^(search filters|filters|shorts|playlists|community)$/i.test(title)) return null;
+  if (channel.toLowerCase() === 'youtube' && !duration && !seconds) return null;
   return {
     id: item.id,
     title: title,
-    channel: String(item.channel || item.author || item.artist || 'YouTube').trim(),
+    channel: channel,
     thumbnail: item.thumbnail || `https://i.ytimg.com/vi/${item.id}/mqdefault.jpg`,
     url: item.url || `https://www.youtube.com/watch?v=${item.id}`,
-    duration: item.duration || '',
-    seconds: Number(item.seconds) || 0,
+    duration: duration,
+    seconds: seconds,
     views: item.views || ''
   };
 }
@@ -5896,8 +5903,14 @@ async function musicRelayResolve(item, onAttempt) {
         const formats = Array.isArray(data.audio) ? data.audio.filter(entry => entry && entry.url) : [];
         if (formats.length) {
           if (data.length_seconds) item.seconds = Number(data.length_seconds);
-          if (data.title && (!item.title || item.title === 'YouTube track')) item.title = data.title;
-          if (data.author && (!item.channel || item.channel === 'YouTube')) item.channel = data.author;
+          // The relay returns the canonical video metadata. Adopt it so a stale
+          // search title never labels a track that is actually playing.
+          if (data.title) item.title = data.title;
+          if (data.author) item.channel = data.author;
+          if (musicState.current === item) {
+            musicRenderNowPlaying();
+            musicRenderQueue();
+          }
           return { base, formats };
         }
       }

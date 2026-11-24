@@ -31,7 +31,9 @@ assert guest_config['relay_base'] is None, guest_config
 assert guest_config['engine'] == 'youtube-embed', guest_config
 assert guest_config['quality'] == 'tiny', guest_config
 
-# --- guest search: local YouTube scrape only, zero relay calls -------------
+# --- guest search: metadata may use the server-side relay index -------------
+# The relay origin never leaves the server, and guest audio still uses the
+# official YouTube embed, so this does not grant guest ad-free playback.
 relay_calls = []
 hdsfd._music_relay_search = lambda query, limit=14: (relay_calls.append(query) or [])
 hdsfd._youtube_search_results = lambda query, limit=14: [track('guest000001')]
@@ -39,7 +41,7 @@ hdsfd._youtube_search_results = lambda query, limit=14: [track('guest000001')]
 guest_search = client.get('/api/music/search?q=guest%20relay%20guard%209281')
 assert guest_search.status_code == 200, guest_search.status_code
 assert len(guest_search.get_json()['results']) == 1, guest_search.get_json()
-assert relay_calls == [], relay_calls
+assert relay_calls == ['guest relay guard 9281'], relay_calls
 
 # --- guest feed/radio helpers are told not to use the relay ----------------
 parallel_flags = []
