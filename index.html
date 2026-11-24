@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>HDSFD</title>
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
   
   <!-- Google Search Console / Cloud Verification -->
   <meta name="google-site-verification" content="google9e2eaefbc0938497" />
@@ -2130,15 +2131,25 @@
 
     /* --- Phones and touch pointers: target sizes --------------------------- */
     @media (max-width: 640px), (pointer: coarse) {
-      #global-sync-badge, #google-status-badge,
       #tab2-subtab-cal-btn, #tab2-subtab-sched-btn,
       .gtask-tab-btn, .nav-btn {
         min-height: 44px;
         padding-top: 0.35rem;
         padding-bottom: 0.35rem;
       }
-      #global-sync-badge { min-width: 44px; }
-      #global-sync-badge, #google-status-badge { padding-left: 0.65rem; padding-right: 0.65rem; }
+      /* Header chips stay compact: the old 44x44 rule made the sync and Pair
+         pills look like oversized blocks on a phone. */
+      #global-sync-badge, #google-status-badge {
+        min-height: 32px;
+        height: 32px;
+        padding-top: 0;
+        padding-bottom: 0;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+        gap: 4px;
+      }
+      #global-sync-badge { min-width: 32px; width: 32px; padding-left: 0; padding-right: 0; }
+      #global-sync-badge::before, #google-status-badge::before { display: none; }
       .gtask-tab-btn { min-width: 44px; }
 
       /* Playback deck and floating music controls */
@@ -2298,9 +2309,9 @@
       color: #fff; overflow: hidden;
       background:
         radial-gradient(120% 160% at 12% -20%, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0) 56%),
-        linear-gradient(165deg, rgba(23, 27, 50, 0.82), rgba(8, 11, 24, 0.9));
-      -webkit-backdrop-filter: blur(22px) saturate(1.55) brightness(1.06);
-      backdrop-filter: blur(22px) saturate(1.55) brightness(1.06);
+        linear-gradient(165deg, rgba(23, 27, 50, 0.78), rgba(8, 11, 24, 0.86));
+      -webkit-backdrop-filter: blur(26px) saturate(1.55) brightness(1.06);
+      backdrop-filter: blur(26px) saturate(1.55) brightness(1.06);
       box-shadow:
         inset 0 1px 1px rgba(255, 255, 255, 0.28),
         inset 0 0 0 1px rgba(255, 255, 255, 0.14),
@@ -2836,6 +2847,158 @@
       #dashboard button { transition-duration: 1ms !important; }
     }
 
+    /* Peeling sticky pad — a blank note that matches the board notes exactly. */
+    .sticky-pad {
+      position: relative; flex-shrink: 0; cursor: grab; touch-action: none;
+      border-radius: 3px 3px 18px 3px;
+      transition: opacity 0.12s ease;
+    }
+    .sticky-pad.is-peeling { display: none; }
+    .sticky-pad-sheet {
+      position: absolute; inset: 0; border-radius: 3px 3px 18px 3px;
+      background: linear-gradient(135deg, #fef9c3, #fef08a);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      pointer-events: none;
+    }
+    .sticky-pad-sheet-a { transform: rotate(3.5deg) scale(0.965); opacity: 0.55; }
+    .sticky-pad-sheet-b { transform: rotate(-2.5deg) scale(0.982); opacity: 0.72; }
+    .sticky-pad-sheet-c { transform: rotate(1deg) scale(0.992); opacity: 0.88; }
+    .sticky-pad-face {
+      position: absolute; inset: 0; border-radius: 3px 3px 18px 3px;
+      background: linear-gradient(135deg, #fef9c3 0%, #fef08a 100%);
+      border: 1px solid rgba(180, 140, 20, 0.18);
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.28), 0 12px 28px rgba(0, 0, 0, 0.18);
+      overflow: hidden;
+      transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.18s ease;
+    }
+    .sticky-pad:hover .sticky-pad-face {
+      transform: translateY(-2px) rotate(-0.6deg);
+      box-shadow: 0 12px 26px rgba(0, 0, 0, 0.36), 0 18px 34px rgba(0, 0, 0, 0.2);
+    }
+    .sticky-pad:active .sticky-pad-face { transform: scale(0.985); }
+    .sticky-pad-tape {
+      position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+      width: 56px; height: 20px; border-radius: 2px;
+      background: rgba(255, 255, 255, 0.62);
+      border-left: 1px dashed rgba(0, 0, 0, 0.16);
+      border-right: 1px dashed rgba(0, 0, 0, 0.16);
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+      -webkit-backdrop-filter: blur(3px);
+      backdrop-filter: blur(3px);
+    }
+    .sticky-pad-curl {
+      position: absolute; right: 0; bottom: 0; width: 26px; height: 26px;
+      background: linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.1) 50%, rgba(255, 255, 255, 0.35) 100%);
+      border-top-left-radius: 4px;
+      pointer-events: none;
+    }
+
+    /* Zen soundscape + music remote */
+    .zen-orbit-music {
+      display: flex; flex-direction: column; gap: 8px;
+      margin-top: 2px; padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .zen-orbit-music-head { display: flex; align-items: center; gap: 8px; }
+    .zen-orbit-music-art {
+      width: 30px; height: 30px; flex-shrink: 0; border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fda4af; background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .zen-orbit-music-art .hdsfd-icon { width: 14px; height: 14px; }
+    .zen-orbit-music-title {
+      font-size: 11px; font-weight: 700; color: #fff;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .zen-orbit-music-sub {
+      font-size: 9px; color: rgba(255, 255, 255, 0.45);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .zen-orbit-music-controls { display: flex; align-items: center; justify-content: center; gap: 10px; }
+    .zen-orbit-music-btn {
+      width: 32px; height: 32px; border-radius: 999px;
+      display: flex; align-items: center; justify-content: center;
+      color: rgba(255, 255, 255, 0.8); background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      transition: background 0.18s ease, transform 0.18s ease;
+    }
+    .zen-orbit-music-btn:hover { background: rgba(255, 255, 255, 0.14); }
+    .zen-orbit-music-btn:active { transform: scale(0.95); }
+    .zen-orbit-music-btn.is-primary {
+      width: 38px; height: 38px; color: #1a1024;
+      background: linear-gradient(160deg, #e9d5ff, #c4b5fd);
+      border-color: rgba(255, 255, 255, 0.4);
+      box-shadow: 0 8px 18px -10px rgba(168, 85, 247, 0.8);
+    }
+    .zen-orbit-music-btn .hdsfd-icon { width: 14px; height: 14px; }
+    .zen-orbit-music-seek {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 9px; font-family: ui-monospace, monospace;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .zen-orbit-music-seek input { flex: 1 1 auto; min-width: 0; }
+    .zen-orbit-task-group { display: flex; flex-direction: column; gap: 5px; }
+    .zen-orbit-task-group + .zen-orbit-task-group { margin-top: 7px; }
+    .zen-orbit-task-group-title {
+      font-size: 8px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #c4b5fd; padding: 0 2px 1px;
+    }
+
+    /* Refresh buttons share the same busy animation. */
+    .music-feed-refresh.is-busy .hdsfd-icon { animation: hdsfdRefreshSpin 0.8s linear infinite; }
+    .music-feed-refresh:disabled { opacity: 0.62; cursor: progress; }
+    @keyframes hdsfdRefreshSpin { to { transform: rotate(360deg); } }
+
+    /* Assistant Markdown + KaTeX */
+    .gemini-markdown { white-space: normal; }
+    .gemini-markdown > *:first-child { margin-top: 0; }
+    .gemini-markdown > *:last-child { margin-bottom: 0; }
+    .gemini-markdown p { margin: 0 0 0.55em; }
+    .gemini-markdown h1, .gemini-markdown h2, .gemini-markdown h3,
+    .gemini-markdown h4, .gemini-markdown h5, .gemini-markdown h6 {
+      color: #fff; font-weight: 800; line-height: 1.3; margin: 0.7em 0 0.35em;
+    }
+    .gemini-markdown h1 { font-size: 1.25em; }
+    .gemini-markdown h2 { font-size: 1.15em; }
+    .gemini-markdown h3 { font-size: 1.06em; }
+    .gemini-markdown h4, .gemini-markdown h5, .gemini-markdown h6 { font-size: 1em; }
+    .gemini-markdown ul, .gemini-markdown ol { margin: 0.25em 0 0.6em; padding-left: 1.25em; }
+    .gemini-markdown li { margin: 0.15em 0; }
+    .gemini-markdown blockquote {
+      margin: 0.45em 0; padding: 0.35em 0.7em;
+      border-left: 2px solid #38bdf8; border-radius: 0 8px 8px 0;
+      color: #cbd5e1; background: rgba(255, 255, 255, 0.05);
+    }
+    .gemini-markdown hr { border: 0; border-top: 1px solid rgba(255, 255, 255, 0.14); margin: 0.7em 0; }
+    .gemini-markdown a { color: #7dd3fc; text-decoration: underline; text-underline-offset: 2px; }
+    .gemini-markdown code.gemini-inline-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.92em; padding: 0.1em 0.35em; border-radius: 5px;
+      color: #fbcfe8; background: rgba(244, 63, 94, 0.12);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+    }
+    .gemini-markdown .gemini-code-block {
+      margin: 0.5em 0; padding: 0.65em 0.75em; border-radius: 10px;
+      background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.1);
+      overflow-x: auto; white-space: pre;
+    }
+    .gemini-markdown .gemini-code-block code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.9em; color: #e2e8f0; background: transparent; border: 0; padding: 0;
+    }
+    .gemini-markdown .gemini-table-wrap { overflow-x: auto; margin: 0.5em 0; }
+    .gemini-markdown table { border-collapse: collapse; width: 100%; font-size: 0.95em; }
+    .gemini-markdown th, .gemini-markdown td {
+      border: 1px solid rgba(255, 255, 255, 0.12); padding: 0.3em 0.5em; text-align: left;
+    }
+    .gemini-markdown th { background: rgba(255, 255, 255, 0.07); color: #fff; font-weight: 700; }
+    .gemini-markdown .gemini-math { display: inline-block; max-width: 100%; vertical-align: middle; }
+    .gemini-markdown .gemini-math.is-display { display: block; overflow-x: auto; overflow-y: hidden; margin: 0.55em 0; padding: 2px 0; }
+    .gemini-markdown .katex { font-size: 1.05em; color: #f1f5f9; }
+    .gemini-markdown .katex-display { margin: 0; }
+    .gemini-markdown .gemini-math-fallback { white-space: pre-wrap; }
+
   </style>
 </head>
 <body class="h-full">
@@ -2870,7 +3033,10 @@
   <symbol id="i-arrow-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-arrow-up" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m5 12 7-7 7 7" /> <path d="M12 19V5" /></symbol>
   <symbol id="i-arrow-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-arrow-down" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M12 5v14" /> <path d="m19 12-7 7-7-7" /></symbol>
   <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-chevron-down" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m6 9 6 6 6-6" /></symbol>
+  <symbol id="i-chevron-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6" /></symbol>
   <symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-chevron-right" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m9 18 6-6-6-6" /></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" /><path d="m21.854 2.147-10.94 10.939" /></symbol>
+  <symbol id="i-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></symbol>
   <symbol id="i-chevron-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-chevron-up" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="m18 15-6-6-6 6" /></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-menu" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <line x1="4" x2="20" y1="12" y2="12" /> <line x1="4" x2="20" y1="6" y2="6" /> <line x1="4" x2="20" y1="18" y2="18" /></symbol>
   <symbol id="i-chart-column" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><svg class="lucide lucide-chart-column" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" > <path d="M3 3v16a2 2 0 0 0 2 2h16" /> <path d="M18 17V9" /> <path d="M13 17V5" /> <path d="M8 17v-3" /></symbol>
@@ -3231,13 +3397,13 @@
         </div>
 
         <div class="flex items-center gap-1.5 sm:gap-2.5">
-          <button onclick="triggerGlobalSync(true)" id="global-sync-badge" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full flex items-center gap-1 text-[10px] sm:text-xs font-bold transition-all hover:bg-purple-500/30 shrink-0" title="Click to sync Google Tasks, Calendar & Drive">
-            <span id="sync-spin-icon"><svg class="hdsfd-icon"><use href="#i-refresh-cw"></use></svg></span>
+          <button onclick="triggerGlobalSync(true)" id="global-sync-badge" class="bg-purple-500/20 text-purple-200 border border-purple-500/30 w-7 h-7 sm:w-auto sm:h-auto p-0 sm:px-3 sm:py-1 rounded-full flex items-center justify-center gap-1 text-[10px] sm:text-xs font-bold transition-all hover:bg-purple-500/30 shrink-0" title="Click to sync Google Tasks, Calendar & Drive" aria-label="Sync Google">
+            <span id="sync-spin-icon" class="flex items-center justify-center"><svg class="hdsfd-icon"><use href="#i-refresh-cw"></use></svg></span>
             <span id="global-sync-text" class="hidden sm:inline">Synced</span>
           </button>
 
-          <button onclick="connectGoogleAccount()" id="google-status-badge" class="bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 sm:px-3 py-0.5 sm:py-1 rounded-full flex items-center gap-1 text-[10px] sm:text-xs font-bold transition-all hover:bg-amber-500/30 shrink-0" title="Click to pair Google account">
-            <span><svg class="hdsfd-icon"><use href="#i-triangle-alert"></use></svg></span>
+          <button onclick="connectGoogleAccount()" id="google-status-badge" class="bg-amber-500/20 text-amber-200 border border-amber-500/30 px-2 sm:px-3 py-1 sm:py-1 rounded-full flex items-center justify-center gap-1 text-[10px] sm:text-xs font-bold transition-all hover:bg-amber-500/30 shrink-0 whitespace-nowrap" title="Click to pair Google account" aria-label="Pair Google account">
+            <span class="flex items-center justify-center"><svg class="hdsfd-icon"><use href="#i-triangle-alert"></use></svg></span>
             <span id="google-badge-text"><span class="hidden sm:inline">Guest Mode (Pair Google)</span><span class="sm:hidden">Pair</span></span>
           </button>
 
@@ -3364,7 +3530,7 @@
 
             <!-- Center: Session Focus (Dynamic 120m Slider & Decimal Custom Stepper) -->
             <div class="lg:col-span-5 order-2 lg:order-2 flex flex-col gap-4">
-              <div class="glass-card reskin-hero p-5 w-full flex flex-col items-center justify-center min-h-[380px] text-center">
+              <div class="glass-card reskin-hero p-5 w-full h-full flex flex-col items-center justify-center min-h-[380px] text-center">
                 
                 <!-- Radial Timer Ring (With Sunlight Essence Glowing Aura) -->
                 <div id="timer-ring-container" class="relative w-48 h-48 flex items-center justify-center my-1 rounded-full transition-all duration-700">
@@ -3383,7 +3549,7 @@
                 <div class="flex items-center gap-3 mt-2">
                   <button id="pomo-start-btn" onclick="startTimer()" class="bg-white text-slate-900 font-bold px-7 py-2 rounded-xl shadow-md hover:bg-white/90 active:scale-95 text-xs transition-all">Start Session</button>
                   <button id="pomo-pause-btn" onclick="pauseTimer()" class="hidden bg-amber-400 text-slate-950 font-bold px-7 py-2 rounded-xl shadow-md hover:bg-amber-300 active:scale-95 text-xs transition-all">Pause</button>
-                  <button onclick="resetTimer()" class="glass p-2 rounded-xl text-white/70 hover:text-white transition-all" title="Reset"><i data-lucide="rotate-ccw" class="w-4 h-4"></i></button>
+                  <button onclick="resetTimer()" class="glass w-9 h-9 p-0 rounded-xl text-white/70 hover:text-white flex items-center justify-center transition-all" title="Reset" aria-label="Reset focus timer"><svg class="hdsfd-icon" style="width:16px;height:16px"><use href="#i-rotate-ccw"></use></svg></button>
                 </div>
 
                 <!-- Preset Time Chips -->
@@ -3799,7 +3965,7 @@
                     class="w-8 h-8 rounded-xl bg-sky-500 hover:bg-sky-400 active:scale-95 text-slate-950 font-bold flex items-center justify-center transition-all shadow-md shadow-sky-500/20"
                     title="Send to Gemini Agent"
                   >
-                    <svg class="hdsfd-icon"><use href="#i-arrow-right"></use></svg>
+                    <svg class="hdsfd-icon"><use href="#i-send"></use></svg>
                   </button>
                 </div>
               </div>
@@ -3822,18 +3988,6 @@
                 <input id="settings-name-input" type="text" placeholder="Enter display name" class="w-full bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-xs outline-none focus:border-purple-400" onkeydown="if(event.key==='Enter') saveNameFromSettings()">
                 <button id="settings-name-save-btn" onclick="saveNameFromSettings()" class="bg-white text-slate-900 font-bold px-4 py-2 rounded-xl text-xs hover:bg-white/90 transition-all active:scale-95">Save</button>
               </div>
-            </div>
-
-            <!-- AI Assistant Privacy -->
-            <div class="glass p-4 rounded-2xl border border-white/10 space-y-2">
-              <label class="text-xs font-bold text-white/70 uppercase tracking-wider block">AI Assistant Privacy</label>
-              <label class="flex items-start gap-3 cursor-pointer">
-                <input id="ai-notes-context-toggle" type="checkbox" checked onchange="setAINotesContext(this.checked)" class="mt-0.5 h-4 w-4 accent-purple-500">
-                <span class="text-[11px] text-white/60 leading-relaxed">
-                  Send note titles and short snippets to the AI assistant
-                  <span class="block text-white/40 mt-0.5">Lets Gemini answer questions about your notes using their titles and the opening words of each note. Turn this off to keep all note text out of every AI request. Tasks, classes and exams are still included so app commands keep working.</span>
-                </span>
-              </label>
             </div>
 
             <!-- Stats Overview Card (With Digital Sanctuary Tree Level & Lifetime XP) -->
@@ -4086,6 +4240,18 @@
               <div id="school-import-result" class="hidden bg-black/30 p-3 rounded-xl border border-white/10 text-[10px] text-white/70 space-y-1"></div>
             </div>
 
+            <!-- AI Assistant Privacy (kept near the bottom, next to the account controls) -->
+            <div class="glass p-4 rounded-2xl border border-white/10 space-y-2">
+              <label class="text-xs font-bold text-white/70 uppercase tracking-wider block">AI Assistant Privacy</label>
+              <label class="flex items-start gap-3 cursor-pointer">
+                <input id="ai-context-toggle" type="checkbox" checked onchange="setAIContext(this.checked)" class="mt-0.5 h-4 w-4 accent-purple-500">
+                <span class="text-[11px] text-white/60 leading-relaxed">
+                  Share workspace context with the AI assistant
+                  <span class="block text-white/40 mt-0.5">When on, Gemini can read your tasks, notes, classes, exams, stats and music and run app commands. Turn it off for plain Gemini: no notes, tasks, classes, exams, stats, music or chat history are sent, and app commands will not run. Nothing in your workspace changes while it is off.</span>
+                </span>
+              </label>
+            </div>
+
             <!-- Footer: GitHub & Legal Privacy Policy / Terms Links -->
             <div class="pt-4 pb-12 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between text-xs text-white/50 gap-2 px-2">
               <div class="flex items-center gap-3">
@@ -4156,7 +4322,7 @@
       <!-- One compact panel per dock action, anchored to the dock. -->
       <div id="zen-orbit-panel" class="zen-orbit-panel hidden" role="dialog" aria-label="Zen controls" onpointerdown="event.stopPropagation()">
         <div class="zen-orbit-panel-head">
-          <span id="zen-orbit-panel-title" class="zen-orbit-panel-title">Ambient sound</span>
+          <span id="zen-orbit-panel-title" class="zen-orbit-panel-title">Soundscape &amp; music</span>
           <button type="button" class="zen-orbit-panel-close" onclick="closeZenOrbitPanel()" aria-label="Close">
             <svg class="hdsfd-icon"><use href="#i-x"></use></svg>
           </button>
@@ -4172,12 +4338,33 @@
               <div class="zen-orbit-sound-row"><span>Brown noise</span><span id="zen-val-noise">10%</span></div>
               <input id="zen-noise-slider" type="range" min="0" max="1" step="0.05" value="0.1" class="zen-orbit-slider hdsfd-range" data-tone="purple" oninput="zenSetSound('noise', this.value)" aria-label="Brown noise volume">
             </div>
+
+            <!-- Compact music remote: play/pause, prev/next and scrubber only. -->
+            <div class="zen-orbit-music">
+              <div class="zen-orbit-music-head">
+                <span class="zen-orbit-music-art"><svg class="hdsfd-icon"><use href="#i-music"></use></svg></span>
+                <div class="min-w-0 flex-1">
+                  <div id="zen-music-title" class="zen-orbit-music-title">Nothing playing</div>
+                  <div id="zen-music-sub" class="zen-orbit-music-sub">Pick a track in the full player first</div>
+                </div>
+              </div>
+              <div class="zen-orbit-music-controls">
+                <button type="button" class="zen-orbit-music-btn" onclick="musicPrev()" title="Previous track" aria-label="Previous track"><svg class="hdsfd-icon"><use href="#i-skip-back"></use></svg></button>
+                <button type="button" id="zen-music-toggle" class="zen-orbit-music-btn is-primary" onclick="zenMusicToggle()" title="Play" aria-label="Play music"><svg class="hdsfd-icon"><use href="#i-play"></use></svg></button>
+                <button type="button" class="zen-orbit-music-btn" onclick="musicNext()" title="Next track" aria-label="Next track"><svg class="hdsfd-icon"><use href="#i-skip-forward"></use></svg></button>
+              </div>
+              <div class="zen-orbit-music-seek">
+                <span id="zen-music-cur">0:00</span>
+                <input id="zen-music-seek" type="range" min="0" max="100" step="0.1" value="0" class="zen-orbit-slider hdsfd-range" data-tone="rose" oninput="zenMusicSeek(this.value)" aria-label="Music position">
+                <span id="zen-music-dur">0:00</span>
+              </div>
+            </div>
           </div>
           <div class="zen-orbit-section hidden" data-zen-panel="tasks">
             <div id="zen-quick-tasks-list" class="zen-orbit-task-list">
               <span class="zen-orbit-empty">Loading tasks...</span>
             </div>
-            <p class="zen-orbit-hint">Tap a task to tick it off.</p>
+            <p class="zen-orbit-hint">Every task, grouped by list. Tap one to tick it off — add new tasks in the Tasks tab.</p>
           </div>
           <div class="zen-orbit-section hidden" data-zen-panel="note">
             <textarea id="zen-quick-note-input" class="zen-orbit-note-input" rows="4" placeholder="Jot it down…" aria-label="Quick note"></textarea>
@@ -4195,9 +4382,9 @@
         <span id="zen-pomo-toggle-label">Start focus</span>
       </button>
       
-      <!-- Auto-Fading Hold Text (Reappears for 5s on touch/press) -->
+      <!-- Auto-Fading Exit Hint (reappears briefly on a backdrop tap) -->
       <p id="zen-hold-msg" class="text-white/40 text-xs font-bold uppercase tracking-widest mt-6 mb-3 transition-opacity duration-700">
-        Hold Spacebar or Hold / Long-press on screen to exit
+        Click Exit below to leave Zen Mode
       </p>
 
       <!-- Permanent Progress Bar (Always Visible) -->
@@ -4487,7 +4674,7 @@
                 </div>
                 <div id="music-feed-sub" class="music-feed-sub">What everyone is playing right now</div>
               </div>
-              <button type="button" class="music-feed-refresh" onclick="musicLoadFeed(true)" title="Refresh feed">
+              <button type="button" id="music-feed-refresh" class="music-feed-refresh" onclick="musicLoadFeed(true)" title="Refresh feed" aria-label="Refresh music feed">
                 <svg class="hdsfd-icon"><use href="#i-refresh-cw"></use></svg><span>Refresh</span>
               </button>
             </div>
@@ -4521,6 +4708,9 @@
             <div class="music-queue-tools">
               <button id="music-radio-toggle" type="button" class="music-mini-toggle is-on" onclick="musicToggleRadio()" aria-pressed="true"><svg class="hdsfd-icon"><use href="#i-radio"></use></svg><span>Smart radio on</span></button>
               <button id="music-autoplay-toggle" type="button" class="music-mini-toggle is-on" onclick="musicToggleAutoplay()" aria-pressed="true"><svg class="hdsfd-icon"><use href="#i-play"></use></svg><span>Autoplay on</span></button>
+              <button id="music-queue-refresh" type="button" class="music-feed-refresh" onclick="musicRefreshQueue()" title="Refresh the queue with smart radio" aria-label="Refresh queue">
+                <svg class="hdsfd-icon"><use href="#i-refresh-cw"></use></svg><span>Refresh</span>
+              </button>
               <span id="music-queue-note" class="music-queue-note"></span>
             </div>
             <div id="music-queue-list"></div>
@@ -4611,7 +4801,8 @@
       <button onclick="dismissGoogleReconnectPrompt()" class="text-white/40 hover:text-white text-sm leading-none" aria-label="Dismiss">&#10005;</button>
     </div>
 
-    <script src="app.js?v=7.0"></script>
+    <script src="vendor/katex/katex.min.js"></script>
+    <script src="app.js?v=7.1"></script>
   <script src="hdsfd-ui.js?v=2"></script>
   <script type="module" src="liquid-glass.js?v=1"></script>
   </body>

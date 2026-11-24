@@ -42,6 +42,8 @@ RUNTIME_FILES = (
 # travels with the app and PythonAnywhere never needs a pip step for it.
 RUNTIME_DIRS = (
     "vendor/ytmusicapi",
+    # Local KaTeX build: assistant math renders without a CDN dependency.
+    "vendor/katex",
 )
 
 

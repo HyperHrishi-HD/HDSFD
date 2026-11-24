@@ -14,7 +14,7 @@
 - **Apple Chronometer**: Ultra-clean digital focus timer with dynamic 120m logarithmic slider, decimal custom stepper (`25.30m`), and quick preset chips (`15m`, `25m`, `45m`, `60m`, `90m`).
 - **Partial Session Coin Engine**: Pausing or stopping focus sessions early calculates elapsed focus seconds and proportionally awards coins to your sanctuary.
 - **Web Audio Soundscape Synthesizer**: Built-in procedural brown noise, rain soundscape mixer, and YouTube music player.
-- **Distraction-Free Zen Mode**: Pure black fullscreen focus overlay with floating AssistiveTouch controls and an auto-fading 3-second hold to exit.
+- **Distraction-Free Zen Mode**: Pure black fullscreen focus overlay with floating AssistiveTouch controls and a visible Click to Exit button.
 
 ### 2. 📅 Intelligent Tasks, Calendar & Exam Scheduler (Tab 2)
 - **Interactive Dark Calendar Grid**: Dynamic monthly calendar with event and deadline dots, quick-add modal, and seamless bidirectional **Google Calendar Sync**.

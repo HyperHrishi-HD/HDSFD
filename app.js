@@ -2289,68 +2289,83 @@ function setSplitSnap(targetPct) {
   tasksPanel.style.width = `${100 - clamped}%`;
 }
 
-// ===== STARRED TASKS VIEW (INSTANT & AUTOMATIC SYNC) =====
+// ===== STARRED TASKS (HOME) + ALL TASKS (ZEN) =====
 function renderHomeStarredTasks() {
   const listEl = document.getElementById('home-starred-tasks-list');
   const zenListEl = document.getElementById('zen-quick-tasks-list');
   if (!listEl && !zenListEl) return;
 
-  const tasks = allData.filter(d => d.type === 'task' && d.is_important);
+  const groupByFolder = (tasks) => {
+    const groups = {};
+    tasks.forEach(t => {
+      const listKey = t.folder || 'My Tasks';
+      if (!groups[listKey]) groups[listKey] = [];
+      groups[listKey].push(t);
+    });
+    return groups;
+  };
 
-  if (tasks.length === 0) {
-    const emptyMsg = '<p class="text-white/40 text-[11px] italic text-center py-8">No starred tasks! Click the star on any task in Tasks tab to pin here.</p>';
-    if (listEl) listEl.innerHTML = emptyMsg;
-    if (zenListEl) zenListEl.innerHTML = '<span class="zen-orbit-empty">No starred tasks</span>';
-    return;
-  }
-
-  const groups = {};
-  tasks.forEach(t => {
-    const listKey = t.folder || 'My Tasks';
-    if (!groups[listKey]) groups[listKey] = [];
-    groups[listKey].push(t);
-  });
-
-  let html = '';
-  let zenHtml = '';
-
-  for (const [folderName, groupTasks] of Object.entries(groups)) {
-    groupTasks.sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1));
-
-    html += `
-      <div class="space-y-1">
-        <div class="text-[9px] uppercase font-bold tracking-wider text-purple-300/80 px-1 border-b border-white/5 pb-0.5 flex items-center gap-1">
-          <span class="text-purple-300">${hdsfdIcon('folder')}</span> <span>${folderName}</span>
-        </div>
-        ${groupTasks.map(t => {
-          const dueFormatted = t.due ? new Date(t.due).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
-          return `
-            <div class="glass p-2.5 rounded-2xl flex items-center justify-between border border-white/10 hover:border-white/20 text-left transition-all ${t.completed ? 'opacity-40' : ''}">
-              <div class="flex items-center gap-2 overflow-hidden flex-1">
-                <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTaskState('${t.id}')" class="w-3.5 h-3.5 accent-amber-400 cursor-pointer flex-shrink-0">
-                <div class="flex flex-col truncate">
-                  <span class="text-xs ${t.completed ? 'line-through text-white/40' : 'text-white font-medium'} truncate">${t.title}</span>
-                  ${dueFormatted ? `<span class="text-[8px] text-amber-300/80 flex items-center gap-1">${hdsfdIcon('calendar')} ${dueFormatted}</span>` : ''}
-                </div>
-              </div>
-              <button onclick="toggleTaskImportance('${t.id}')" class="text-xs text-amber-300 px-1 hover:scale-110 transition-all" title="Unstar to remove from Home">${hdsfdIcon('star')}</button>
+  // Home stays exactly as it was: only starred tasks.
+  if (listEl) {
+    const starred = allData.filter(d => d.type === 'task' && d.is_important);
+    if (!starred.length) {
+      listEl.innerHTML = '<p class="text-white/40 text-[11px] italic text-center py-8">No starred tasks! Click the star on any task in Tasks tab to pin here.</p>';
+    } else {
+      let html = '';
+      const groups = groupByFolder(starred);
+      for (const [folderName, groupTasks] of Object.entries(groups)) {
+        groupTasks.sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1));
+        html += `
+          <div class="space-y-1">
+            <div class="text-[9px] uppercase font-bold tracking-wider text-purple-300/80 px-1 border-b border-white/5 pb-0.5 flex items-center gap-1">
+              <span class="text-purple-300">${hdsfdIcon('folder')}</span> <span>${folderName}</span>
             </div>
-          `;
-        }).join('')}
-      </div>
-    `;
-
-    zenHtml += groupTasks.map(t => `
-      <button type="button" class="zen-orbit-task ${t.completed ? 'is-done' : ''}" onclick="toggleTaskState('${t.id}')" title="${t.completed ? 'Mark as not done' : 'Mark done'}">
-        <span class="zen-orbit-task-check">${hdsfdIcon(t.completed ? 'check' : 'circle')}</span>
-        <span class="zen-orbit-task-title">${t.title}</span>
-        <span class="zen-orbit-task-folder">${folderName}</span>
-      </button>
-    `).join('');
+            ${groupTasks.map(t => {
+              const dueFormatted = t.due ? new Date(t.due).toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+              return `
+                <div class="glass p-2.5 rounded-2xl flex items-center justify-between border border-white/10 hover:border-white/20 text-left transition-all ${t.completed ? 'opacity-40' : ''}">
+                  <div class="flex items-center gap-2 overflow-hidden flex-1">
+                    <input type="checkbox" ${t.completed ? 'checked' : ''} onchange="toggleTaskState('${t.id}')" class="w-3.5 h-3.5 accent-amber-400 cursor-pointer flex-shrink-0">
+                    <div class="flex flex-col truncate">
+                      <span class="text-xs ${t.completed ? 'line-through text-white/40' : 'text-white font-medium'} truncate">${t.title}</span>
+                      ${dueFormatted ? `<span class="text-[8px] text-amber-300/80 flex items-center gap-1">${hdsfdIcon('calendar')} ${dueFormatted}</span>` : ''}
+                    </div>
+                  </div>
+                  <button onclick="toggleTaskImportance('${t.id}')" class="text-xs text-amber-300 px-1 hover:scale-110 transition-all" title="Unstar to remove from Home">${hdsfdIcon('star')}</button>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+      listEl.innerHTML = html;
+    }
   }
 
-  if (listEl) listEl.innerHTML = html;
-  if (zenListEl) zenListEl.innerHTML = zenHtml;
+  // Zen shows every task (not only starred ones) and can tick them off, but it
+  // never creates tasks — that stays in the Tasks tab.
+  if (zenListEl) {
+    const allTasks = allData.filter(d => d.type === 'task');
+    if (!allTasks.length) {
+      zenListEl.innerHTML = '<span class="zen-orbit-empty">No tasks yet — add one in the Tasks tab.</span>';
+    } else {
+      let zenHtml = '';
+      const groups = groupByFolder(allTasks);
+      for (const [folderName, groupTasks] of Object.entries(groups)) {
+        groupTasks.sort((a, b) => (a.completed === b.completed ? 0 : a.completed ? 1 : -1));
+        zenHtml += `<div class="zen-orbit-task-group"><span class="zen-orbit-task-group-title">${escapeHtml(folderName)}</span>`;
+        zenHtml += groupTasks.map(t => `
+          <button type="button" class="zen-orbit-task ${t.completed ? 'is-done' : ''}" onclick="toggleTaskState('${t.id}')" title="${t.completed ? 'Mark as not done' : 'Mark done'}">
+            <span class="zen-orbit-task-check">${hdsfdIcon(t.completed ? 'check' : 'circle')}</span>
+            <span class="zen-orbit-task-title">${escapeHtml(t.title)}</span>
+            ${t.due ? `<span class="zen-orbit-task-folder">${escapeHtml(String(t.due).slice(0, 10))}</span>` : ''}
+          </button>
+        `).join('');
+        zenHtml += '</div>';
+      }
+      zenListEl.innerHTML = zenHtml;
+    }
+  }
 }
 
 function toggleTaskImportance(id) {
@@ -2437,6 +2452,7 @@ let noteVelocityX = 0;
 let noteVelocityY = 0;
 let notePhysicsMap = {};
 let pendingDeleteNoteId = null;
+let padPeelActive = false;
 
 function setSelectedPostItColor(color) {
   selectedPostItColor = color;
@@ -2566,25 +2582,24 @@ function renderPhysicsPostIts() {
     if (activeTab === 'notes') {
       const boardNotes = notes.filter(n => (n.tab || 'notes') === 'notes' && !n.floatingOverlay && n.id !== activeDraggedNoteId);
       
+      // The pad is a real blank sticky note, not a labelled tool card: same
+      // paper gradient, same tape, same corner radius as a board note. Peeling
+      // it produces a note in the exact slot the pad occupied, so the lift is
+      // seamless with no jump or reflow flash.
       const stackHtml = `
-        <div 
-          id="infinite-sticky-stack" 
-          onpointerdown="initPadPeelDrag(event)" 
-          class="relative w-44 h-44 cursor-grab group flex-shrink-0 select-none p-1 m-1" 
-          title="Drag to peel a new sticky note directly onto the board or any tab!"
+        <div
+          id="infinite-sticky-stack"
+          onpointerdown="initPadPeelDrag(event)"
+          class="sticky-pad group ${padPeelActive ? 'is-peeling' : ''}"
+          style="width:175px;height:175px;margin:6px"
+          title="New sticky note"
         >
-          <!-- 3D Layered Under-Notes (Physical Stack Look) -->
-          <div class="absolute inset-3 bg-yellow-200/60 rounded-md transform rotate-3 scale-95 border border-yellow-400/20 shadow-md"></div>
-          <div class="absolute inset-2 bg-pink-200/70 rounded-md transform -rotate-2 scale-98 border border-pink-400/20 shadow-md"></div>
-          <div class="absolute inset-1.5 bg-sky-200/60 rounded-md transform rotate-1 scale-99 border border-sky-400/20 shadow-md"></div>
-          
-          <!-- Top Pad Surface (Looks & Acts Like Real Top Note Sheet) -->
-          <div class="absolute inset-1 bg-gradient-to-br from-yellow-100 to-yellow-300 rounded-md border border-yellow-400/40 shadow-xl flex flex-col items-center justify-center group-hover:scale-105 group-active:scale-95 transition-all duration-200">
-            <!-- Frosted Tape Strip -->
-            <div class="w-14 h-4 bg-white/75 backdrop-blur-sm rounded-sm mb-3 shadow-sm border-l border-r border-dashed border-black/20"></div>
-            <span class="text-3xl font-black text-amber-950/70 group-hover:text-amber-950 transition-colors">+</span>
-            <span class="text-[10px] font-black text-amber-950/70 uppercase tracking-widest mt-1">Sticky Pad</span>
-            <span class="text-[8px] font-bold text-amber-950/50 mt-0.5">Drag to peel note</span>
+          <div class="sticky-pad-sheet sticky-pad-sheet-a"></div>
+          <div class="sticky-pad-sheet sticky-pad-sheet-b"></div>
+          <div class="sticky-pad-sheet sticky-pad-sheet-c"></div>
+          <div class="sticky-pad-face">
+            <div class="sticky-pad-tape"></div>
+            <span class="sticky-pad-curl" aria-hidden="true"></span>
           </div>
         </div>
       `;
@@ -2626,9 +2641,15 @@ function renderPostItBoard() {
 
 // ===== PEEL STICKY NOTE FROM PILE ON DRAG =====
 function initPadPeelDrag(e) {
-  const currentOwner = googleAccount || userName || 'Guest';
-  const randomRot = parseFloat((Math.random() * 3.6 - 1.8).toFixed(1));
+  if (isDraggingNote) return;
+  const padEl = e.currentTarget && e.currentTarget.id === 'infinite-sticky-stack'
+    ? e.currentTarget
+    : document.getElementById('infinite-sticky-stack');
+  if (!padEl) return;
+  if (e.target.closest('button, textarea, input')) return;
+  e.preventDefault();
 
+  const currentOwner = googleAccount || userName || 'Guest';
   const noteItem = {
     id: 'note_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
     type: 'note',
@@ -2638,7 +2659,7 @@ function initPadPeelDrag(e) {
     tab: activeTab || 'notes',
     width: 175,
     height: 175,
-    rotation: randomRot,
+    rotation: 0,
     xPct: Math.max(2, Math.min(85, parseFloat(((e.clientX / window.innerWidth) * 100).toFixed(2)))),
     yPct: Math.max(5, Math.min(80, parseFloat(((e.clientY / window.innerHeight) * 100).toFixed(2)))),
     drawMode: false,
@@ -2647,16 +2668,27 @@ function initPadPeelDrag(e) {
     username: currentOwner
   };
 
-  allData.push(noteItem);
+  // Insert at the front of the board so the new note lands in the pad's cell.
+  allData.unshift(noteItem);
   localStorage.setItem(`hdsfd_data_${currentOwner}`, JSON.stringify(allData));
   createData(noteItem);
 
-  // Render to DOM first then immediately trigger drag
+  padPeelActive = true;
   renderPhysicsPostIts();
 
+  const noteEl = document.getElementById(`note-card-${noteItem.id}`);
+  if (!noteEl) {
+    padPeelActive = false;
+    renderPhysicsPostIts();
+    return;
+  }
+
+  // Wait for the new note to be laid out in the pad's old slot, then hand it
+  // to the GPU drag engine with the original pointer offset. A timer (not rAF)
+  // keeps this working in background tabs where animation frames are paused.
   setTimeout(() => {
-    initNotePhysicsDrag(noteItem.id, e);
-  }, 10);
+    initNotePhysicsDrag(noteItem.id, { clientX: e.clientX, clientY: e.clientY, target: padEl });
+  }, 16);
 }
 
 // ===== CUSTOM IN-APP DELETE MODAL CONTROLLERS =====
@@ -3038,6 +3070,7 @@ function initNotePhysicsDrag(noteId, e) {
     document.removeEventListener('pointermove', onPointerMove);
     document.removeEventListener('pointerup', onPointerUp);
 
+    padPeelActive = false;
     const finalX = (notePhysicsMap[noteId] && notePhysicsMap[noteId].x !== undefined) ? notePhysicsMap[noteId].x : (e.clientX - grabOffsetX);
     const finalY = (notePhysicsMap[noteId] && notePhysicsMap[noteId].y !== undefined) ? notePhysicsMap[noteId].y : (e.clientY - grabOffsetY);
     const targetRestRot = parseFloat((Math.random() * 3.6 - 1.8).toFixed(1));
@@ -3650,7 +3683,7 @@ function renderGeminiChatMessages() {
         <div class="flex items-start gap-3 max-w-[92%]">
           <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-500 via-indigo-500 to-pink-500 flex items-center justify-center text-white shrink-0 shadow-md">${hdsfdIcon('sparkles')}</div>
           <div class="bg-[#1e1f20] border border-white/10 p-3.5 rounded-2xl rounded-tl-sm text-slate-200 text-xs leading-relaxed space-y-2">
-            <div>${formatted}</div>
+            <div class="gemini-markdown">${formatted}</div>
             ${actionsHtml ? `<div class="pt-1.5 space-y-1">${actionsHtml}</div>` : ''}
           </div>
         </div>
@@ -3729,18 +3762,162 @@ function renderAgentActionBadge(act) {
   return '';
 }
 
+function geminiMathHtml(tex, displayMode) {
+  const source = String(tex == null ? '' : tex).trim();
+  if (!source) return '';
+  if (typeof katex !== 'undefined' && katex && typeof katex.renderToString === 'function') {
+    try {
+      return katex.renderToString(source, {
+        displayMode: !!displayMode,
+        throwOnError: true,
+        strict: false,
+        trust: false,
+        output: 'html'
+      });
+    } catch (e) { /* fall back to readable source below */ }
+  }
+  return `<code class="gemini-math-fallback">${escapeHtml(source)}</code>`;
+}
+
+// Inline Markdown only. The input is already HTML-escaped by the caller, so
+// emphasis, links and inline code can be added without trusting model output.
+function geminiInlineMarkdown(text) {
+  let out = String(text == null ? '' : text);
+  out = out.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    (m, label, url) => `<a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a>`);
+  out = out.replace(/`([^`\n]+)`/g, '<code class="gemini-inline-code">$1</code>');
+  out = out.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  out = out.replace(/__([^_\n]+)__/g, '<strong>$1</strong>');
+  out = out.replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>');
+  out = out.replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?:;]|$)/g, '$1<em>$2</em>');
+  out = out.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+  return out;
+}
+
+// A small, deterministic Markdown + LaTeX renderer for assistant replies.
+// It escapes first, then builds block structure, so no model output can inject
+// markup. Math is typeset by the bundled KaTeX build and degrades to readable
+// source if a formula is malformed.
 function formatGeminiResponseText(raw) {
   if (!raw) return '';
-  // Strip raw action json blocks from user-visible display
-  let clean = raw.replace(/```json\s*\{[\s\S]*?\}\s*```/g, '').trim();
-  
-  // Format bold text
-  clean = clean.replace(/\*\*(.*?)\*\*/g, '<b class="text-white font-bold">$1</b>');
-  // Format blockquotes
-  clean = clean.replace(/^>\s*(.*?)$/gm, '<blockquote class="border-l-2 border-sky-400 pl-2.5 py-0.5 my-1 text-slate-300 bg-white/5 rounded-r">$1</blockquote>');
-  // Format line breaks
-  clean = clean.replace(/\n/g, '<br>');
-  return clean;
+  let text = String(raw).replace(/\r\n?/g, '\n');
+  const codeTokens = [];
+  const mathTokens = [];
+  const stashCode = html => {
+    const key = `\uE000${codeTokens.length}\uE001`;
+    codeTokens.push(html);
+    return key;
+  };
+  const stashMath = (tex, display) => {
+    const key = `\uE010${mathTokens.length}\uE011`;
+    mathTokens.push(`<span class="gemini-math${display ? ' is-display' : ''}">${geminiMathHtml(tex, display)}</span>`);
+    return key;
+  };
+
+  // Fenced code first, dropping the machine-readable action block entirely.
+  text = text.replace(/```([^\n`]*)\n([\s\S]*?)```/g, (m, lang, code) => {
+    const language = String(lang || '').trim();
+    if (/^json$/i.test(language) && /"actions"\s*:/.test(code)) return '';
+    const cls = language ? ` class="language-${escapeHtml(language.slice(0, 32))}"` : '';
+    return stashCode(`<pre class="gemini-code-block"><code${cls}>${escapeHtml(code.replace(/\n$/, ''))}</code></pre>`);
+  });
+
+  // Math: display forms first, then inline forms. A lone currency dollar is
+  // left alone (it has whitespace after the opening marker or a digit after).
+  text = text.replace(/\\\[([\s\S]+?)\\\]/g, (m, tex) => stashMath(tex, true));
+  text = text.replace(/\$\$([\s\S]+?)\$\$/g, (m, tex) => stashMath(tex, true));
+  text = text.replace(/\\\(([\s\S]+?)\\\)/g, (m, tex) => stashMath(tex, false));
+  text = text.replace(/(^|[\s(>])\$([^\s$][^$\n]*?)\$(?![\d%])/g, (m, lead, tex) => lead + stashMath(tex, false));
+
+  const lines = escapeHtml(text).split('\n');
+  const out = [];
+  let paragraph = [];
+  let list = null;
+  let quote = [];
+  const inline = geminiInlineMarkdown;
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    out.push(`<p>${paragraph.map(inline).join('<br>')}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (!list) return;
+    out.push(`<${list.tag}>${list.items.map(item => `<li>${inline(item)}</li>`).join('')}</${list.tag}>`);
+    list = null;
+  };
+  const flushQuote = () => {
+    if (!quote.length) return;
+    out.push(`<blockquote>${quote.map(inline).join('<br>')}</blockquote>`);
+    quote = [];
+  };
+  const flushAll = () => { flushParagraph(); flushList(); flushQuote(); };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) { flushAll(); continue; }
+
+    const heading = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      flushAll();
+      const level = heading[1].length;
+      out.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      flushAll();
+      out.push('<hr>');
+      continue;
+    }
+
+    // GFM table: a pipe row followed by a separator row.
+    const nextLine = lines[i + 1] ? lines[i + 1].trim() : '';
+    if (trimmed.includes('|') && /^\|?[\s:|-]+\|[\s:|-]*$/.test(nextLine) && nextLine.includes('-')) {
+      flushAll();
+      const cells = row => row.replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+      const header = cells(trimmed);
+      const rows = [];
+      i += 2;
+      while (i < lines.length && lines[i].trim().includes('|')) {
+        rows.push(cells(lines[i].trim()));
+        i += 1;
+      }
+      i -= 1;
+      out.push(`<div class="gemini-table-wrap"><table><thead><tr>${header.map(cell => `<th>${inline(cell)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${row.map(cell => `<td>${inline(cell)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+      continue;
+    }
+
+    const bullet = trimmed.match(/^[-*+]\s+(.*)$/);
+    if (bullet) {
+      flushParagraph(); flushQuote();
+      if (!list || list.tag !== 'ul') { flushList(); list = { tag: 'ul', items: [] }; }
+      list.items.push(bullet[1]);
+      continue;
+    }
+
+    const ordered = trimmed.match(/^\d+[.)]\s+(.*)$/);
+    if (ordered) {
+      flushParagraph(); flushQuote();
+      if (!list || list.tag !== 'ol') { flushList(); list = { tag: 'ol', items: [] }; }
+      list.items.push(ordered[1]);
+      continue;
+    }
+
+    if (trimmed.startsWith('&gt;')) {
+      flushParagraph(); flushList();
+      quote.push(trimmed.replace(/^&gt;\s?/, ''));
+      continue;
+    }
+
+    flushList(); flushQuote();
+    paragraph.push(trimmed);
+  }
+  flushAll();
+
+  let result = out.join('');
+  result = result.replace(/\uE000(\d+)\uE001/g, (m, index) => codeTokens[Number(index)] || '');
+  result = result.replace(/\uE010(\d+)\uE011/g, (m, index) => mathTokens[Number(index)] || '');
+  return result;
 }
 
 function setAgentPromptPrefix(prefix) {
@@ -3766,34 +3943,50 @@ function hdsfdIcon(name, extraClass) {
 // Only the slice an answer can use: open work first, then a little recent
 // history. Keeps every request small so replies stay fast.
 const AI_CONTEXT_LIMITS = { openTasks: 12, doneTasks: 3, notes: 6, schedule: 8, exams: 5, folders: 10 };
-const AI_NOTES_CONTEXT_KEY = 'hdsfd_ai_notes_context';
+const AI_CONTEXT_KEY = 'hdsfd_ai_context';
+const AI_LEGACY_NOTES_CONTEXT_KEY = 'hdsfd_ai_notes_context';
 
-function aiNotesContextEnabled() {
-  return localStorage.getItem(AI_NOTES_CONTEXT_KEY) !== 'off';
+function aiContextEnabled() {
+  const stored = localStorage.getItem(AI_CONTEXT_KEY);
+  if (stored === 'on' || stored === 'off') return stored === 'on';
+  // Migrate the old notes-only switch: its "off" already means private.
+  return localStorage.getItem(AI_LEGACY_NOTES_CONTEXT_KEY) !== 'off';
 }
 
-function setAINotesContext(enabled) {
-  localStorage.setItem(AI_NOTES_CONTEXT_KEY, enabled ? 'on' : 'off');
-  const toggle = document.getElementById('ai-notes-context-toggle');
-  if (toggle) toggle.checked = !!enabled;
-  showInAppNotification(
-    enabled
-      ? 'AI note context on. Recent note titles and short snippets are sent with your AI messages.'
-      : 'AI note context off. Notes are left out of every AI request.',
-    { variant: enabled ? 'info' : 'success' }
-  );
+function setAIContext(enabled) {
+  const next = !!enabled;
+  localStorage.setItem(AI_CONTEXT_KEY, next ? 'on' : 'off');
+  localStorage.removeItem(AI_LEGACY_NOTES_CONTEXT_KEY);
+  const toggle = document.getElementById('ai-context-toggle');
+  if (toggle) toggle.checked = next;
+  if (next) {
+    updateAIContextBadge(buildAIWorkspaceContext());
+    showInAppNotification('', {
+      title: 'Workspace context on',
+      description: 'The assistant can read your tasks, notes, classes, exams and stats, and run app commands.',
+      variant: 'info'
+    });
+  } else {
+    updateAIContextOffBadge();
+    showInAppNotification('', {
+      title: 'Workspace context off',
+      description: 'Every request is now plain Gemini with no tasks, notes, classes, exams, stats or history context. App commands will not run.',
+      variant: 'success'
+    });
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const toggle = document.getElementById('ai-notes-context-toggle');
-  if (toggle) toggle.checked = aiNotesContextEnabled();
+  const toggle = document.getElementById('ai-context-toggle');
+  if (toggle) toggle.checked = aiContextEnabled();
+  if (!aiContextEnabled()) updateAIContextOffBadge();
 });
 
 function buildAIWorkspaceContext() {
   const clip = (value, limit) => String(value == null ? '' : value)
     .replace(/\s+/g, ' ').trim().slice(0, limit || 70);
 
-  const includeNotes = aiNotesContextEnabled();
+  const includeNotes = aiContextEnabled();
   const tasks = allData.filter(d => d.type === 'task');
   const notes = allData.filter(d => d.type === 'note');
   const schedule = allData.filter(d => d.type === 'schedule_entry');
@@ -3870,9 +4063,18 @@ function buildAIWorkspaceContext() {
   };
 }
 
+function updateAIContextOffBadge() {
+  const badge = document.getElementById('ai-context-badge');
+  if (!badge) return;
+  badge.innerHTML = `${hdsfdIcon('shield')} context off`;
+  badge.title = 'Workspace context sharing is off — Gemini gets no personal data and cannot run app commands';
+  badge.dataset.context = 'off';
+}
+
 function updateAIContextBadge(context) {
   const badge = document.getElementById('ai-context-badge');
   if (!badge || !context) return;
+  delete badge.dataset.context;
   const counts = context.counts || {};
   const pick = (key, fallback) => (typeof counts[key] === 'number' ? counts[key] : fallback);
   const notesPart = context.notes_included === false
@@ -3941,8 +4143,10 @@ async function sendGeminiAgentMessage(optPrompt) {
 
   try {
     const savedApiKey = localStorage.getItem('hdsfd_gemini_api_key') || '';
-    const aiContext = buildAIWorkspaceContext();
-    updateAIContextBadge(aiContext);
+    const contextEnabled = aiContextEnabled();
+    const aiContext = contextEnabled ? buildAIWorkspaceContext() : null;
+    if (aiContext) updateAIContextBadge(aiContext);
+    else updateAIContextOffBadge();
     const res = await fetch('/api/gemini/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -3951,7 +4155,9 @@ async function sendGeminiAgentMessage(optPrompt) {
         username: currentOwner,
         api_key: savedApiKey,
         context: aiContext,
-        include_notes: aiNotesContextEnabled()
+        include_context: contextEnabled,
+        allow_actions: contextEnabled,
+        include_notes: contextEnabled
       })
     });
 
@@ -3999,6 +4205,9 @@ async function sendGeminiAgentMessage(optPrompt) {
 
 // ===== REAL-TIME AGENT ACTION EXECUTOR =====
 function executeAgentAction(action) {
+  // Privacy guard: with context sharing off the assistant is plain Gemini and
+  // must never mutate the workspace, even if a stale response contains actions.
+  if (!aiContextEnabled()) return;
   if (!action || !action.type) return;
   const currentOwner = googleAccount || userName || 'Guest';
 
@@ -4225,6 +4434,7 @@ const musicState = {
   loading: false,
   resolving: false,
   radioLoading: false,
+  queueRefreshing: false,
   searchBusy: false,
   playStartedAt: 0,
   resolvingItem: null,
@@ -5566,6 +5776,7 @@ async function musicLoadFeed(force) {
   musicState.feedLoading = true;
   musicState.feedSignature = signature;
   musicState.feedStale = false;
+  musicSetFeedRefreshBusy(true);
   musicRenderFeed();
   try {
     const data = await musicPostJson(`${API_BASE}/music/feed`, { profile: profile, seeds: seeds, limit: 18 }, 18000);
@@ -5652,8 +5863,19 @@ async function musicLoadFeed(force) {
     }
   } finally {
     musicState.feedLoading = false;
+    musicSetFeedRefreshBusy(false);
     musicRenderFeed();
   }
+}
+
+function musicSetFeedRefreshBusy(busy) {
+  const button = document.getElementById('music-feed-refresh');
+  if (!button) return;
+  button.classList.toggle('is-busy', !!busy);
+  button.disabled = !!busy;
+  button.setAttribute('aria-busy', busy ? 'true' : 'false');
+  const label = button.querySelector('span');
+  if (label) label.textContent = busy ? 'Refreshing…' : 'Refresh';
 }
 
 function musicApplyFeed(payload) {
@@ -5887,17 +6109,27 @@ async function musicRelayResolve(item, onAttempt) {
   const base = await musicRelayBaseUrl();
   if (!base) return null;
 
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    if (onAttempt) onAttempt(attempt + 1, 5);
+  // A YouTube resolve can blip with a single 502 even when the same track works
+  // a moment later. Give that one quick retry before the normal attempt ladder,
+  // so a transient upstream failure never drops the listener to the ad-filled
+  // YouTube embed. A real outage still ends in the existing embed fallback.
+  const totalAttempts = 5;
+  let quickRetryUsed = false;
+  let attempt = 0;
+
+  while (attempt < totalAttempts) {
+    if (onAttempt) onAttempt(attempt + 1, totalAttempts);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 9000);
+    let status = 0;
     try {
-      const res = await fetch(`${base}/api/player?attempt=${attempt}`, {
+      const res = await fetch(`${base}/api/player?attempt=${attempt}${quickRetryUsed ? '&quick=1' : ''}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ videoId: item.id }),
         signal: controller.signal
       });
+      status = res.status;
       if (res.ok) {
         const data = await res.json();
         const formats = Array.isArray(data.audio) ? data.audio.filter(entry => entry && entry.url) : [];
@@ -5920,7 +6152,18 @@ async function musicRelayResolve(item, onAttempt) {
     } finally {
       clearTimeout(timer);
     }
-    await musicSleep(200 + attempt * 140);
+
+    if (musicState.current !== item) return null;
+
+    if (status === 502 && !quickRetryUsed) {
+      quickRetryUsed = true;
+      if (onAttempt) onAttempt(attempt + 1, totalAttempts);
+      await musicSleep(500);
+      continue; // Retry the same slot once, immediately.
+    }
+
+    attempt += 1;
+    if (attempt < totalAttempts) await musicSleep(200 + attempt * 140);
   }
   return null;
 }
@@ -6224,6 +6467,7 @@ function musicUpdateProgress() {
   if (cur) cur.textContent = musicFmt(current);
   if (dur) dur.textContent = duration > 0 ? musicFmt(duration) : '--:--';
   if (legacyTime) legacyTime.textContent = `${musicFmt(current)} / ${musicFmt(duration)}`;
+  if (typeof zenMusicSync === 'function') zenMusicSync();
 }
 
 function musicSetPlayingUI(playing) {
@@ -6277,6 +6521,8 @@ function musicSyncPlayControls() {
     button.title = musicIsSaved(id) ? 'Remove from Saved' : 'Save';
     button.setAttribute('aria-label', musicIsSaved(id) ? 'Remove from Saved' : 'Save track');
   });
+
+  if (typeof zenMusicSync === 'function') zenMusicSync();
 }
 
 function musicToggleShuffle() {
@@ -6426,6 +6672,59 @@ async function musicLoadRadio(options) {
 function musicUpdateFeedNote(count) {
   const note = document.getElementById('music-queue-note');
   if (note) note.textContent = count ? `Smart radio added ${count} track${count === 1 ? '' : 's'}` : '';
+}
+
+function musicSetQueueRefreshBusy(busy) {
+  const button = document.getElementById('music-queue-refresh');
+  if (!button) return;
+  button.classList.toggle('is-busy', !!busy);
+  button.disabled = !!busy;
+  button.setAttribute('aria-busy', busy ? 'true' : 'false');
+  const label = button.querySelector('span');
+  if (label) label.textContent = busy ? 'Refreshing…' : 'Refresh';
+}
+
+// Manual top-up from the Queue tab. It uses the same smart-radio source as
+// automatic refill but can be pressed at any time, even when radio is off.
+async function musicRefreshQueue() {
+  if (musicState.queueRefreshing) return;
+  const seed = musicState.current || musicState.queue[musicState.index] || musicState.recent[0];
+  if (!seed || !seed.id) {
+    showInAppNotification('Play or add a track first, then refresh the queue', { variant: 'info' });
+    return;
+  }
+  if (musicGuestMode()) {
+    showInAppNotification('', {
+      title: 'Sign in to refresh smart radio',
+      description: 'Guest mode can still add tracks and play the queue, but radio needs an HDSFD session.',
+      variant: 'warning'
+    });
+    return;
+  }
+  musicState.queueRefreshing = true;
+  musicSetQueueRefreshBusy(true);
+  musicPill.start('Refreshing queue');
+  try {
+    const added = await musicLoadRadio({ seed });
+    if (!added.length) {
+      musicPill.fail('No fresh tracks found');
+      showInAppNotification('No new tracks found — try again in a moment', { variant: 'info' });
+      return;
+    }
+    musicPill.done();
+    musicUpdateFeedNote(added.length);
+    showInAppNotification('', {
+      title: 'Queue refreshed',
+      description: `${added.length} new track${added.length === 1 ? '' : 's'} added`,
+      variant: 'success'
+    });
+  } catch (e) {
+    musicPill.fail('Could not refresh queue');
+  } finally {
+    musicState.queueRefreshing = false;
+    musicSetQueueRefreshBusy(false);
+    musicRenderQueue();
+  }
 }
 
 function musicMaybeExtendQueue() {
@@ -7420,10 +7719,8 @@ function setCustomPomoFromInput() {
 }
 
 // ===== ZEN MODE =====
-let zenHoldTimer = null;
 let zenStartTime = null;
 let zenFadeTimeout = null;
-let zenHoldProgress = 0;
 
 function enterZenMode() {
   const zenOverlay = document.getElementById('zen-overlay');
@@ -7435,6 +7732,8 @@ function enterZenMode() {
   setZenOrbitOpen(false);
   applyZenOrbitPosition();
   zenPomoSyncControls();
+  zenMusicSync();
+  zenOrbitSyncSound();
   zenStartTime = Date.now();
 
   if (holdMsg) {
@@ -7462,6 +7761,14 @@ function zenPomoSyncControls() {
   btn.classList.toggle('is-running', running);
   btn.setAttribute('aria-pressed', running ? 'true' : 'false');
   btn.setAttribute('aria-label', running ? 'Pause focus timer' : (paused ? 'Resume focus timer' : 'Start focus timer'));
+  // The permanent Zen bar shows real session progress instead of the old
+  // hold-to-exit countdown.
+  const fill = document.getElementById('zen-fill');
+  if (fill) {
+    const total = Math.max(1, pomoDurationSeconds || 0);
+    const elapsed = running || paused ? Math.max(0, total - Math.max(0, pomoRemainingSeconds)) : 0;
+    fill.style.width = `${Math.min(100, Math.max(0, (elapsed / total) * 100)).toFixed(1)}%`;
+  }
 }
 
 function zenPomoToggle() {
@@ -7511,16 +7818,16 @@ function onZenScreenTouch(e) {
 }
 
 // ===== ZEN ORBIT DOCK =====
-// A movable radial dock that replaces the old quick-controls card. The action
-// set is zen-only: ambient sound, music, starred tasks, a quick note, and exit.
+// A movable radial dock for the distraction-free view. Three actions only:
+// a combined soundscape/music panel, every task, and a quick note. There is no
+// player shortcut and no exit action; the on-screen Exit button is the only way
+// out, so the dock can never replace the focus screen with the full player.
 const ZEN_ORBIT_ACTIONS = [
-  { key: 'sound', label: 'Ambient sound', icon: 'volume-2' },
-  { key: 'music', label: 'Music', icon: 'music' },
-  { key: 'tasks', label: 'Starred tasks', icon: 'star' },
-  { key: 'note', label: 'Quick note', icon: 'sticky-note' },
-  { key: 'exit', label: 'Exit Zen Mode', icon: 'x' }
+  { key: 'sound', label: 'Soundscape & music', icon: 'headphones' },
+  { key: 'tasks', label: 'All tasks', icon: 'clipboard-list' },
+  { key: 'note', label: 'Quick note', icon: 'sticky-note' }
 ];
-const ZEN_ORBIT_PANEL_TITLES = { sound: 'Ambient sound', tasks: 'Starred tasks', note: 'Quick note' };
+const ZEN_ORBIT_PANEL_TITLES = { sound: 'Soundscape & music', tasks: 'All tasks', note: 'Quick note' };
 const ZEN_ORBIT_POS_KEY = 'hdsfd_zen_orbit_pos';
 const zenOrbitState = {
   x: 0, y: 0, size: 56,
@@ -7703,6 +8010,55 @@ function toggleZenSoundscape() {
   zenOrbitSyncSound();
 }
 
+// Compact music transport inside the combined Soundscape panel. It is a remote
+// control for the real player: no search, queue, library or player screen, just
+// the controls needed to keep focus music going without leaving Zen Mode.
+function zenMusicFmt(seconds) {
+  const value = Number(seconds);
+  if (!isFinite(value) || value <= 0) return '0:00';
+  const mins = Math.floor(value / 60);
+  const secs = Math.floor(value % 60);
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+}
+
+function zenMusicSync() {
+  const title = document.getElementById('zen-music-title');
+  if (!title) return;
+  const item = musicState.current;
+  title.textContent = item ? (item.title || 'Unknown track') : 'Nothing playing';
+  const sub = document.getElementById('zen-music-sub');
+  if (sub) sub.textContent = item ? (item.channel || 'YouTube') : 'Pick a track in the music player first';
+  const toggle = document.getElementById('zen-music-toggle');
+  if (toggle) {
+    const playing = musicIsPlaying();
+    toggle.innerHTML = hdsfdIcon(playing ? 'pause' : 'play');
+    toggle.setAttribute('aria-label', playing ? 'Pause music' : 'Play music');
+    toggle.title = playing ? 'Pause' : 'Play';
+  }
+  const seek = document.getElementById('zen-music-seek');
+  const cur = document.getElementById('zen-music-cur');
+  const dur = document.getElementById('zen-music-dur');
+  const duration = musicKnownDuration();
+  const current = musicState.engine === 'youtube' && musicEmbedFrame
+    ? musicEmbedTime
+    : ((musicAudioEl() && musicAudioEl().currentTime) || 0);
+  if (seek && document.activeElement !== seek) {
+    seek.value = String(duration > 0 ? Math.min(100, (current / duration) * 100) : 0);
+  }
+  if (cur) cur.textContent = zenMusicFmt(current);
+  if (dur) dur.textContent = duration > 0 ? zenMusicFmt(duration) : '0:00';
+}
+
+function zenMusicToggle() {
+  musicToggle();
+  setTimeout(zenMusicSync, 60);
+}
+
+function zenMusicSeek(value) {
+  musicSeek(value);
+  zenMusicSync();
+}
+
 function zenSetSound(kind, value) {
   const numeric = Math.max(0, Math.min(1, parseFloat(value) || 0));
   const main = document.getElementById(kind === 'rain' ? 'vol-rain' : 'vol-noise');
@@ -7755,7 +8111,7 @@ function openZenOrbitPanel(kind) {
     section.classList.toggle('hidden', section.dataset.zenPanel !== kind);
   });
   if (title) title.textContent = ZEN_ORBIT_PANEL_TITLES[kind];
-  if (kind === 'sound') zenOrbitSyncSound();
+  if (kind === 'sound') { zenOrbitSyncSound(); zenMusicSync(); }
   if (kind === 'tasks') renderHomeStarredTasks();
   panel.classList.remove('hidden');
   positionZenOrbitPanel();
@@ -7774,8 +8130,7 @@ function closeZenOrbitPanel() {
 
 function zenOrbitAction(key) {
   setZenOrbitOpen(false);
-  if (key === 'music') { closeZenOrbitPanel(); openMusicPlayer(); return; }
-  if (key === 'exit') { closeZenOrbitPanel(); exitZenMode(); return; }
+  if (key !== 'sound' && key !== 'tasks' && key !== 'note') return;
   openZenOrbitPanel(key);
 }
 
@@ -7901,75 +8256,14 @@ function initZenOrbitDock() {
   }, { passive: true });
 }
 
-// Hold Spacebar to exit Zen Mode
-document.addEventListener('keydown', (e) => {
-  const zenOverlay = document.getElementById('zen-overlay');
-  if (zenOverlay && !zenOverlay.classList.contains('hidden')) {
-    if (e.target && e.target.closest('#zen-pomo-toggle, input, textarea, select, [contenteditable="true"]')) return;
-    onZenScreenTouch();
-    if (e.code === 'Space' || e.key === ' ') {
-      e.preventDefault();
-      if (!zenHoldTimer) {
-        zenHoldProgress = 0;
-        zenHoldTimer = setInterval(() => {
-          zenHoldProgress += 7;
-          const fill = document.getElementById('zen-fill');
-          if (fill) fill.style.width = `${zenHoldProgress}%`;
-          if (zenHoldProgress >= 100) {
-            clearInterval(zenHoldTimer);
-            zenHoldTimer = null;
-            exitZenMode();
-          }
-        }, 100);
-      }
-    }
-  }
-});
-
-document.addEventListener('keyup', (e) => {
-  if (e.code === 'Space' || e.key === ' ') {
-    if (zenHoldTimer) {
-      clearInterval(zenHoldTimer);
-      zenHoldTimer = null;
-    }
-    zenHoldProgress = 0;
-    const fill = document.getElementById('zen-fill');
-    if (fill) fill.style.width = '0%';
-  }
-});
-
-// Hold / Touchscreen on Zen Overlay
+// Zen Mode has exactly one exit: the visible Exit button. Tapping the backdrop
+// only brings back the fading hint, so a stray tap can never end a session.
 const zenOverlayEl = document.getElementById('zen-overlay');
 if (zenOverlayEl) {
-  let touchHoldTimer = null;
   zenOverlayEl.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#zen-orbit') || e.target.closest('#zen-orbit-panel')) return;
+    if (e.target.closest('#zen-orbit') || e.target.closest('#zen-orbit-panel') || e.target.closest('button, input, textarea, select')) return;
     onZenScreenTouch(e);
-    zenHoldProgress = 0;
-    touchHoldTimer = setInterval(() => {
-      zenHoldProgress += 8;
-      const fill = document.getElementById('zen-fill');
-      if (fill) fill.style.width = `${zenHoldProgress}%`;
-      if (zenHoldProgress >= 100) {
-        clearInterval(touchHoldTimer);
-        touchHoldTimer = null;
-        exitZenMode();
-      }
-    }, 100);
   });
-
-  const stopTouchHold = () => {
-    if (touchHoldTimer) {
-      clearInterval(touchHoldTimer);
-      touchHoldTimer = null;
-    }
-    zenHoldProgress = 0;
-    const fill = document.getElementById('zen-fill');
-    if (fill) fill.style.width = '0%';
-  };
-
-  zenOverlayEl.addEventListener('pointerup', stopTouchHold);
-  zenOverlayEl.addEventListener('pointerleave', stopTouchHold);
 }
 
 // ===== SETTINGS, THEMES & SHOP =====
@@ -8240,7 +8534,12 @@ function awardActivityCoins(baseAmount, activityName) {
   localStorage.setItem('hdsfd_lifetime_bonus_xp', String(curBonus + actualAmount));
   updateStatsOverview();
   if (activityName) {
- showInAppNotification(` +${actualAmount} earned (${activityName})!`);
+    // Keep notifications calm and parenthesis-free: "+10 coins · Focus Progress · 5m".
+    const label = String(activityName)
+      .replace(/\s*\(([^()]*)\)\s*/g, ' · $1')
+      .replace(/\s*·\s*$/, '')
+      .trim();
+    showInAppNotification(`+${actualAmount} coins · ${label}`);
   }
   checkStageMilestoneBonus();
   // Sync to server so coins persist across devices
@@ -8252,7 +8551,7 @@ function deductActivityCoins(baseAmount, reason) {
   localStorage.setItem('hdsfd_lifetime_bonus_xp', String(Math.max(0, curBonus - baseAmount)));
   updateStatsOverview();
   if (reason) {
- showInAppNotification(` -${baseAmount} (${reason})`);
+     showInAppNotification(`−${baseAmount} coins · ${reason}`);
   }
   // Sync to server so deductions persist across devices
   syncUserStatsToServer();
@@ -8385,7 +8684,7 @@ function buyFertileDew() {
   const cost = 50 * (currentTier + 1);
 
   if (currentCoins < cost) {
- showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
+     showInAppNotification(`Not enough coins — you need ${cost}, you have ${currentCoins}.`);
     return;
   }
 
@@ -8405,7 +8704,7 @@ function buySunlightEssence() {
   const cost = 100;
 
   if (currentCoins < cost) {
- showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
+     showInAppNotification(`Not enough coins — you need ${cost}, you have ${currentCoins}.`);
     return;
   }
 
@@ -8433,7 +8732,7 @@ function buyGlowingVines() {
   const cost = 150 + ((currentTier - 1) * 50);
 
   if (currentCoins < cost) {
- showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
+     showInAppNotification(`Not enough coins — you need ${cost}, you have ${currentCoins}.`);
     return;
   }
 
@@ -8445,7 +8744,7 @@ function buyGlowingVines() {
   updateStatsOverview();
   updateShopCardsUI();
   renderSanctuaryTree();
- showInAppNotification(` Enchanted tree with Glowing Vines for 24 Hours! (Growth x${(1.0 + currentTier * 0.5).toFixed(1)})`);
+     showInAppNotification(`Enchanted tree with Glowing Vines for 24 hours — growth x${(1.0 + currentTier * 0.5).toFixed(1)}`);
 }
 
 // 4. Blossom Petals (1.5x Coins + 10 coins/hr passive - 1 Day)
@@ -8454,7 +8753,7 @@ function buyBlossomPetals() {
   const cost = 200;
 
   if (currentCoins < cost) {
- showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
+     showInAppNotification(`Not enough coins — you need ${cost}, you have ${currentCoins}.`);
     return;
   }
 
@@ -8467,7 +8766,7 @@ function buyBlossomPetals() {
   updateStatsOverview();
   updateShopCardsUI();
   renderSanctuaryTree();
- showInAppNotification(` Drifting Blossom Petals active for 24 Hours! (1.5x Coins + 10/hr Passive Harvest).`);
+     showInAppNotification(`Drifting Blossom Petals active for 24 hours — 1.5x coins plus 10/hr passive harvest.`);
 }
 
 // 5. Starlight Aura (2x Coins & 2x Growth - 1 Week)
@@ -8476,7 +8775,7 @@ function buyStarlightAura() {
   const cost = 500;
 
   if (currentCoins < cost) {
- showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
+     showInAppNotification(`Not enough coins — you need ${cost}, you have ${currentCoins}.`);
     return;
   }
 
@@ -8490,7 +8789,7 @@ function buyStarlightAura() {
   updateStatsOverview();
   updateShopCardsUI();
   renderSanctuaryTree();
- showInAppNotification(` Starlight Cosmic Aura active for 1 Whole Week! (2x Coins & 2x Tree Growth).`);
+     showInAppNotification(`Starlight Cosmic Aura active for one whole week — 2x coins and 2x tree growth.`);
 }
 
 // 6. Streak Shield (2 Days Protection)
@@ -8499,7 +8798,7 @@ function buyStreakShield() {
   const cost = 250;
 
   if (currentCoins < cost) {
- showInAppNotification(` Not enough coins! You need ${cost} (Have: ${currentCoins} ).`);
+     showInAppNotification(`Not enough coins — you need ${cost}, you have ${currentCoins}.`);
     return;
   }
 

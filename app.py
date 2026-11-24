@@ -1004,6 +1004,16 @@ def quick_liquid_vendor(filename):
     resp.headers['Cache-Control'] = 'public, max-age=86400'
     return resp
 
+@app.route('/vendor/katex/<path:filename>')
+def katex_vendor(filename):
+    # Only the bundled stylesheet, script and fonts are public.
+    if not filename.endswith(('.css', '.js', '.woff2')):
+        return ("Not found", 404)
+    mimetype = 'font/woff2' if filename.endswith('.woff2') else None
+    resp = send_from_directory('vendor/katex', filename, mimetype=mimetype)
+    resp.headers['Cache-Control'] = 'public, max-age=604800' if filename.startswith('fonts/') else 'no-cache'
+    return resp
+
 @app.route('/manifest.json')
 def manifest():
     return send_from_directory('.', 'manifest.json', mimetype='application/manifest+json')
@@ -1571,6 +1581,38 @@ def gemini_generate():
         return jsonify({"status": "error", "message": "Prompt is required"}), 400
 
     is_guest = (not username) or (username.lower() in ['guest', 'user', 'null', 'undefined', ''])
+    # Workspace access is opt-out. When off, the request is plain Gemini: no
+    # workspace context, no chat memory and no app actions.
+    context_enabled = data.get('include_context') is not False
+    actions_enabled = context_enabled and data.get('allow_actions') is not False
+
+    # With context off, app commands and personal-workspace questions get one
+    # immediate, honest answer. Do not spend a Gemini call or let the offline
+    # fallback invent a generic study answer for a workspace request.
+    privacy_command_response = ''
+    if not context_enabled:
+        lower_prompt = prompt.lower().strip()
+        workspace_nouns = ['task', 'assignment', 'homework', 'todo', 'note', 'sticky', 'timer', 'pomodoro', 'focus session', 'theme', 'soundscape', 'rain', 'music', 'song', 'exam', 'schedule', 'class']
+        command_text = lower_prompt
+        for prefix in ('please ', 'can you ', 'could you ', 'would you ', 'will you '):
+            if command_text.startswith(prefix):
+                command_text = command_text[len(prefix):].strip()
+        command_like = command_text.startswith((
+            'add ', 'create ', 'make ', 'set ', 'pause ', 'stop ', 'reset ', 'play ',
+            'delete ', 'remove ', 'complete ', 'change ', 'open ', 'go to ', 'navigate ', 'schedule '
+        ))
+        if command_text.startswith('start '):
+            command_like = any(w in command_text for w in ['timer', 'pomodoro', 'focus', 'music', 'song', 'soundscape', 'rain', 'noise'])
+        personal_like = lower_prompt.startswith((
+            'what are my', 'what is my', "what's my", 'show my', 'show me my',
+            'list my', 'do i have', 'when is my', 'where is my', 'how many'
+        ))
+        if (command_like or personal_like) and any(noun in lower_prompt for noun in workspace_nouns):
+            privacy_command_response = (
+                "Workspace actions are off. I can't read or change your tasks, notes, classes, exams, "
+                "schedule, music or stats while \"Share workspace context\" is off. Turn it on in "
+                "Settings -> AI Assistant Privacy, or ask me an academic or general question."
+            )
     
     conn = get_db()
     access_token = None
@@ -1625,7 +1667,7 @@ def gemini_generate():
         "5. FOCUS SANCTUARY (Tab 1):\n"
         "   - Pomodoro timer with presets, custom steppers, and dynamic slider.\n"
         "   - Audio Synthesizer with Rain, Brown Noise, and YouTube music player.\n"
-        "   - Zen Mode with assistive floating touch controls and 3-second hold exit.\n\n"
+        "   - Zen Mode with assistive floating touch controls and a Click to Exit button.\n\n"
         "6. GOOGLE DRIVE BACKUP (Tab 4):\n"
         "   - Backs up all notes as 'Notes.json' and the assistant's study context as 'ai.json' into the user's 'HDSFD Backup' Google Drive folder.\n\n"
         "CRITICAL RULES FOR STICKY NOTES:\n"
@@ -1654,9 +1696,20 @@ def gemini_generate():
         "Always provide natural, intelligent, comprehensive, and helpful academic explanations for math, science, SAT, essay planning, coding, and productivity advice."
     )
 
+    if not context_enabled:
+        system_instruction = (
+            "You are Gemini inside HDSFD (HD Student Focus Dashboard).\n"
+            "The user has turned workspace context sharing OFF. You have no access to their tasks, "
+            "notes, classes, exams, stats, music or chat history, and you must not claim to. "
+            "You cannot create, complete, delete or change anything in their workspace, and you must "
+            "not output app action JSON. If they ask for an app command, briefly explain that they can "
+            "enable \"Share workspace context\" in Settings -> AI Assistant Privacy.\n"
+            "Answer academic and general questions as a helpful, knowledgeable study assistant."
+        )
+
     # ---- Live workspace context injected by the client on every request ----
     live_context = data.get('context') or {}
-    if isinstance(live_context, dict) and live_context:
+    if context_enabled and isinstance(live_context, dict) and live_context:
         import datetime as _context_datetime
         def _clip_ctx(value, limit=90):
             text = str(value if value is not None else '').replace('\n', ' ').strip()
@@ -1750,24 +1803,25 @@ def gemini_generate():
         "parts": [{"text": "Understood! I am the HDSFD AI Agent. I will answer any academic questions and execute app actions seamlessly."}]
     })
 
-    for h in history_rows:
-        role = "user" if h['role'] == 'user' else "model"
-        contents.append({
-            "role": role,
-            "parts": [{"text": h['content']}]
-        })
+    if context_enabled:
+        for h in history_rows:
+            role = "user" if h['role'] == 'user' else "model"
+            contents.append({
+                "role": role,
+                "parts": [{"text": h['content']}]
+            })
 
     contents.append({
         "role": "user",
         "parts": [{"text": prompt}]
     })
 
-    generated_text = ""
+    generated_text = privacy_command_response
     model_name = "gemini-2.0-flash"
     source = "built_in"
 
     # 1. Call via Google OAuth Access Token (Gemini 2.0 Flash / 1.5 Flash)
-    if not is_guest and access_token:
+    if not is_guest and access_token and not generated_text:
         try:
             import requests
             headers = {
@@ -1831,12 +1885,12 @@ def gemini_generate():
         actions = []
 
         # Intent: Questions about the user's own workspace → answer from live context
-        context_answer = _answer_from_live_context(lower, live_context)
+        context_answer = _answer_from_live_context(lower, live_context) if context_enabled else ''
         if context_answer:
             generated_text = context_answer
 
         # Intent: Create/Add Task
-        elif any(w in lower for w in ['task', 'assignment', 'hw', 'homework', 'todo', 'due']) and any(w in lower for w in ['add', 'create', 'schedule', 'set', 'make', 'put', 'need', 'task:']):
+        elif context_enabled and any(w in lower for w in ['task', 'assignment', 'hw', 'homework', 'todo', 'due']) and any(w in lower for w in ['add', 'create', 'schedule', 'set', 'make', 'put', 'need', 'task:']):
             raw_title = prompt
             for remove_word in ['add a task to:', 'add a task to', 'add a task:', 'add a task', 'add task:', 'add task to', 'add task', 'create task:', 'create a task:', 'create task', 'create a task', 'schedule a task:', 'schedule task:', 'schedule a task', 'schedule task', 'task:', 'please add', 'please create']:
                 if raw_title.lower().startswith(remove_word):
@@ -1873,7 +1927,7 @@ def gemini_generate():
             )
 
         # Intent: Create Sticky Note
-        elif any(w in lower for w in ['note', 'sticky', 'post-it', 'postit', 'pad']) and any(w in lower for w in ['create', 'add', 'make', 'write', 'put', 'stick', 'generate']):
+        elif context_enabled and any(w in lower for w in ['note', 'sticky', 'post-it', 'postit', 'pad']) and any(w in lower for w in ['create', 'add', 'make', 'write', 'put', 'stick', 'generate']):
             color = 'yellow'
             if 'pink' in lower: color = 'pink'
             elif 'blue' in lower or 'cyan' in lower: color = 'blue'
@@ -1966,7 +2020,7 @@ def gemini_generate():
             )
 
         # Intent: Start / Control Pomodoro Timer
-        elif any(w in lower for w in ['timer', 'pomodoro', 'focus session', 'clock', 'countdown']):
+        elif context_enabled and any(w in lower for w in ['timer', 'pomodoro', 'focus session', 'clock', 'countdown']):
             if 'pause' in lower or 'stop' in lower:
                 actions.append({"type": "pause_timer"})
                 action_json = json.dumps({"actions": [{"type": "pause_timer"}]})
@@ -1991,7 +2045,7 @@ def gemini_generate():
                 )
 
         # Intent: Play YouTube Song / Playlist
-        elif any(w in lower for w in ['play song', 'play track', 'play youtube', 'play music', 'play lofi', 'play mozart', 'play piano', 'play jazz', 'play rain music']) or (lower.startswith('play ') and not 'game' in lower and not 'soundscape' in lower):
+        elif context_enabled and any(w in lower for w in ['play song', 'play track', 'play youtube', 'play music', 'play lofi', 'play mozart', 'play piano', 'play jazz', 'play rain music']) or (context_enabled and lower.startswith('play ') and not 'game' in lower and not 'soundscape' in lower):
             song_query = prompt
             for strip_prefix in ['play song:', 'play song', 'play music:', 'play music', 'play youtube:', 'play youtube', 'play track:', 'play track', 'play:', 'play', 'listen to']:
                 if song_query.lower().startswith(strip_prefix):
@@ -2006,7 +2060,7 @@ def gemini_generate():
             generated_text = f"🎵 **Playing Track:** Now streaming **\"{song_query or 'Lofi Study Beats'}\"** via the YouTube player in Tab 1!\n\n```json\n{action_json}\n```"
 
         # Intent: Create/Schedule Exam
-        elif any(w in lower for w in ['exam', 'midterm', 'final', 'quiz', 'test', 'assessment']) and any(w in lower for w in ['add', 'create', 'schedule', 'set']):
+        elif context_enabled and any(w in lower for w in ['exam', 'midterm', 'final', 'quiz', 'test', 'assessment']) and any(w in lower for w in ['add', 'create', 'schedule', 'set']):
             exam_title = prompt
             for strip_prefix in ['add exam:', 'add exam', 'schedule exam:', 'schedule exam', 'create exam:', 'create exam', 'add midterm:', 'schedule midterm:']:
                 if exam_title.lower().startswith(strip_prefix):
@@ -2025,7 +2079,7 @@ def gemini_generate():
             generated_text = f"🎯 **Exam Scheduled:** Added **\"{exam_title or 'Exam'}\"** on **{exam_date}** with a **+250 🪙** completion reward! Matching study folder created.\n\n```json\n{action_json}\n```"
 
         # Intent: Soundscape Audio
-        elif any(w in lower for w in ['rain', 'sound', 'audio', 'soundscape', 'noise', 'brown noise']):
+        elif context_enabled and any(w in lower for w in ['rain', 'sound', 'audio', 'soundscape', 'noise', 'brown noise']):
             actions.append({
                 "type": "set_soundscape",
                 "playing": True,
@@ -2036,7 +2090,7 @@ def gemini_generate():
             generated_text = f"🎧 **Soundscape Activated:** Rain set to 80% and Brown Noise to 40% for optimal focus alpha wave states.\n\n```json\n{action_json}\n```"
 
         # Intent: Theme Change
-        elif 'theme' in lower or any(t in lower for t in ['obsidian', 'cyberpunk', 'cyber theme', 'ocean theme', 'sunset theme', 'forest theme', 'aurora theme', 'rose theme']):
+        elif context_enabled and ('theme' in lower or any(t in lower for t in ['obsidian', 'cyberpunk', 'cyber theme', 'ocean theme', 'sunset theme', 'forest theme', 'aurora theme', 'rose theme'])):
             chosen = 'midnight'
             if 'obsidian' in lower: chosen = 'obsidian'
             elif 'cyber' in lower or 'cyberpunk' in lower or 'synthwave' in lower or 'neon' in lower: chosen = 'cyber'
@@ -2051,6 +2105,13 @@ def gemini_generate():
             generated_text = f"🎨 **Theme Updated:** Switched workspace appearance to **{chosen.capitalize()}**.\n\n```json\n{action_json}\n```"
 
         # Intent: Features / Help / Capabilities
+        elif not context_enabled and any(w in lower for w in ['feature', 'what can you do', 'what do you do', 'help me', 'actions you can do', 'capabilities', 'hdsfd features', 'guide']):
+            generated_text = (
+                "I can help with academic questions, explanations, essay planning, coding and study strategy. "
+                "Workspace tools and personal data are currently unavailable because \"Share workspace context\" "
+                "is turned off in Settings -> AI Assistant Privacy. Turn it on to let me read your tasks, "
+                "notes, classes and exams and run app commands again."
+            )
         elif any(w in lower for w in ['feature', 'what can you do', 'what do you do', 'help me', 'actions you can do', 'capabilities', 'hdsfd features', 'guide']):
             generated_text = (
                 "✨ **HDSFD Workspace Overview & AI Agent Capabilities:**\n\n"
@@ -2075,15 +2136,22 @@ def gemini_generate():
 
         # Intent: Greetings & Conversational Queries
         elif lower in ['hi', 'hello', 'hey', 'yo', 'good morning', 'good afternoon', 'good evening', 'how are you', 'sup']:
-            generated_text = (
-                "👋 **Hello! How can I help with your studies today?**\n\n"
-                "I can solve math/science problems, summarize concepts, outline essays, or directly manage your workspace:\n\n"
-                "• 📋 **Tasks:** *\"Add task to study calculus due tomorrow\"*\n"
-                "• 📌 **Sticky Notes:** *\"Create a sticky note about photosynthesis\"*\n"
-                "• ⏱ **Pomodoro Timer:** *\"Start a 25m focus timer\"*\n"
-                "• 🎨 **Themes:** *\"Change theme to obsidian\"*\n"
-                "• 🕒 **Schedule:** *\"Add AP Calculus to my schedule on Mon/Wed at 9am\"*"
-            )
+            if context_enabled:
+                generated_text = (
+                    "👋 **Hello! How can I help with your studies today?**\n\n"
+                    "I can solve math/science problems, summarize concepts, outline essays, or directly manage your workspace:\n\n"
+                    "• 📋 **Tasks:** *\"Add task to study calculus due tomorrow\"*\n"
+                    "• 📌 **Sticky Notes:** *\"Create a sticky note about photosynthesis\"*\n"
+                    "• ⏱ **Pomodoro Timer:** *\"Start a 25m focus timer\"*\n"
+                    "• 🎨 **Themes:** *\"Change theme to obsidian\"*\n"
+                    "• 🕒 **Schedule:** *\"Add AP Calculus to my schedule on Mon/Wed at 9am\"*"
+                )
+            else:
+                generated_text = (
+                    "👋 **Hello! How can I help with your studies today?**\n\n"
+                    "Ask me to explain a concept, solve a problem, plan an essay or build a study strategy. "
+                    "Workspace context is off, so I cannot see or change your tasks, notes, classes or exams."
+                )
 
         # Intent: Study Techniques & Productivity Advice
         elif any(w in lower for w in ['how to study', 'study technique', 'active recall', 'spaced repetition', 'feynman', 'memorize', 'focus better', 'procrastination', 'exam prep', 'study routine']):
@@ -2178,20 +2246,25 @@ def gemini_generate():
                 f"📚 **Key Information & Analysis on \"{clean_q}\":**\n\n"
                 f"• **Overview:** When analyzing *{clean_q}*, break down the subject into its foundational components and core definitions.\n"
                 f"• **Key Concepts:** Identify the cause-and-effect relationships, critical variables, and real-world examples.\n"
-                f"• **Practical Study Application:** Test yourself on this topic using active recall or summarize the main takeaways in your own words.\n\n"
-                f"💡 *Tip: You can ask me to create a sticky note summary of this on your board, set a study task, or start a timer!*"
+                f"• **Practical Study Application:** Test yourself on this topic using active recall or summarize the main takeaways in your own words."
+                + ("\n\n💡 *Tip: You can ask me to create a sticky note summary of this on your board, set a study task, or start a timer!*" if context_enabled else "")
             )
 
-    # Extract structured actions from generated text if present
+    # Extract structured actions from generated text if present. With workspace
+    # access off nothing is executed and any leftover action block is removed so
+    # the reply never looks like a successful command.
     parsed_actions = []
     import re
-    json_match = re.search(r'```json\s*(\{.*?\})\s*```', generated_text, re.DOTALL)
-    if json_match:
-        try:
-            parsed_block = json.loads(json_match.group(1))
-            parsed_actions = parsed_block.get('actions', [])
-        except Exception:
-            pass
+    if actions_enabled:
+        json_match = re.search(r'```json\s*(\{.*?\})\s*```', generated_text, re.DOTALL)
+        if json_match:
+            try:
+                parsed_block = json.loads(json_match.group(1))
+                parsed_actions = parsed_block.get('actions', [])
+            except Exception:
+                pass
+    else:
+        generated_text = re.sub(r'```json\s*\{[\s\S]*?"actions"[\s\S]*?\}\s*```', '', generated_text).strip()
 
     # Save to SQLite chat history
     try:
